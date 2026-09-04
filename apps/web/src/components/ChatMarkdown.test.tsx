@@ -1,12 +1,12 @@
 import { EnvironmentId } from "@t3tools/contracts";
-import { act, type ComponentProps, type ReactNode } from "react";
+import { act,type ComponentProps,type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { create, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { create,type ReactTestRenderer } from "react-test-renderer";
+import { describe,expect,it,vi } from "vite-plus/test";
 
 import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
-import { Button } from "./ui/button";
 import { setMarkdownTaskChecked } from "./files/filePreviewMode";
+import { Button } from "./ui/button";
 
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => null }));
 vi.mock("../hooks/useTheme", () => ({ useTheme: () => ({ resolvedTheme: "dark" }) }));
@@ -43,9 +43,6 @@ vi.mock("../state/entities", () => ({
   readThreadShell: () => null,
   useProjects: () => [],
 }));
-vi.mock("../remoteOpen", () => ({
-  useRemoteOpenResolution: () => ({ state: { mode: "local-exec" }, isResolved: true }),
-}));
 vi.mock("../editorPreferences", () => ({
   useOpenInPreferredEditor: () => vi.fn(),
   usePreferredEditor: () => [null, vi.fn()],
@@ -57,11 +54,10 @@ vi.mock("~/lib/openPullRequestLink", () => ({
   useOpenChangeRequestLink: () => vi.fn(),
 }));
 
-import ChatMarkdown, {
-  canUseMarkdownFileShellActions,
-  hasMarkdownFilePrimaryAction,
-  orderedListGutterStyle,
-  shouldUseMarkdownFileBrowserPrimaryAction,
+import ChatMarkdown,{
+hasMarkdownFilePrimaryAction,
+orderedListGutterStyle,
+shouldUseMarkdownFileBrowserPrimaryAction,
 } from "./ChatMarkdown";
 
 function codeButton(renderer: ReactTestRenderer, label: string) {
@@ -202,27 +198,6 @@ describe("ChatMarkdown streaming", () => {
       await act(async () => renderer?.unmount());
       vi.unstubAllGlobals();
     }
-  });
-});
-
-describe("canUseMarkdownFileShellActions", () => {
-  const environmentId = EnvironmentId.make("environment-1");
-
-  it("allows editor and file manager actions for local environments", () => {
-    expect(canUseMarkdownFileShellActions(environmentId, "local-exec", true)).toBe(true);
-  });
-
-  it("hides shell actions until the environment mode is resolved", () => {
-    expect(canUseMarkdownFileShellActions(environmentId, "local-exec", false)).toBe(false);
-  });
-
-  it("hides editor and file manager actions for remote environments", () => {
-    expect(canUseMarkdownFileShellActions(environmentId, "remote-links", true)).toBe(false);
-    expect(canUseMarkdownFileShellActions(environmentId, "remote-unavailable", true)).toBe(false);
-  });
-
-  it("hides shell actions when no environment owns the markdown", () => {
-    expect(canUseMarkdownFileShellActions(null, "local-exec", true)).toBe(false);
   });
 });
 

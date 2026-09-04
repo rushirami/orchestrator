@@ -203,9 +203,6 @@ importers:
       '@t3tools/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@t3tools/tailscale':
-        specifier: workspace:*
-        version: link:../../packages/tailscale
       '@t3tools/web':
         specifier: workspace:*
         version: link:../web

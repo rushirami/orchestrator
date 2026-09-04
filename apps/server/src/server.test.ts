@@ -102,7 +102,6 @@ import * as ServerConfig from "./config.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
-import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as GitManager from "./git/GitManager.ts";
@@ -783,9 +782,6 @@ const buildAppUnderTest = (options?: {
             resolveAvailableEditors: () => Effect.succeed([]),
             resolveFileManagerRevealKind: () => Effect.sync((): undefined => undefined),
             ...options?.layers?.externalLauncher,
-          }),
-          Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({
-            resolveTargets: () => Effect.succeed([]),
           }),
         ),
       ),

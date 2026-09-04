@@ -30,3 +30,6 @@ untracked files, or local commits.
 
 The pull is skipped if the checkout is on another branch, has no upstream, or contains local work.
 Pull failures do not prevent the server from starting.
+
+Opening a project in an editor uses an installed editor on the local environment.
+Remote SSH editor links and remote host discovery are not available in this fork.
