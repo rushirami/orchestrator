@@ -99,7 +99,6 @@ const makeCliTestServerConfig = (baseDir: string) =>
       cwd: process.cwd(),
       baseDir,
       ...derivedPaths,
-      staticDir: undefined,
       devUrl: undefined,
       devAllowedOrigins: [],
       noBrowser: true,

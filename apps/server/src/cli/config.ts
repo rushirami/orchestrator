@@ -310,7 +310,6 @@ export const resolveServerConfig = (
       ),
       () => 443,
     );
-    const staticDir = devUrl ? undefined : yield* ServerConfig.resolveStaticDir();
     const host = yield* resolveListenHost(
       Option.getOrElse(
         resolveOptionPrecedence(
@@ -337,7 +336,6 @@ export const resolveServerConfig = (
       ...derivedPaths,
       serverTracePath,
       host,
-      staticDir,
       devUrl,
       devAllowedOrigins: env.devAllowedOrigins,
       noBrowser,

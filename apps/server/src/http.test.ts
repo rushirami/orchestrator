@@ -1,21 +1,15 @@
-import { expect, it } from "@effect/vitest";
-import { describe, vi } from "vite-plus/test";
 import * as NodeHttpPlatform from "@effect/platform-node/NodeHttpPlatform";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { HttpServerResponse } from "effect/unstable/http";
+import { describe, vi } from "vite-plus/test";
 import { openMediaFile } from "./assets/MediaFile.ts";
 
-import {
-  assetResponseHeaders,
-  assetFileResponse,
-  downloadContentDisposition,
-  isLoopbackHostname,
-  resolveDevRedirectUrl,
-} from "./http.ts";
+import { assetFileResponse, assetResponseHeaders, downloadContentDisposition } from "./http.ts";
 
 const fileResponseLayer = Layer.mergeAll(NodeHttpPlatform.layer, NodeServices.layer);
 
@@ -269,30 +263,6 @@ describe("video asset byte ranges", () => {
       expect(empty.headers.get("content-range")).toBe("bytes */0");
     }).pipe(Effect.provide(fileResponseLayer)),
   );
-});
-
-describe("http dev routing", () => {
-  it("treats localhost and loopback addresses as local", () => {
-    expect(isLoopbackHostname("127.0.0.1")).toBe(true);
-    expect(isLoopbackHostname("localhost")).toBe(true);
-    expect(isLoopbackHostname("::1")).toBe(true);
-    expect(isLoopbackHostname("[::1]")).toBe(true);
-  });
-
-  it("does not treat LAN addresses as local", () => {
-    expect(isLoopbackHostname("192.168.86.35")).toBe(false);
-    expect(isLoopbackHostname("10.0.0.24")).toBe(false);
-    expect(isLoopbackHostname("example.local")).toBe(false);
-  });
-
-  it("preserves path and query when redirecting to the dev server", () => {
-    const devUrl = new URL("http://127.0.0.1:5173/");
-    const requestUrl = new URL("http://127.0.0.1:3774/pair?token=test-token");
-
-    expect(resolveDevRedirectUrl(devUrl, requestUrl)).toBe(
-      "http://127.0.0.1:5173/pair?token=test-token",
-    );
-  });
 });
 
 describe("assetResponseHeaders", () => {

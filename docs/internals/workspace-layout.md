@@ -58,3 +58,13 @@ no root export. Import the narrow path (`@t3tools/shared/DrainableWorker`,
 `@t3tools/client-runtime/state/threads`) rather than the package root. Files that are not exported
 are implementation details. `@t3tools/contracts` does export a root alongside `./settings` and
 `./relay`.
+
+## Desktop renderer packaging
+
+`apps/web` contains Electron's React interface. The desktop artifact stages its
+build under `apps/web/dist` inside the application archive, including on Windows
+where the backend is in a separate archive. Electron serves these local files
+through `t3code://app` and uses the internal Vite origin during development.
+API requests go to the local backend. The backend does not serve the application
+HTML, expose static renderer files, or redirect to Vite. Its build has no renderer
+bundle dependency; the desktop build depends on both packages.

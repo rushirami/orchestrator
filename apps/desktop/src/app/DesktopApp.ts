@@ -177,12 +177,11 @@ const bootstrap = Effect.gen(function* () {
   const serverExposureState = yield* serverExposure.configureFromSettings({ port: backendPort });
   const backendConfig = yield* serverExposure.backendConfig;
   const electronProtocol = yield* ElectronProtocol.ElectronProtocol;
-  const rendererTarget = environment.isDevelopment
-    ? Option.getOrThrow(environment.devServerUrl)
-    : backendConfig.httpBaseUrl;
   yield* electronProtocol.registerDesktopProtocol({
     scheme: ElectronProtocol.getDesktopScheme(environment.isDevelopment),
-    targetOrigin: rendererTarget,
+    renderer: environment.isDevelopment
+      ? { devOrigin: Option.getOrThrow(environment.devServerUrl) }
+      : { directory: environment.path.join(environment.appRoot, "apps/web/dist") },
     backendOrigin: backendConfig.httpBaseUrl,
   });
   yield* logBootstrapInfo("bootstrap resolved backend endpoint", {

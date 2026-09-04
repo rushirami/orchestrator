@@ -15,7 +15,6 @@ import {
   assetRouteLayer,
   attachmentUploadRouteLayer,
   serverEnvironmentHttpApiLayer,
-  staticAndDevRouteLayer,
   browserApiCorsLayer,
   httpCompressionLayer,
 } from "./http.ts";
@@ -498,7 +497,6 @@ export const makeRoutesLayer = Layer.mergeAll(
     clientTraceRouteLayer,
     assetRouteLayer,
     attachmentUploadRouteLayer,
-    staticAndDevRouteLayer,
     websocketRpcRouteLayer,
   ),
   McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),

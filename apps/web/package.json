@@ -7,7 +7,6 @@
     "build:ghostty-wasm": "bash scripts/build-libghostty-wasm.sh",
     "dev": "vp dev",
     "build": "vp build",
-    "preview": "vp preview",
     "typecheck": "tsgo --noEmit",
     "test": "vp test run --passWithNoTests --project unit"
   },

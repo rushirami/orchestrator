@@ -506,14 +506,14 @@ const DesktopBuildInputArtifact = Schema.Literals([
   "desktop-dist",
   "desktop-resources",
   "server-dist",
-  "bundled-server-client",
+  "bundled-desktop-renderer",
 ]);
 type DesktopBuildInputArtifact = typeof DesktopBuildInputArtifact.Type;
 const desktopBuildInputArtifactNames = {
   "desktop-dist": "desktopDist",
   "desktop-resources": "desktopResources",
   "server-dist": "serverDist",
-  "bundled-server-client": "bundled server client",
+  "bundled-desktop-renderer": "bundled desktop renderer",
 } satisfies Record<DesktopBuildInputArtifact, string>;
 
 /**
@@ -3108,8 +3108,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     desktopDist: path.join(repoRoot, "apps/desktop/dist-electron"),
     desktopResources: path.join(repoRoot, "apps/desktop/resources"),
     serverDist: path.join(repoRoot, "apps/server/dist"),
+    rendererDist: path.join(repoRoot, "apps/web/dist"),
   };
-  const bundledClientEntry = path.join(distDirs.serverDist, "client/index.html");
+  const bundledClientEntry = path.join(distDirs.rendererDist, "index.html");
 
   if (!options.skipBuild) {
     yield* Effect.log("[desktop-artifact] Building desktop/server/web artifacts...");
@@ -3201,14 +3202,14 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   if (!(yield* fs.exists(bundledClientEntry))) {
     return yield* new MissingDesktopBuildInputError({
-      artifact: "bundled-server-client",
+      artifact: "bundled-desktop-renderer",
       artifactPath: bundledClientEntry,
       buildCommand: "vp run build:desktop",
     });
   }
 
   const webAssetBrand = resolveDesktopWebAssetBrand(appVersion);
-  yield* applyWebBrandAssets(webAssetBrand, "apps/server/dist/client");
+  yield* applyWebBrandAssets(webAssetBrand, "apps/web/dist");
   yield* Effect.log(`[desktop-artifact] Applied ${webAssetBrand} web client branding.`);
   yield* validateBundledClientAssets(path.dirname(bundledClientEntry));
 
@@ -3218,6 +3219,8 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   }
 
   yield* Effect.log("[desktop-artifact] Staging release app...");
+  yield* fs.makeDirectory(path.join(stageAppDir, "apps/web"), { recursive: true });
+  yield* fs.copy(distDirs.rendererDist, path.join(stageAppDir, "apps/web/dist"));
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
   if (options.platform === "mac" && options.target === "dmg") {

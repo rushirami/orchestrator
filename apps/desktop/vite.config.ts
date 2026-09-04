@@ -7,13 +7,13 @@ export default defineConfig({
       build: {
         command:
           "node scripts/build-browser-secret.mjs && node scripts/build-preview-annotation-css.mjs && vp pack",
-        dependsOn: ["t3#build"],
+        dependsOn: ["t3#build", "@t3tools/web#build"],
         cache: false,
       },
       dev: {
         command:
           "node scripts/build-browser-secret.mjs && node scripts/build-preview-annotation-css.mjs && cross-env T3CODE_DESKTOP_DEV=1 vp pack --watch",
-        dependsOn: ["t3#build"],
+        dependsOn: ["t3#build", "@t3tools/web#build"],
         cache: false,
       },
       "dev:bundle": {
@@ -23,7 +23,7 @@ export default defineConfig({
       },
       "dev:electron": {
         command: "node scripts/dev-electron.mjs",
-        dependsOn: ["t3#build"],
+        dependsOn: ["t3#build", "@t3tools/web#build"],
         cache: false,
       },
     },
