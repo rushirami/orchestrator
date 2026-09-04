@@ -1,7 +1,7 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as NodeCrypto from "node:crypto";
 
 import { assert, it } from "@effect/vitest";
@@ -97,7 +97,6 @@ import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
-import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "./config.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
@@ -700,18 +699,12 @@ const buildAppUnderTest = (options?: {
         ),
       ),
     );
-    const serviceLauncherClientLayer = ServiceLauncherClient.layer.pipe(
-      Layer.provide(Layer.succeed(HostProcessEnvironment, {})),
-    );
 
-    const servedRoutesLayer = HttpRouter.serve(
-      makeRoutesLayer.pipe(Layer.provide(serviceLauncherClientLayer)),
-      {
-        disableListenLog: true,
-        disableLogger: true,
-        routerConfig: HTTP_ROUTER_CONFIG,
-      },
-    ).pipe(
+    const servedRoutesLayer = HttpRouter.serve(makeRoutesLayer, {
+      disableListenLog: true,
+      disableLogger: true,
+      routerConfig: HTTP_ROUTER_CONFIG,
+    }).pipe(
       Layer.provide(
         Layer.mergeAll(
           Layer.mock(Keybindings.Keybindings)({

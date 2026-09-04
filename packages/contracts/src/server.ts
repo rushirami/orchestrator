@@ -712,21 +712,9 @@ export const ServerConfigStreamEvent = Schema.Union([
 ]);
 export type ServerConfigStreamEvent = typeof ServerConfigStreamEvent.Type;
 
-/** Terminal selection recorded by the service launcher for one update. */
-export const ServerSelfUpdateOutcome = Schema.Struct({
-  id: TrimmedNonEmptyString,
-  fromVersion: TrimmedNonEmptyString,
-  targetVersion: TrimmedNonEmptyString,
-  status: Schema.Literals(["committed", "rolled-back", "failed"]),
-  reason: Schema.optionalKey(TrimmedNonEmptyString),
-});
-export type ServerSelfUpdateOutcome = typeof ServerSelfUpdateOutcome.Type;
-
 export const ServerLifecycleReadyPayload = Schema.Struct({
   at: IsoDateTime,
   environment: ExecutionEnvironmentDescriptor,
-  /** Present when this process resumed a launcher-managed update. */
-  updateOutcome: Schema.optionalKey(ServerSelfUpdateOutcome),
 });
 export type ServerLifecycleReadyPayload = typeof ServerLifecycleReadyPayload.Type;
 

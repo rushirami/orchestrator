@@ -1,11 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off - CLI integration exercises Node HTTP and filesystem boundaries.
-import * as NodeHttp from "node:http";
 import * as NodeFS from "node:fs";
+import * as NodeHttp from "node:http";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import {
   CommandId,
   EnvironmentOrchestrationHttpApi,
@@ -13,31 +14,27 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
-import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
-import { assert, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
 import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestConsole from "effect/testing/TestConsole";
+import { Command } from "effect/unstable/cli";
+import * as CliError from "effect/unstable/cli/CliError";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as CliError from "effect/unstable/cli/CliError";
-import * as TestConsole from "effect/testing/TestConsole";
-import { Command } from "effect/unstable/cli";
 
+import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
+import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import { environmentAuthenticatedAuthLayer } from "./auth/http.ts";
 import { cli } from "./bin.ts";
-import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
-import {
-  SERVICE_LAUNCHER_CONTEXT_ENV,
-  SERVICE_LAUNCHER_PROTOCOL,
-} from "./cloud/serviceProtocol.ts";
 import * as ServerConfig from "./config.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
-import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
-import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
+import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { orchestrationHttpApiLayer } from "./orchestration/http.ts";
+import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import {
@@ -45,28 +42,8 @@ import {
   persistServerRuntimeState,
 } from "./serverRuntimeState.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
-import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
-import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
-import { environmentAuthenticatedAuthLayer } from "./auth/http.ts";
-
-import packageJson from "../package.json" with { type: "json" };
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
-const DisconnectedLauncherChildLayer = Layer.mergeAll(
-  Layer.succeed(HostProcessEnvironment, {
-    ...process.env,
-    [SERVICE_LAUNCHER_CONTEXT_ENV]: JSON.stringify({
-      protocol: SERVICE_LAUNCHER_PROTOCOL,
-      childVersion: packageJson.version,
-    }),
-  }),
-  Layer.succeed(ServiceLauncherClient.ServiceLauncherHostProcess, {
-    connected: false,
-    send: () => false,
-    on: () => undefined,
-    off: () => undefined,
-  }),
-);
 class ProjectCliHttpApi extends HttpApi.make("environment").add(EnvironmentOrchestrationHttpApi) {}
 
 const runCli = (args: ReadonlyArray<string>, command = cli) =>
@@ -175,18 +152,6 @@ const withLiveProjectCliServer = <A, E, R>(baseDir: string, run: () => Effect.Ef
   });
 
 it.layer(NodeServices.layer)("bin cli parsing", (it) => {
-  it.effect("exposes service lifecycle commands in the local CLI", () =>
-    Effect.gen(function* () {
-      const { output } = yield* captureStdout(runCli(["service", "--help"]));
-
-      assert.include(output, "Manage the T3 Code background service.");
-      assert.include(output, "install");
-      assert.include(output, "uninstall");
-      assert.include(output, "update");
-      assert.include(output, "status");
-    }),
-  );
-
   it.effect("omits removed pairing and tunnel options from the CLI", () =>
     Effect.gen(function* () {
       const { output } = yield* captureStdout(runCli(["--help"]));
@@ -308,7 +273,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         "relay:write",
       ]);
       assert.equal("token" in (listed[0] ?? {}), false);
-    }).pipe(Effect.provide(DisconnectedLauncherChildLayer)),
+    }),
   );
 
   it.effect("rejects invalid ttl values before running auth commands", () =>

@@ -26,7 +26,6 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
-import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "./config.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as Keybindings from "./keybindings.ts";
@@ -600,7 +599,6 @@ export const make = (options?: StartupOptions) =>
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
     const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
     const crypto = yield* Crypto.Crypto;
-    const launcher = yield* ServiceLauncherClient.ServiceLauncherClient;
 
     const commandGate = yield* makeCommandGate;
     const httpListening = yield* Deferred.make<void>();
@@ -729,10 +727,6 @@ export const make = (options?: StartupOptions) =>
         "auxiliary-roots.parked",
         options?.awaitAuxiliaryParked ?? Effect.void,
       );
-
-      // This is the prepared boundary. Every dependency has been acquired and
-      // every runtime root has confirmed that it is parked before this request.
-      const updateOutcome = yield* launcher.prepareTrial;
       yield* runStartupPhase(
         "welcome.publish",
         lifecycleEvents.publish({
@@ -753,7 +747,6 @@ export const make = (options?: StartupOptions) =>
           payload: {
             at: DateTime.formatIso(yield* DateTime.now),
             environment,
-            ...(updateOutcome === undefined ? {} : { updateOutcome }),
           },
         }),
       );

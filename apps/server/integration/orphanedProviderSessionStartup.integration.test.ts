@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -9,18 +10,16 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
-import { assert, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { HttpServer } from "effect/unstable/http";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import * as EnvironmentAuth from "../src/auth/EnvironmentAuth.ts";
-import * as ServiceLauncherClient from "../src/cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "../src/config.ts";
 import * as ServerEnvironment from "../src/environment/ServerEnvironment.ts";
 import * as Keybindings from "../src/keybindings.ts";
@@ -31,11 +30,11 @@ import * as ProjectionSnapshotQuery from "../src/orchestration/Services/Projecti
 import { makeSqlitePersistenceLive } from "../src/persistence/Layers/Sqlite.ts";
 import * as ProviderSessionRuntime from "../src/persistence/ProviderSessionRuntime.ts";
 import * as ExternalLauncher from "../src/process/externalLauncher.ts";
+import * as RepositoryIdentityResolver from "../src/project/RepositoryIdentityResolver.ts";
 import { ProviderSessionDirectoryLive } from "../src/provider/Layers/ProviderSessionDirectory.ts";
 import * as ProviderService from "../src/provider/Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "../src/provider/Services/ProviderSessionDirectory.ts";
 import * as ProviderSessionReaper from "../src/provider/Services/ProviderSessionReaper.ts";
-import * as RepositoryIdentityResolver from "../src/project/RepositoryIdentityResolver.ts";
 import * as ServerLifecycleEvents from "../src/serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "../src/serverRuntimeStartup.ts";
 import * as ServerSettings from "../src/serverSettings.ts";
@@ -91,11 +90,6 @@ const startupDependencies = Layer.mergeAll(
   }),
   Layer.mock(ExternalLauncher.ExternalLauncher)({
     launchBrowser: () => Effect.void,
-  }),
-  Layer.succeed(ServiceLauncherClient.ServiceLauncherClient, {
-    managed: false,
-    requestUpdate: () => Effect.die("unused"),
-    prepareTrial: Effect.sync(() => undefined),
   }),
   Layer.succeed(
     HttpServer.HttpServer,

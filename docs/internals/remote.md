@@ -27,3 +27,7 @@ session lifecycle.
 
 Provider and source-control authentication belong to their integrations. Git may still use SSH;
 removing T3 remote environments does not alter the user's SSH configuration or agent socket.
+
+The standalone boot service, its installer, launcher IPC, runtime downloader, and trial-update
+protocol are removed. The backend runs under the desktop pool rather than an independently installed
+service. Startup still restores persisted provider sessions and local conversation state.

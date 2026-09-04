@@ -145,7 +145,7 @@ const publishCmd = Command.make(
       const packageJsonPath = path.join(serverDir, "package.json");
 
       // Assert build assets exist
-      for (const relPath of ["dist/bin.mjs", "dist/service-launcher.mjs"]) {
+      for (const relPath of ["dist/bin.mjs"]) {
         const abs = path.join(serverDir, relPath);
         if (!(yield* fs.exists(abs))) {
           return yield* new ServerCliBuildAssetMissingError({ assetPath: abs });

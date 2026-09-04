@@ -17,7 +17,6 @@ import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as HostPowerMonitor from "./background/HostPowerMonitor.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as CheckpointStore from "./checkpointing/CheckpointStore.ts";
-import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "./config.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
@@ -508,7 +507,6 @@ export const makeServerLayer = Layer.unwrap(
     const activationLayer = Layer.succeed(ServerActivation, awaitActivation);
     const runtimeStateParked = yield* Deferred.make<void>();
     const routesReady = yield* Deferred.make<void>();
-    const launcherLayer = ServiceLauncherClient.layer;
 
     yield* fixPath();
 
@@ -558,9 +556,9 @@ export const makeServerLayer = Layer.unwrap(
         [Deferred.await(runtimeStateParked), Deferred.await(routesReady)],
         { concurrency: "unbounded" },
       ).pipe(Effect.asVoid),
-    }).pipe(Layer.provideMerge(RuntimeDependenciesLive), Layer.provide(launcherLayer));
+    }).pipe(Layer.provideMerge(RuntimeDependenciesLive));
 
-    const routesLayer = HttpRouter.serve(makeRoutesLayer.pipe(Layer.provide(launcherLayer)), {
+    const routesLayer = HttpRouter.serve(makeRoutesLayer, {
       disableLogger: !config.logWebSocketEvents,
       routerConfig: HTTP_ROUTER_CONFIG,
     }).pipe(Layer.tap(() => Deferred.succeed(routesReady, undefined).pipe(Effect.orDie)));
