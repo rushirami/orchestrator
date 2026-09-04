@@ -3,9 +3,9 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { appendClientConnectionParams } from "./clientMetadata.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import { type ConnectionCatalogEntry } from "./catalog.ts";
+import { appendClientConnectionParams } from "./clientMetadata.ts";
 import type { PreparedConnection, PrimaryConnectionTarget } from "./model.ts";
 import { type ConnectionAttemptError, ConnectionBlockedError } from "./model.ts";
 
@@ -50,7 +50,6 @@ export const make = Effect.gen(function* () {
           label: target.label,
           httpBaseUrl: parseLocalBackendUrl(target.httpBaseUrl, "http:").href,
           socketUrl: primarySocketUrl(target, presentation.metadata),
-          httpAuthorization: null,
           target,
         }) satisfies PreparedConnection,
       catch: () =>

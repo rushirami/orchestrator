@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { ClientPresentation } from "../platform/capabilities.ts";
-import { PrimaryConnectionTarget, SshConnectionTarget, BearerConnectionTarget } from "./model.ts";
+import { BearerConnectionTarget, PrimaryConnectionTarget, SshConnectionTarget } from "./model.ts";
 import * as ConnectionResolver from "./resolver.ts";
 
 const environmentId = EnvironmentId.make("environment-local");
@@ -30,7 +30,7 @@ describe("local connection resolver", () => {
     Effect.gen(function* () {
       const resolver = yield* ConnectionResolver.ConnectionResolver;
       const prepared = yield* resolver.prepare({ target: target(), profile: Option.none() });
-      expect(prepared.httpAuthorization).toBeNull();
+
       expect(prepared.httpBaseUrl).toBe("http://127.0.0.1:3777/");
       expect(prepared.target).toEqual(target());
       const socket = new URL(prepared.socketUrl);

@@ -1,17 +1,17 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   EventId,
   ORCHESTRATION_WS_METHODS,
-  ProjectId,
-  ProviderInstanceId,
-  ThreadId,
-  TurnId,
   type OrchestrationMessage,
   type OrchestrationThread,
   type OrchestrationThreadDetailSnapshot,
   type OrchestrationThreadStreamItem,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
+  TurnId,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -20,23 +20,23 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
-import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
-  PrimaryConnectionTarget,
   type PreparedConnection,
+  PrimaryConnectionTarget,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
+import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { ThreadSnapshotWindow } from "./threadSnapshotHttp.ts";
 import {
+  type EnvironmentThreadState,
   INITIAL_THREAD_USER_TURN_LIMIT,
   makeEnvironmentThreadState,
   requestOlderThreadTurns,
   ThreadSnapshotLoader,
-  type EnvironmentThreadState,
 } from "./threads.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -51,7 +51,6 @@ const PREPARED: PreparedConnection = {
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
   socketUrl: TARGET.wsBaseUrl,
-  httpAuthorization: null,
   target: TARGET,
 };
 

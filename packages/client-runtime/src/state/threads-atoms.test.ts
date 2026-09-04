@@ -1,16 +1,16 @@
+import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import {
   EnvironmentId,
   EventId,
   MessageId,
   ORCHESTRATION_WS_METHODS,
-  ProjectId,
-  ProviderInstanceId,
-  ThreadId,
   type OrchestrationThread,
   type OrchestrationThreadDetailSnapshot,
   type OrchestrationThreadStreamItem,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
 } from "@t3tools/contracts";
-import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -21,13 +21,13 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom, AtomRegistry } from "effect/unstable/reactivity";
 
 import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
-import { EnvironmentRegistry } from "../connection/registry.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
-  PrimaryConnectionTarget,
   type NetworkStatus,
   type PreparedConnection,
+  PrimaryConnectionTarget,
 } from "../connection/model.ts";
+import { EnvironmentRegistry } from "../connection/registry.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import { EnvironmentCacheStore } from "../platform/persistence.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
@@ -37,9 +37,9 @@ import { THREAD_SNAPSHOT_IDLE_TTL_MS } from "./threadRetention.ts";
 import type { ThreadSnapshotWindow } from "./threadSnapshotHttp.ts";
 import {
   createEnvironmentThreadStateAtoms,
+  type EnvironmentThreadState,
   requestOlderThreadTurns,
   ThreadSnapshotLoader,
-  type EnvironmentThreadState,
 } from "./threads.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -133,7 +133,6 @@ const makeHarness = Effect.fn("TestThreadAtoms.makeHarness")(function* (options?
         label: TARGET.label,
         httpBaseUrl: TARGET.httpBaseUrl,
         socketUrl: TARGET.wsBaseUrl,
-        httpAuthorization: null,
         target: TARGET,
       }),
     ),
