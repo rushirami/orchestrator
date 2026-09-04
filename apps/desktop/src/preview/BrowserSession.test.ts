@@ -11,6 +11,7 @@ const { fromPartition, sessions } = vi.hoisted(() => ({
   sessions: new Map<
     string,
     {
+      readonly webRequest: { readonly onBeforeRequest: ReturnType<typeof vi.fn> };
       readonly clearCache: ReturnType<typeof vi.fn>;
       readonly clearStorageData: ReturnType<typeof vi.fn>;
       readonly getUserAgent: ReturnType<typeof vi.fn>;
@@ -37,6 +38,7 @@ describe("BrowserSession", () => {
     fromPartition.mockReset();
     fromPartition.mockImplementation((partition: string) => {
       const browserSession = {
+        webRequest: { onBeforeRequest: vi.fn() },
         clearCache: vi.fn(() => Promise.resolve()),
         clearStorageData: vi.fn(() => Promise.resolve()),
         getUserAgent: vi.fn(() => "Mozilla/5.0 Electron/41.5.0 t3code/0.0.27"),
@@ -48,6 +50,29 @@ describe("BrowserSession", () => {
       return browserSession;
     });
   });
+
+  it.effect(
+    "filters navigation, redirected resources, and WebSocket requests in the created session",
+    () =>
+      Effect.gen(function* () {
+        const browserSessions = yield* BrowserSession.BrowserSession;
+        const partition = yield* browserSessions.getPartition("network-test");
+        yield* browserSessions.getSession("network-test");
+        const handler = sessions.get(partition)?.webRequest.onBeforeRequest.mock.calls[0]?.[0];
+        assert.isFunction(handler);
+        for (const [url, cancel] of [
+          ["http://localhost:3000", false],
+          ["https://remote.example/page", true],
+          ["https://cdn.example/redirected.js", true],
+          ["wss://remote.example/ws", true],
+          ["ws://localhost:3000/hmr", false],
+        ] as const) {
+          const callback = vi.fn();
+          handler({ url }, callback);
+          assert.deepEqual(callback.mock.calls, [[{ cancel }]]);
+        }
+      }).pipe(Effect.provide(layer)),
+  );
 
   it.effect("derives deterministic partitions and memoizes sessions", () =>
     Effect.gen(function* () {
@@ -125,18 +150,16 @@ describe("BrowserSession", () => {
         return granted;
       };
 
-      for (const permission of [
-        "clipboard-read",
-        "clipboard-sanitized-write",
-        "notifications",
-        "geolocation",
-      ]) {
+      for (const permission of ["clipboard-read", "clipboard-sanitized-write", "notifications"]) {
         assert.isTrue(requestAllows(permission), `request handler should allow ${permission}`);
         assert.isTrue(
           checkHandler(null, permission) as boolean,
           `check handler should allow ${permission}`,
         );
       }
+
+      assert.isFalse(requestAllows("geolocation"));
+      assert.isFalse(checkHandler(null, "geolocation") as boolean);
 
       // `clipboard-write` is not a real Electron permission — the async write API
       // uses `clipboard-sanitized-write` — so the stale name must not be granted,

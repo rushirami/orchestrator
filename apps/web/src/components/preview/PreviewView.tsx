@@ -199,7 +199,11 @@ export function PreviewView({
           recordVisitForThread(threadRef, normalized);
         }
       } catch {
-        // Server-side `failed` event renders the unreachable view.
+        toastManager.add({
+          type: "warning",
+          title: "Preview requires a local URL",
+          description: "Use localhost, 127.0.0.1, or [::1] without embedded credentials.",
+        });
       }
     },
     [navigateToResolvedUrl, threadRef],
@@ -213,7 +217,11 @@ export function PreviewView({
           recordVisitForThread(threadRef, next);
         }
       } catch {
-        // Server-side `failed` event renders the unreachable view.
+        toastManager.add({
+          type: "warning",
+          title: "Preview requires a local URL",
+          description: "Use localhost, 127.0.0.1, or [::1] without embedded credentials.",
+        });
       }
     },
     [navigateToResolvedUrl, threadRef],
