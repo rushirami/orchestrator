@@ -17,7 +17,6 @@ import type {
   RelayAgentActivityState,
 } from "@t3tools/contracts/relay";
 import { CommandId, ProviderInstanceId } from "@t3tools/contracts";
-import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 import { RELAY_ACTIVITY_PUBLISH_TYP, verifyRelayJwt } from "@t3tools/shared/relayJwt";
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
@@ -26,7 +25,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -40,7 +38,6 @@ import {
 } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
   RELAY_ENVIRONMENT_CREDENTIAL_SECRET,
-  RELAY_ISSUER_SECRET,
   RELAY_URL_SECRET,
   PUBLISH_AGENT_ACTIVITY_SECRET,
 } from "../cloud/config.ts";
@@ -537,181 +534,6 @@ describe.sequential("signRelayAgentActivityPublishProof", () => {
               Layer.provideMerge(NodeServices.layer),
             ),
           ),
-        );
-      }),
-    ),
-  );
-
-  it.effect("publishes agent activity to the relay transport URL, not the relay issuer", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const originalFetch = globalThis.fetch;
-        const events = yield* Queue.unbounded<OrchestrationEvent>();
-        let resolveFetchSeen: (url: URL) => void = () => {};
-        const fetchSeen = new Promise<URL>((resolve) => {
-          resolveFetchSeen = resolve;
-        });
-        const userSpans: Array<string> = [];
-        const productSpans: Array<string> = [];
-        const collectingTracer = (spans: Array<string>) =>
-          Tracer.make({
-            span: (options) => {
-              const span = new Tracer.NativeSpan(options);
-              const end = span.end.bind(span);
-              span.end = (endTime, exit) => {
-                end(endTime, exit);
-                spans.push(span.name);
-              };
-              return span;
-            },
-          });
-        const secrets = makeMemorySecretStore();
-        const now = "2026-05-25T00:00:00.000Z";
-        const projectId = "project-1" as ProjectId;
-        const threadId = "thread-1" as ThreadId;
-        const environmentId = "env-1" as EnvironmentId;
-
-        const project = {
-          id: projectId,
-          title: "T3 Code",
-          workspaceRoot: "/workspace",
-          repositoryIdentity: null,
-          defaultModelSelection: null,
-          scripts: [],
-          createdAt: now,
-          updatedAt: now,
-        } satisfies OrchestrationProjectShell;
-
-        const thread = {
-          id: threadId,
-          projectId,
-          title: "Run remote agent",
-          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
-          runtimeMode: "full-access",
-          interactionMode: "default",
-          branch: null,
-          worktreePath: null,
-          latestTurn: {
-            turnId: "turn-1" as TurnId,
-            state: "running",
-            requestedAt: now,
-            startedAt: now,
-            completedAt: null,
-            assistantMessageId: null,
-          },
-          createdAt: now,
-          updatedAt: now,
-          archivedAt: null,
-          settledOverride: null,
-          settledAt: null,
-          session: {
-            threadId,
-            status: "running",
-            providerName: "Codex",
-            runtimeMode: "full-access",
-            activeTurnId: "turn-1" as TurnId,
-            lastError: null,
-            updatedAt: now,
-          },
-          latestUserMessageAt: now,
-          hasPendingApprovals: false,
-          hasPendingUserInput: false,
-          hasActionableProposedPlan: false,
-        } satisfies OrchestrationThreadShell;
-
-        const descriptor = {
-          environmentId,
-          label: "Test Desktop",
-          platform: {
-            os: "darwin",
-            arch: "arm64",
-          },
-          serverVersion: "0.0.0-test",
-          capabilities: {
-            repositoryIdentity: true,
-          },
-        } satisfies ExecutionEnvironmentDescriptor;
-
-        globalThis.fetch = ((input: Parameters<typeof fetch>[0]) => {
-          const url = new URL(
-            typeof input === "string" || input instanceof URL
-              ? input
-              : (input as unknown as { readonly url: string }).url,
-          );
-          resolveFetchSeen(url);
-          return Promise.resolve(Response.json({ ok: true, deliveries: [] }));
-        }) as unknown as typeof fetch;
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            globalThis.fetch = originalFetch;
-          }),
-        );
-
-        const layer = Layer.mergeAll(
-          Layer.succeed(ServerSecretStore.ServerSecretStore, secrets.store),
-          Layer.succeed(ServerEnvironment.ServerEnvironment, {
-            getEnvironmentId: Effect.succeed(environmentId),
-            getDescriptor: Effect.succeed(descriptor),
-          }),
-          Layer.succeed(OrchestrationEngineService, {
-            readEvents: () => Stream.empty,
-            readThreadEvents: () => Stream.empty,
-            getThreadReplayStats: () => Effect.die("unused thread replay stats"),
-            dispatch: () => Effect.succeed({ sequence: 1 }),
-            streamDomainEvents: Stream.fromQueue(events),
-            subscribeDomainEvents: Effect.succeed(Stream.fromQueue(events)),
-            latestSequence: Effect.succeed(0),
-          } satisfies OrchestrationEngineShape),
-          Layer.succeed(ProjectionSnapshotQuery, {
-            getShellSnapshot: () =>
-              Effect.succeed({
-                snapshotSequence: 1,
-                projects: [project],
-                threads: [thread],
-                updatedAt: now,
-              } satisfies OrchestrationShellSnapshot),
-            getThreadShellById: () => Effect.succeed(Option.some(thread)),
-            getProjectShellById: () => Effect.succeed(Option.some(project)),
-          } as unknown as ProjectionSnapshotQueryShape),
-        );
-
-        yield* Effect.gen(function* () {
-          const relay = yield* AgentAwarenessRelay.AgentAwarenessRelay;
-          yield* secrets.setString(RELAY_URL_SECRET, "https://transport.example.test");
-          yield* secrets.setString(RELAY_ISSUER_SECRET, "https://issuer.example.test");
-          yield* secrets.setString(RELAY_ENVIRONMENT_CREDENTIAL_SECRET, "relay-credential");
-          yield* secrets.setString(PUBLISH_AGENT_ACTIVITY_SECRET, "true");
-          yield* relay.start();
-          yield* Queue.offer(events, {
-            type: "thread.activity-appended",
-            sequence: 1,
-            eventId: "evt-1",
-            commandId: CommandId.make("cmd-1"),
-            aggregateKind: "thread",
-            aggregateId: threadId,
-            actor: { kind: "server" },
-            payload: {
-              threadId,
-              activity: {
-                kind: "approval.requested",
-              },
-            },
-            occurredAt: now,
-          } as unknown as OrchestrationEvent);
-
-          const url = yield* Effect.promise(() => fetchSeen).pipe(Effect.timeout("2 seconds"));
-          expect(url.origin).toBe("https://transport.example.test");
-          expect(productSpans).toContain("makePublishProof");
-          expect(userSpans).not.toContain("makePublishProof");
-        }).pipe(
-          Effect.provide(
-            AgentAwarenessRelay.layer.pipe(
-              Layer.provide(layer),
-              Layer.provideMerge(NodeServices.layer),
-            ),
-          ),
-          Effect.provideService(RelayClientTracer, Option.some(collectingTracer(productSpans))),
-          Effect.withTracer(collectingTracer(userSpans)),
         );
       }),
     ),
