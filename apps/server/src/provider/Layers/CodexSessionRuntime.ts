@@ -2,13 +2,13 @@ import {
   ApprovalRequestId,
   DEFAULT_MODEL,
   EventId,
-  ProviderDriverKind,
-  ProviderItemId,
-  type ProviderInstanceId,
   type ProviderApprovalDecision,
   type ProviderApprovalOption,
+  ProviderDriverKind,
   type ProviderEvent,
+  type ProviderInstanceId,
   type ProviderInteractionMode,
+  ProviderItemId,
   type ProviderRequestKind,
   type ProviderSession,
   type ProviderTurnStartResult,
@@ -17,8 +17,12 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { normalizeModelSlug } from "@t3tools/shared/model";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as CodexClient from "effect-codex-app-server/client";
+import * as CodexErrors from "effect-codex-app-server/errors";
+import * as CodexRpc from "effect-codex-app-server/rpc";
+import * as EffectCodexSchema from "effect-codex-app-server/schema";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -31,15 +35,11 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import * as CodexClient from "effect-codex-app-server/client";
-import * as CodexErrors from "effect-codex-app-server/errors";
-import * as CodexRpc from "effect-codex-app-server/rpc";
-import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
-import { buildCodexInitializeParams } from "./CodexProvider.ts";
-import { codexSessionAppServerArgs } from "./codexLaunchArgs.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import { buildCodexDeveloperInstructions } from "../CodexDeveloperInstructions.ts";
+import { buildCodexInitializeParams } from "./CodexProvider.ts";
+import { codexSessionAppServerArgs } from "./codexLaunchArgs.ts";
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 
 const PROVIDER = ProviderDriverKind.make("codex");
@@ -202,9 +202,6 @@ export interface CodexSessionRuntimeShape {
   readonly rollbackThread: (
     numTurns: number,
   ) => Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
-  readonly uploadFeedback: (
-    reason?: string,
-  ) => Effect.Effect<EffectCodexSchema.V2FeedbackUploadResponse, CodexSessionRuntimeError>;
   readonly respondToRequest: (
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
@@ -2408,16 +2405,6 @@ export const makeCodexSessionRuntime = (
             activeTurnId: undefined,
           });
           return parseThreadSnapshot(response);
-        }),
-      uploadFeedback: (reason) =>
-        Effect.gen(function* () {
-          const providerThreadId = yield* readProviderThreadId;
-          return yield* client.request("feedback/upload", {
-            classification: "bug",
-            includeLogs: true,
-            ...(reason ? { reason } : {}),
-            threadId: providerThreadId,
-          });
         }),
       respondToRequest: (requestId, decision) =>
         Effect.gen(function* () {

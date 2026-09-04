@@ -14,20 +14,19 @@ import {
   MessageId,
   ModelSelection,
   NonNegativeInt,
+  type ProviderDriverKind,
+  type ProviderInstanceId,
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
-  RuntimeRequestId,
+  type ProviderRuntimeEvent,
   ProviderSendTurnInput,
+  type ProviderSession,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
-  ProviderUploadFeedbackInput,
+  RuntimeRequestId,
   ThreadId,
   TurnId,
-  type ProviderInstanceId,
-  type ProviderDriverKind,
-  type ProviderRuntimeEvent,
-  type ProviderSession,
 } from "@t3tools/contracts";
 import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
 import { causeErrorTag } from "@t3tools/shared/observability";
@@ -44,27 +43,30 @@ import * as Stream from "effect/Stream";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
 import {
   increment,
   providerMetricAttributes,
   providerRuntimeEventsTotal,
   providerSessionsTotal,
   providerTurnDuration,
-  providerTurnsTotal,
   providerTurnMetricAttributes,
+  providerTurnsTotal,
   withMetrics,
 } from "../../observability/Metrics.ts";
-import { ProviderAdapterRequestError } from "../Errors.ts";
-import { type ProviderAdapterError, ProviderValidationError } from "../Errors.ts";
+import * as ServerSettings from "../../serverSettings.ts";
+import {
+  type ProviderAdapterError,
+  ProviderAdapterRequestError,
+  ProviderValidationError,
+} from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "../Services/ProviderAdapterRegistry.ts";
 import * as ProviderService from "../Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "../Services/ProviderSessionDirectory.ts";
 import { type EventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
-import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
-import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
-import * as ServerSettings from "../../serverSettings.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
 interface PendingCompaction {
@@ -1363,47 +1365,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     );
   });
 
-  const uploadFeedback: ProviderServiceMethod<"uploadFeedback"> = Effect.fn("uploadFeedback")(
-    function* (rawInput) {
-      const input = yield* decodeInputOrValidationError({
-        operation: "ProviderService.uploadFeedback",
-        schema: ProviderUploadFeedbackInput,
-        payload: rawInput,
-      });
-      let routed = yield* resolveRoutableSession({
-        threadId: input.threadId,
-        operation: "ProviderService.uploadFeedback",
-        allowRecovery: false,
-      });
-      if (routed.adapter.uploadFeedback === undefined) {
-        return yield* toValidationError(
-          "ProviderService.uploadFeedback",
-          `Provider '${routed.adapter.provider}' does not support feedback uploads.`,
-        );
-      }
-      if (!routed.isActive) {
-        routed = yield* resolveRoutableSession({
-          threadId: input.threadId,
-          operation: "ProviderService.uploadFeedback",
-          allowRecovery: true,
-        });
-      }
-      const uploadFeedback = routed.adapter.uploadFeedback;
-      if (uploadFeedback === undefined) {
-        return yield* toValidationError(
-          "ProviderService.uploadFeedback",
-          `Provider '${routed.adapter.provider}' does not support feedback uploads.`,
-        );
-      }
-      yield* Effect.annotateCurrentSpan({
-        "provider.operation": "upload-feedback",
-        "provider.kind": routed.adapter.provider,
-        "provider.thread_id": input.threadId,
-      });
-      return yield* uploadFeedback(input);
-    },
-  );
-
   const runStopAll = Effect.fn("runStopAll")(function* () {
     const currentAdapters = yield* getAdapterEntries;
     const activeSessions = yield* Effect.forEach(currentAdapters, ([instanceId, adapter]) =>
@@ -1472,7 +1433,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     getInstanceInfo,
     assertConversationRollbackSupported,
     rollbackConversation,
-    uploadFeedback,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each
     // independently receive all runtime events.

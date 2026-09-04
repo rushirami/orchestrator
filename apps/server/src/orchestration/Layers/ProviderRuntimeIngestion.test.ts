@@ -3,13 +3,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import {
-  OrchestrationReadModel,
-  ProviderDriverKind,
-  ProviderRuntimeEvent,
-  ProviderSession,
-  ProviderInstanceId,
-} from "@t3tools/contracts";
+import { it as effectIt } from "@effect/vitest";
 import {
   ApprovalRequestId,
   CommandId,
@@ -17,8 +11,13 @@ import {
   EventId,
   MessageId,
   type OrchestrationCommand,
+  OrchestrationReadModel,
   ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
   ProviderItemId,
+  ProviderRuntimeEvent,
+  ProviderSession,
   type ServerSettings,
   ThreadId,
   TurnId,
@@ -33,31 +32,30 @@ import * as PubSub from "effect/PubSub";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
-import { it as effectIt } from "@effect/vitest";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { makeSqlStatementCounter } from "../../../integration/SqlStatementCounter.integration.ts";
+import { ServerConfig } from "../../config.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
+import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
 import {
   ProviderService,
   type ProviderServiceShape,
 } from "../../provider/Services/ProviderService.ts";
-import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
+import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
+import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
+import * as ThreadBackgroundLiveness from "../ThreadBackgroundLiveness.ts";
+import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
+import { DEFAULT_THREAD_TITLE } from "../threadTitles.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
-import * as ThreadBackgroundLiveness from "../ThreadBackgroundLiveness.ts";
-import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
 import { ProviderRuntimeIngestionLive } from "./ProviderRuntimeIngestion.ts";
-import { DEFAULT_THREAD_TITLE } from "../threadTitles.ts";
-import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
-import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
-import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
-import { ServerConfig } from "../../config.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { makeSqlStatementCounter } from "../../../integration/SqlStatementCounter.integration.ts";
 
 function makeTestServerSettingsLayer(overrides: Partial<ServerSettings> = {}) {
   return ServerSettingsService.layerTest(overrides);
@@ -135,7 +133,6 @@ function createProviderServiceHarness() {
       });
     },
     rollbackConversation: () => unsupported(),
-    uploadFeedback: () => unsupported(),
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub).pipe(
         Stream.flatMap(({ events, enqueued }) =>

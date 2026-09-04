@@ -3,15 +3,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
-import {
-  ModelSelection,
-  ProviderRuntimeEvent,
-  ProviderSession,
-  ProviderDriverKind,
-  ProviderInstanceId,
-  ProviderSetupError,
-} from "@t3tools/contracts";
-import { createModelSelection } from "@t3tools/shared/model";
+import { it as effectIt } from "@effect/vitest";
 import {
   ApprovalRequestId,
   CommandId,
@@ -19,13 +11,20 @@ import {
   EnvironmentId,
   EventId,
   MessageId,
+  ModelSelection,
   ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  ProviderRuntimeEvent,
+  ProviderSession,
+  ProviderSetupError,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
 import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
-import * as Effect from "effect/Effect";
+import { createModelSelection } from "@t3tools/shared/model";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -34,42 +33,41 @@ import * as PubSub from "effect/PubSub";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { it as effectIt } from "@effect/vitest";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { deriveServerPaths, ServerConfig } from "../../config.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { TextGenerationError } from "@t3tools/contracts";
-import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
-import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
+import * as Clock from "effect/Clock";
+import { deriveServerPaths, ServerConfig } from "../../config.ts";
+import * as GitWorkflowService from "../../git/GitWorkflowService.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
+import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
+import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
+import { ProviderAuthService } from "../../provider/Services/ProviderAuthService.ts";
 import {
   ProviderService,
   type ProviderServiceShape,
 } from "../../provider/Services/ProviderService.ts";
-import { ProviderAuthService } from "../../provider/Services/ProviderAuthService.ts";
 import { makeProviderRegistryLayer } from "../../provider/testUtils/providerRegistryMock.ts";
+import { ServerActivation } from "../../serverActivation.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import { TextGeneration } from "../../textGeneration/TextGeneration.ts";
-import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
+import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
+import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
+import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
+import * as ThreadBackgroundLiveness from "../ThreadBackgroundLiveness.ts";
+import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
-import * as ThreadBackgroundLiveness from "../ThreadBackgroundLiveness.ts";
-import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
 import {
+  ProviderCommandReactorLive,
   providerErrorLabel,
   providerErrorLabelFromInstanceHint,
-  ProviderCommandReactorLive,
 } from "./ProviderCommandReactor.ts";
-import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
-import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
-import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Clock from "effect/Clock";
-import { ServerSettingsService } from "../../serverSettings.ts";
-import { ServerActivation } from "../../serverActivation.ts";
-import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
-import * as GitWorkflowService from "../../git/GitWorkflowService.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
 const asApprovalRequestId = (value: string): ApprovalRequestId => ApprovalRequestId.make(value);
@@ -391,7 +389,6 @@ describe("ProviderCommandReactor", () => {
         });
       },
       rollbackConversation: () => unsupported(),
-      uploadFeedback: () => unsupported(),
       get streamEvents() {
         return Stream.fromPubSub(runtimeEventPubSub);
       },

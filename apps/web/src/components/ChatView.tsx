@@ -24,11 +24,7 @@ import {
 } from "@t3tools/client-runtime/state/subagentRuntime";
 import { effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
 import {
-  codexFeedbackMessage,
-  type CodexFeedbackSubmission,
-  parseCodexFeedbackCommand,
   requestOlderThreadTurns,
-  submitCodexFeedback,
   threadHasOlderTurns,
 } from "@t3tools/client-runtime/state/threads";
 import {
@@ -1380,9 +1376,7 @@ export default function ChatView(props: ChatViewProps) {
     reportFailure: false,
     refresh: true,
   });
-  const uploadThreadFeedback = useAtomCommand(threadEnvironment.uploadFeedback, {
-    reportFailure: false,
-  });
+
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, {
     reportFailure: false,
   });
@@ -1545,16 +1539,7 @@ export default function ChatView(props: ChatViewProps) {
     return () => revokeBlobPreviewUrl(src);
   }, [expandedImage]);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
-  const [feedbackSubmissionsByThreadKey, setFeedbackSubmissionsByThreadKey] = useState<
-    Record<string, ReadonlyArray<CodexFeedbackSubmission>>
-  >({});
-  const feedbackSubmissions = useMemo(
-    () => feedbackSubmissionsByThreadKey[routeThreadKey] ?? [],
-    [feedbackSubmissionsByThreadKey, routeThreadKey],
-  );
-  const feedbackUploading = feedbackSubmissions.some(
-    (submission) => submission.status === "uploading",
-  );
+
   const optimisticUserMessagesRef = useRef(optimisticUserMessages);
   optimisticUserMessagesRef.current = optimisticUserMessages;
   const [localDraftErrorsByDraftId, setLocalDraftErrorsByDraftId] = useState<
@@ -1630,7 +1615,6 @@ export default function ChatView(props: ChatViewProps) {
   const attachmentPreviewPromotionInFlightByMessageIdRef = useRef<Record<string, true>>({});
   const sendInFlightRef = useRef(false);
   const environmentUnavailableSendToastSlotRef = useRef(0);
-  const feedbackUploadsInFlightRef = useRef(new Set<string>());
   const terminalUiOpenByThreadRef = useRef<Record<string, boolean>>({});
 
   const terminalUiState = useTerminalUiStateStore((state) =>
@@ -2729,14 +2713,7 @@ export default function ChatView(props: ChatViewProps) {
             });
           });
 
-    const localMessages = [
-      ...optimisticUserMessages,
-      ...feedbackSubmissions.flatMap((submission) =>
-        submission.status === "interrupted"
-          ? []
-          : [codexFeedbackMessage(submission), codexFeedbackMessage(submission, "assistant")],
-      ),
-    ];
+    const localMessages = optimisticUserMessages;
     if (localMessages.length === 0) {
       return serverMessagesWithPreviewHandoff;
     }
@@ -2749,7 +2726,6 @@ export default function ChatView(props: ChatViewProps) {
   }, [
     attachmentPreviewHandoffByMessageId,
     displayServerMessages,
-    feedbackSubmissions,
     optimisticUserMessages,
     projectHandoffMessagePreviews,
   ]);
@@ -5319,7 +5295,6 @@ export default function ChatView(props: ChatViewProps) {
     threadDetailLoading ||
     isPreparingWorktree ||
     activeEnvironmentUnavailable ||
-    feedbackUploading ||
     pendingApprovals.length > 0 ||
     pendingUserInputs.length > 0 ||
     showPlanFollowUpPrompt;
@@ -5906,8 +5881,7 @@ export default function ChatView(props: ChatViewProps) {
       isSendBusy ||
       isConnecting ||
       threadDetailLoading ||
-      sendInFlightRef.current ||
-      feedbackUploadsInFlightRef.current.has(routeThreadKey)
+      sendInFlightRef.current
     ) {
       notifyDirectAnnotationAttached();
       return;
@@ -6001,102 +5975,6 @@ export default function ChatView(props: ChatViewProps) {
         composerPreviewAnnotations.length +
         composerReviewComments.length,
     });
-    const feedbackCommand =
-      ctxSelectedProvider === "codex" &&
-      composerImages.length === 0 &&
-      composerFiles.length === 0 &&
-      sendableComposerTerminalContexts.length === 0 &&
-      composerElementContexts.length === 0 &&
-      composerPreviewAnnotations.length === 0 &&
-      composerReviewComments.length === 0
-        ? parseCodexFeedbackCommand(trimmed)
-        : null;
-    if (feedbackCommand) {
-      if (!isServerThread || activeThread.session === null) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "warning",
-            title: "Start a Codex thread first",
-            description: "Send a message before you submit feedback.",
-          }),
-        );
-        return;
-      }
-      feedbackUploadsInFlightRef.current.add(routeThreadKey);
-      const result = await submitCodexFeedback({
-        submission: {
-          id: newMessageId(),
-          command: trimmed,
-          createdAt: new Date().toISOString(),
-        },
-        clearDraft: () => {
-          promptRef.current = "";
-          clearComposerDraftContent(composerDraftTarget);
-          composerRef.current?.resetCursorState();
-          scrollToEnd();
-        },
-        onUpdate: (submission) => {
-          setFeedbackSubmissionsByThreadKey((current) => {
-            const existing = current[routeThreadKey] ?? [];
-            const found = existing.some((entry) => entry.id === submission.id);
-            return {
-              ...current,
-              [routeThreadKey]: found
-                ? existing.map((entry) => (entry.id === submission.id ? submission : entry))
-                : [...existing, submission],
-            };
-          });
-        },
-        upload: () =>
-          uploadThreadFeedback({
-            environmentId,
-            input: {
-              threadId: activeThread.id,
-              ...feedbackCommand,
-            },
-          }),
-      }).finally(() => {
-        feedbackUploadsInFlightRef.current.delete(routeThreadKey);
-      });
-      if (result._tag === "Failure") {
-        if (!isAtomCommandInterrupted(result)) {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not send feedback to OpenAI",
-              description: chatActionErrorMessage(squashAtomCommandFailure(result)),
-            }),
-          );
-        }
-        return;
-      }
-      const feedbackId = result.value.feedbackId;
-      toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: "Feedback sent to OpenAI",
-          description: `Thread ID: ${feedbackId}`,
-          timeout: 0,
-          actionProps: {
-            children: "Copy ID",
-            onClick: () => {
-              void writeTextToClipboard(feedbackId, "Codex feedback thread ID").catch(
-                (error: unknown) => {
-                  toastManager.add(
-                    stackedThreadToast({
-                      type: "error",
-                      title: "Could not copy thread ID",
-                      description: chatActionErrorMessage(error),
-                    }),
-                  );
-                },
-              );
-            },
-          },
-        }),
-      );
-      return;
-    }
     if (
       !directAnnotation &&
       sendInteractionModeEnabled &&
@@ -7752,13 +7630,7 @@ export default function ChatView(props: ChatViewProps) {
                             phase={phase}
                             isConnecting={isConnecting}
                             isSendBusy={isSendBusy}
-                            sendDisabledReason={
-                              feedbackUploading
-                                ? "Sending feedback"
-                                : threadDetailLoading
-                                  ? "Messages loading"
-                                  : null
-                            }
+                            sendDisabledReason={threadDetailLoading ? "Messages loading" : null}
                             isPreparingWorktree={isPreparingWorktree}
                             bannerItems={composerBannerItems}
                             environmentUnavailable={activeEnvironmentUnavailableState}

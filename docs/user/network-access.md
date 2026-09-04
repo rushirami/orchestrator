@@ -16,3 +16,5 @@ The built-in preview opens local development servers only. It blocks remote navi
 redirects, and HTTP/WebSocket subresources, including external fonts and scripts. Pages that
 rely on a CDN need local copies of those assets. Remote browser-history entries are discarded.
 Location permission is disabled for previews.
+
+Provider diagnostics uploads are removed, including the former Codex `/feedback` command.

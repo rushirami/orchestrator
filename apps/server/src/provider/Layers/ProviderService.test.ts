@@ -3,19 +3,18 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
+import { assert, describe, it, vi } from "@effect/vitest";
 import type {
   ProviderApprovalDecision,
   ProviderRuntimeEvent,
   ProviderSendTurnInput,
   ProviderSession,
   ProviderTurnStartResult,
-  ProviderUploadFeedbackInput,
-  ProviderUploadFeedbackResult,
 } from "@t3tools/contracts";
 import {
+  ApprovalRequestId,
   ASSISTANT_CITATION_MAX_TEXT_LENGTH,
   AssistantCitation,
-  ApprovalRequestId,
   EnvironmentId,
   EventId,
   MessageId,
@@ -31,7 +30,6 @@ import {
   serializeAssistantCitation,
 } from "@t3tools/shared/assistantCitations";
 import { createModelSelection } from "@t3tools/shared/model";
-import { it, assert, describe, vi } from "@effect/vitest";
 
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -49,29 +47,29 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as ServerConfig from "../../config.ts";
 import {
+  makeSqlitePersistenceLive,
+  SqlitePersistenceMemory,
+} from "../../persistence/Layers/Sqlite.ts";
+import * as ProviderSessionRuntime from "../../persistence/ProviderSessionRuntime.ts";
+import * as ServerSettings from "../../serverSettings.ts";
+import {
+  type ProviderAdapterError,
   ProviderAdapterRequestError,
   ProviderAdapterSessionNotFoundError,
   ProviderUnsupportedError,
   ProviderValidationError,
-  type ProviderAdapterError,
 } from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "../Services/ProviderAdapterRegistry.ts";
 import * as ProviderService from "../Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "../Services/ProviderSessionDirectory.ts";
-import { makeProviderServiceLive } from "./ProviderService.ts";
-import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
-import { ProviderSessionDirectoryLive } from "./ProviderSessionDirectory.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as ProviderSessionRuntime from "../../persistence/ProviderSessionRuntime.ts";
-import {
-  makeSqlitePersistenceLive,
-  SqlitePersistenceMemory,
-} from "../../persistence/Layers/Sqlite.ts";
-import * as ServerConfig from "../../config.ts";
-import * as ServerSettings from "../../serverSettings.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
+import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
+import { makeProviderServiceLive } from "./ProviderService.ts";
+import { ProviderSessionDirectoryLive } from "./ProviderSessionDirectory.ts";
 
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
 const serverConfigTestLayer = ServerConfig.layerTest(process.cwd(), process.cwd()).pipe(
@@ -240,13 +238,6 @@ function makeFakeCodexAdapter(
       Effect.succeed({ threadId, turns: [] }),
   );
 
-  const uploadFeedback = vi.fn(
-    (
-      input: ProviderUploadFeedbackInput,
-    ): Effect.Effect<ProviderUploadFeedbackResult, ProviderAdapterError> =>
-      Effect.succeed({ feedbackId: `feedback-${input.threadId}` }),
-  );
-
   const stopAll = vi.fn((): Effect.Effect<void, ProviderAdapterError> =>
     Effect.sync(() => {
       sessions.clear();
@@ -271,7 +262,7 @@ function makeFakeCodexAdapter(
     hasSession,
     readThread,
     rollbackThread,
-    ...(provider === CODEX_DRIVER ? { uploadFeedback } : {}),
+    ...(provider === CODEX_DRIVER ? {} : {}),
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
@@ -308,7 +299,6 @@ function makeFakeCodexAdapter(
     hasSession,
     readThread,
     rollbackThread,
-    uploadFeedback,
     stopAll,
   };
 }
@@ -764,67 +754,6 @@ unsupportedRollback.layer("ProviderServiceLive unsupported rewind", (it) => {
     }),
   );
 });
-
-it.effect(
-  "ProviderServiceLive uploads feedback through the adapter that recovered the session",
-  () =>
-    Effect.gen(function* () {
-      const original = makeFakeCodexAdapter();
-      const replacement = makeFakeCodexAdapter();
-      const baseRegistry = makeAdapterRegistryMock({ [CODEX_DRIVER]: original.adapter });
-      let swapAfterFirstLookup = false;
-      let feedbackLookupCount = 0;
-      const registry: ProviderAdapterRegistry.ProviderAdapterRegistry["Service"] = {
-        ...baseRegistry,
-        getByInstance: (instanceId) => {
-          if (instanceId !== codexInstanceId) {
-            return baseRegistry.getByInstance(instanceId);
-          }
-          const useReplacement = swapAfterFirstLookup && feedbackLookupCount++ > 0;
-          return Effect.succeed(useReplacement ? replacement.adapter : original.adapter);
-        },
-      };
-      const runtimeRepositoryLayer = ProviderSessionRuntime.layer.pipe(
-        Layer.provide(SqlitePersistenceMemory),
-      );
-      const directoryLayer = ProviderSessionDirectoryLive.pipe(
-        Layer.provide(runtimeRepositoryLayer),
-      );
-      const providerLayer = makeProviderServiceLive().pipe(
-        Layer.provide(Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, registry)),
-        Layer.provide(directoryLayer),
-        Layer.provide(defaultServerSettingsLayer),
-        Layer.provide(serverConfigTestLayer),
-        Layer.provide(
-          Layer.succeed(
-            ProviderEventLoggers.ProviderEventLoggers,
-            ProviderEventLoggers.NoOpProviderEventLoggers,
-          ),
-        ),
-      );
-
-      yield* Effect.gen(function* () {
-        const provider = yield* ProviderService.ProviderService;
-        const threadId = asThreadId("thread-feedback-adapter-replacement");
-        yield* provider.startSession(threadId, {
-          provider: CODEX_DRIVER,
-          providerInstanceId: codexInstanceId,
-          threadId,
-          runtimeMode: "full-access",
-        });
-        yield* original.stopSession(threadId);
-        original.uploadFeedback.mockClear();
-        replacement.uploadFeedback.mockClear();
-        swapAfterFirstLookup = true;
-
-        const result = yield* provider.uploadFeedback({ threadId });
-
-        assert.deepStrictEqual(result, { feedbackId: `feedback-${threadId}` });
-        assert.strictEqual(original.uploadFeedback.mock.calls.length, 0);
-        assert.deepStrictEqual(replacement.uploadFeedback.mock.calls, [[{ threadId }]]);
-      }).pipe(Effect.provide(providerLayer));
-    }).pipe(Effect.provide(NodeServices.layer)),
-);
 
 it.effect("ProviderServiceLive writes canonical events to the emitting thread segment", () =>
   Effect.gen(function* () {
@@ -1452,93 +1381,6 @@ routing.layer("ProviderServiceLive routing", (it) => {
       });
       yield* Fiber.join(retryFiber);
       yield* provider.stopSession({ threadId });
-    }),
-  );
-
-  it.effect("routes feedback to the Codex adapter and returns its feedback ID", () =>
-    Effect.gen(function* () {
-      const provider = yield* ProviderService.ProviderService;
-      const threadId = asThreadId("thread-feedback-route");
-      yield* provider.startSession(threadId, {
-        provider: CODEX_DRIVER,
-        providerInstanceId: codexInstanceId,
-        threadId,
-        runtimeMode: "full-access",
-      });
-      routing.codex.uploadFeedback.mockClear();
-
-      const result = yield* provider.uploadFeedback({
-        threadId,
-        reason: "The agent stopped early.",
-      });
-
-      assert.deepStrictEqual(result, { feedbackId: `feedback-${threadId}` });
-      assert.deepStrictEqual(routing.codex.uploadFeedback.mock.calls, [
-        [{ threadId, reason: "The agent stopped early." }],
-      ]);
-    }),
-  );
-
-  it.effect("recovers a stopped Codex session before uploading feedback", () =>
-    Effect.gen(function* () {
-      const provider = yield* ProviderService.ProviderService;
-      const threadId = asThreadId("thread-feedback-recover");
-      yield* provider.startSession(threadId, {
-        provider: CODEX_DRIVER,
-        providerInstanceId: codexInstanceId,
-        threadId,
-        cwd: "/tmp/feedback-project",
-        runtimeMode: "full-access",
-      });
-      yield* routing.codex.stopSession(threadId);
-      routing.codex.startSession.mockClear();
-      routing.codex.uploadFeedback.mockClear();
-
-      const result = yield* provider.uploadFeedback({ threadId });
-
-      assert.deepStrictEqual(result, { feedbackId: `feedback-${threadId}` });
-      assert.strictEqual(routing.codex.startSession.mock.calls.length, 1);
-      assert.deepStrictEqual(routing.codex.uploadFeedback.mock.calls, [[{ threadId }]]);
-    }),
-  );
-
-  it.effect("rejects feedback for providers that do not support uploads", () =>
-    Effect.gen(function* () {
-      const provider = yield* ProviderService.ProviderService;
-      const threadId = asThreadId("thread-feedback-claude");
-      yield* provider.startSession(threadId, {
-        provider: CLAUDE_AGENT_DRIVER,
-        providerInstanceId: claudeAgentInstanceId,
-        threadId,
-        runtimeMode: "full-access",
-      });
-
-      const error = yield* provider.uploadFeedback({ threadId }).pipe(Effect.flip);
-
-      assert.instanceOf(error, ProviderValidationError);
-      assert.include(error.issue, "does not support feedback uploads");
-      routing.claude.startSession.mockClear();
-    }),
-  );
-
-  it.effect("does not restart an unsupported provider before rejecting feedback", () =>
-    Effect.gen(function* () {
-      const provider = yield* ProviderService.ProviderService;
-      const threadId = asThreadId("thread-feedback-unsupported-stopped");
-      yield* provider.startSession(threadId, {
-        provider: CLAUDE_AGENT_DRIVER,
-        providerInstanceId: claudeAgentInstanceId,
-        threadId,
-        runtimeMode: "full-access",
-      });
-      yield* routing.claude.stopSession(threadId);
-      routing.claude.startSession.mockClear();
-
-      const error = yield* provider.uploadFeedback({ threadId }).pipe(Effect.flip);
-
-      assert.instanceOf(error, ProviderValidationError);
-      assert.include(error.issue, "does not support feedback uploads");
-      assert.strictEqual(routing.claude.startSession.mock.calls.length, 0);
     }),
   );
 

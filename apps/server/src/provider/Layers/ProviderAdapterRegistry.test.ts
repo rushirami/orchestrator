@@ -1,26 +1,26 @@
+import { assert, it, vi } from "@effect/vitest";
 import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { it, assert, vi } from "@effect/vitest";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import type * as TextGeneration from "../../textGeneration/TextGeneration.ts";
+import type { ProviderInstance } from "../ProviderDriver.ts";
+import { makeManualOnlyProviderMaintenanceCapabilities } from "../providerMaintenance.ts";
 import type * as ClaudeAdapter from "../Services/ClaudeAdapter.ts";
 import type * as CodexAdapter from "../Services/CodexAdapter.ts";
 import type * as CursorAdapter from "../Services/CursorAdapter.ts";
 import type * as OpenCodeAdapter from "../Services/OpenCodeAdapter.ts";
 import * as ProviderAdapterRegistry from "../Services/ProviderAdapterRegistry.ts";
 import * as ProviderInstanceRegistry from "../Services/ProviderInstanceRegistry.ts";
-import type { ProviderInstance } from "../ProviderDriver.ts";
-import { makeManualOnlyProviderMaintenanceCapabilities } from "../providerMaintenance.ts";
-import type * as TextGeneration from "../../textGeneration/TextGeneration.ts";
 import * as ProviderAdapterRegistryLayer from "./ProviderAdapterRegistry.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
@@ -40,7 +40,6 @@ const fakeCodexAdapter: CodexAdapter.CodexAdapterShape = {
   hasSession: vi.fn(),
   readThread: vi.fn(),
   rollbackThread: vi.fn(),
-  uploadFeedback: vi.fn(),
   stopAll: vi.fn(),
   streamEvents: Stream.empty,
 };

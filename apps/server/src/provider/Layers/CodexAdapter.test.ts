@@ -1,17 +1,15 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import * as NodeAssert from "node:assert/strict";
-import * as NodeFS from "node:fs";
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it, vi } from "@effect/vitest";
 import {
   ApprovalRequestId,
   CodexSettings,
   EventId,
+  type ProviderApprovalDecision,
   ProviderDriverKind,
+  type ProviderEvent,
   ProviderInstanceId,
   ProviderItemId,
-  type ProviderApprovalDecision,
-  type ProviderEvent,
   type ProviderSession,
   type ProviderTurnStartResult,
   type ProviderUserInputAnswers,
@@ -19,9 +17,12 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it, vi } from "@effect/vitest";
+import * as NodeAssert from "node:assert/strict";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 
+import * as CodexErrors from "effect-codex-app-server/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -33,20 +34,19 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as CodexErrors from "effect-codex-app-server/errors";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
+import { makeCodexAdapter } from "./CodexAdapter.ts";
 import {
   type CodexSessionRuntimeOptions,
   type CodexSessionRuntimeSendTurnInput,
   type CodexSessionRuntimeShape,
   type CodexThreadSnapshot,
 } from "./CodexSessionRuntime.ts";
-import { makeCodexAdapter } from "./CodexAdapter.ts";
 const decodeCodexSettings = Schema.decodeSync(CodexSettings);
 
 // Test-local service tag so the rest of the file can keep using `yield* CodexAdapter`.
@@ -104,10 +104,6 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
     }),
   );
 
-  public readonly uploadFeedbackImpl = vi.fn((_reason?: string) =>
-    Promise.resolve({ threadId: "provider-thread-1" }),
-  );
-
   public readonly respondToRequestImpl = vi.fn(
     (_requestId: ApprovalRequestId, _decision: ProviderApprovalDecision): Promise<void> =>
       Promise.resolve(undefined),
@@ -144,10 +140,6 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
 
   rollbackThread(numTurns: number) {
     return Effect.promise(() => this.rollbackThreadImpl(numTurns));
-  }
-
-  uploadFeedback(reason?: string) {
-    return Effect.promise(() => this.uploadFeedbackImpl(reason));
   }
 
   respondToRequest(requestId: ApprovalRequestId, decision: ProviderApprovalDecision) {
@@ -374,42 +366,6 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       NodeAssert.ok(event.type === "thread.state.changed");
       NodeAssert.equal(event.payload.state, "compacted");
       yield* adapter.stopSession(threadId);
-    }),
-  );
-
-  it.effect("uploads feedback for the active Codex thread", () =>
-    Effect.gen(function* () {
-      const adapter = yield* CodexAdapter;
-      const threadId = asThreadId("thread-feedback");
-      yield* adapter.startSession({
-        provider: ProviderDriverKind.make("codex"),
-        threadId,
-        runtimeMode: "full-access",
-      });
-      const runtime = sessionRuntimeFactory.lastRuntime;
-      NodeAssert.ok(runtime);
-
-      const result = yield* adapter.uploadFeedback({
-        threadId,
-        reason: "The agent stopped early.",
-      });
-
-      NodeAssert.deepStrictEqual(result, { feedbackId: "provider-thread-1" });
-      NodeAssert.deepStrictEqual(runtime.uploadFeedbackImpl.mock.calls, [
-        ["The agent stopped early."],
-      ]);
-    }),
-  );
-
-  it.effect("rejects feedback for an unknown Codex thread", () =>
-    Effect.gen(function* () {
-      const adapter = yield* CodexAdapter;
-      const result = yield* adapter
-        .uploadFeedback({ threadId: asThreadId("thread-feedback-missing") })
-        .pipe(Effect.result);
-
-      NodeAssert.equal(result._tag, "Failure");
-      NodeAssert.equal(result.failure._tag, "ProviderAdapterSessionNotFoundError");
     }),
   );
 

@@ -116,11 +116,6 @@ import {
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "./project.ts";
-import {
-  ProviderUploadFeedbackError,
-  ProviderUploadFeedbackInput,
-  ProviderUploadFeedbackResult,
-} from "./provider.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
   ProviderConsumeResetCreditInput,
@@ -233,9 +228,6 @@ export const WS_METHODS = {
   assetsCreateUrl: "assets.createUrl",
   attachmentsCreateUploadUrl: "attachments.createUploadUrl",
   attachmentsDelete: "attachments.delete",
-
-  // Provider methods
-  providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
   providerAuthComplete: "provider.auth.complete",
@@ -790,12 +782,6 @@ export const WsAttachmentsDeleteRpc = Rpc.make(WS_METHODS.attachmentsDelete, {
   error: EnvironmentAuthorizationError,
 });
 
-export const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFeedback, {
-  payload: ProviderUploadFeedbackInput,
-  success: ProviderUploadFeedbackResult,
-  error: Schema.Union([ProviderUploadFeedbackError, EnvironmentAuthorizationError]),
-});
-
 export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
   payload: VcsStatusInput,
   success: VcsStatusStreamEvent,
@@ -1189,7 +1175,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsAssetsCreateUrlRpc,
   WsAttachmentsCreateUploadUrlRpc,
   WsAttachmentsDeleteRpc,
-  WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
   WsVcsRefreshStatusRpc,

@@ -1,24 +1,19 @@
 import * as Crypto from "effect/Crypto";
 import { Atom } from "effect/unstable/reactivity";
-import { WS_METHODS } from "@t3tools/contracts";
 
-import {
-  createAtomCommandScheduler,
-  createEnvironmentCommand,
-  createEnvironmentRpcCommand,
-} from "./runtime.ts";
+import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
   type ArchiveThreadInput,
   type CreateThreadInput,
   type DeleteThreadInput,
   type InterruptThreadTurnInput,
+  type PinThreadInput,
+  type ReorderPinnedThreadInput,
   type RespondToThreadApprovalInput,
   type RespondToThreadUserInputInput,
   type RevertThreadCheckpointInput,
   type SetThreadInteractionModeInput,
   type SetThreadRuntimeModeInput,
-  type PinThreadInput,
-  type ReorderPinnedThreadInput,
   type SettleThreadInput,
   type SnoozeThreadInput,
   type StartThreadTurnInput,
@@ -32,13 +27,13 @@ import {
   createThread,
   deleteThread,
   interruptThreadTurn,
+  pinThread,
+  reorderPinnedThread,
   respondToThreadApproval,
   respondToThreadUserInput,
   revertThreadCheckpoint,
   setThreadInteractionMode,
   setThreadRuntimeMode,
-  pinThread,
-  reorderPinnedThread,
   settleThread,
   snoozeThread,
   startThreadTurn,
@@ -49,20 +44,20 @@ import {
   unsnoozeThread,
   updateThreadMetadata,
 } from "../operations/commands.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import { createAtomCommandScheduler, createEnvironmentCommand } from "./runtime.ts";
 
 export type {
   ArchiveThreadInput,
   CreateThreadInput,
   DeleteThreadInput,
   InterruptThreadTurnInput,
+  PinThreadInput,
+  ReorderPinnedThreadInput,
   RespondToThreadApprovalInput,
   RespondToThreadUserInputInput,
   RevertThreadCheckpointInput,
   SetThreadInteractionModeInput,
   SetThreadRuntimeModeInput,
-  PinThreadInput,
-  ReorderPinnedThreadInput,
   SettleThreadInput,
   SnoozeThreadInput,
   StartThreadTurnInput,
@@ -201,12 +196,6 @@ export function createThreadEnvironmentAtoms<R, E>(
     stopSession: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:stop-session",
       execute: (input: StopThreadSessionInput) => stopThreadSession(input),
-      scheduler,
-      concurrency,
-    }),
-    uploadFeedback: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:commands:thread:upload-feedback",
-      tag: WS_METHODS.providerUploadFeedback,
       scheduler,
       concurrency,
     }),

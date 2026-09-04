@@ -1,11 +1,11 @@
 import * as Schema from "effect/Schema";
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
   ApprovalRequestId,
   EventId,
   IsoDateTime,
   ProviderItemId,
   ThreadId,
+  TrimmedNonEmptyString,
   TurnId,
 } from "./baseSchemas.ts";
 import {
@@ -21,7 +21,7 @@ import {
   ProviderUserInputAnswers,
   RuntimeMode,
 } from "./orchestration.ts";
-import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
+import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 
 const ProviderSessionStatus = Schema.Literals([
   "connecting",
@@ -112,29 +112,6 @@ export const ProviderRespondToUserInputInput = Schema.Struct({
   answers: ProviderUserInputAnswers,
 });
 export type ProviderRespondToUserInputInput = typeof ProviderRespondToUserInputInput.Type;
-
-export const ProviderUploadFeedbackInput = Schema.Struct({
-  threadId: ThreadId,
-  reason: Schema.optional(TrimmedNonEmptyString),
-});
-export type ProviderUploadFeedbackInput = typeof ProviderUploadFeedbackInput.Type;
-
-export const ProviderUploadFeedbackResult = Schema.Struct({
-  feedbackId: TrimmedNonEmptyString,
-});
-export type ProviderUploadFeedbackResult = typeof ProviderUploadFeedbackResult.Type;
-
-export class ProviderUploadFeedbackError extends Schema.TaggedErrorClass<ProviderUploadFeedbackError>()(
-  "ProviderUploadFeedbackError",
-  {
-    threadId: ThreadId,
-    cause: Schema.optional(Schema.Defect()),
-  },
-) {
-  override get message(): string {
-    return `Failed to upload feedback for thread ${this.threadId}.`;
-  }
-}
 
 const ProviderEventKind = Schema.Literals(["session", "notification", "request", "error"]);
 

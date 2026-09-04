@@ -38,7 +38,6 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ProviderSetupError,
-  ProviderUploadFeedbackError,
   RpcClientId,
   type TerminalAttachStreamEvent,
   type TerminalError,
@@ -107,7 +106,6 @@ import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts
 import { ProviderAuthService } from "./provider/Services/ProviderAuthService.ts";
 import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
-import * as ProviderService from "./provider/Services/ProviderService.ts";
 import { makeProviderInstallation } from "./provider/providerInstallation.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
@@ -429,7 +427,6 @@ const makeWsRpcLayer = (
       const previewManager = yield* PreviewManager.PreviewManager;
       const portDiscovery = yield* PortScanner.PortDiscovery;
       const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
-      const providerService = yield* ProviderService.ProviderService;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const providerAuth = yield* ProviderAuthService;
       const providerInstances = yield* ProviderInstanceRegistry;
@@ -1684,20 +1681,6 @@ const makeWsRpcLayer = (
               return { providers };
             }),
             { "rpc.aggregate": "server" },
-          ),
-        [WS_METHODS.providerUploadFeedback]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.providerUploadFeedback,
-            providerService.uploadFeedback(input).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ProviderUploadFeedbackError({
-                    threadId: input.threadId,
-                    cause,
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "provider" },
           ),
         [WS_METHODS.serverUpdateProvider]: (input) =>
           observeRpcEffect(
