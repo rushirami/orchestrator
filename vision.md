@@ -8,15 +8,19 @@ This document describes the intended direction of this fork. It is a product vis
 
 A user should be able to start with a task they write themselves, a Jira ticket, or a GitHub issue, choose a predefined workflow, and launch it in a dedicated Git worktree. That worktree holds the task's code changes as it moves through planning, implementation, PR creation, and review.
 
-A workflow template is a project-specific, reusable definition of an ordered sequence of stages. An agent stage runs one or more skills sequentially, produces an expected result, and has a clear condition for continuing. A human approval stage pauses for a decision about an artifact. A skill describes how an agent performs a particular activity, such as writing a specification or reviewing a change. The workflow determines when that activity happens and what follows it.
+A workflow template is a project-specific, reusable flow of connected stage nodes. The canvas presents a tree-like flow that can branch into multiple activities and join again before continuing. An agent stage runs one or more skills sequentially, produces an expected result, and has a clear condition for continuing. A human approval stage pauses for a decision about an artifact. A skill describes how an agent performs a particular activity, such as writing a specification or reviewing a change. The workflow determines when that activity happens and what follows it.
 
 Users should be able to reuse workflows across tasks and customize them for a project. Configuration should cover the skills and their order, the provider and agent used at each stage, expected outputs, and whether a transition happens automatically or waits for the user.
 
-Each task executes its stages sequentially. For the initial scope, Orchestrator imposes no concurrency limit across separate tasks and exposes no concurrent-runs setting.
+Stages follow their connections and dependencies. A linear path executes sequentially, while a stage can start multiple selected branches in parallel. Orchestrator imposes no concurrency limit across separate tasks and exposes no concurrent-runs setting.
+
+For example, PR creation can start both a Claude review and an OpenAI review. Each review is its own stage node and agent thread. A downstream **Combine findings** node waits for both reviews, gathers their reports, and either returns the work to Builder or completes the workflow. Selecting multiple branches means running all selected activities, rather than choosing one alternative. A failed or paused review keeps the join waiting for user action; it must not count as a successful review.
+
+The initial parallel example uses read-only reviews of the same PR revision in the shared worktree. Builder waits for both reports before editing again. Concurrent agents modifying the same files need a separate isolation policy and are outside this first branching flow. The OpenAI reviewer uses the available Codex provider; this does not introduce a separate ChatGPT account connection.
 
 ## Templates and starting prompts
 
-The project's Orchestration view is where users define the complete workflow: add, remove, and reorder stages; arrange skills within each agent stage; choose thread assignments and providers; and configure expected outputs, handoffs, approvals, and next-stage rules. Agent tasks and human approvals are the basic stage types. PR creation is an agent task using a skill and the agent's tools, rather than a separate GitHub connection.
+The project's Orchestration view is where users define the complete workflow: add, remove, and connect stage nodes; create branches and joins; arrange skills within each agent stage; choose thread assignments and providers; and configure expected outputs, handoffs, approvals, and next-stage rules. Connections determine execution order. The selected node's settings let users select multiple successor nodes to run in parallel and choose where their results join. Agent tasks and human approvals are the basic stage types. PR creation is an agent task using a skill and the agent's tools, rather than a separate GitHub connection.
 
 Each template contains one reusable starting prompt. Users place double-brace variables wherever a value should change between tasks:
 
@@ -47,7 +51,7 @@ Starting creates one dedicated worktree with those settings and begins the first
 
 A workflow execution is a task with one worktree and one or more agent threads. A stage is not automatically a new thread. Multiple stages can reuse the same thread, preserving its conversation and agent context. Choosing a new thread starts a separate conversation in the same worktree, optionally with a different provider.
 
-For example, a **Builder** thread handles planning, implementation, validation, and PR creation. A **Reviewer** thread then reviews the changes in the same worktree. These are configurable assignments, not mandatory agent roles. Users can instead reuse the Builder for review or define other thread boundaries. A human approval stage does not require an agent thread.
+For example, a **Builder** thread handles planning, implementation, validation, and PR creation. Separate **Claude Reviewer** and **OpenAI Reviewer** threads then review the changes in parallel in the same worktree. These are configurable assignments, not mandatory agent roles or a fixed reviewer count. Users can choose a single review, reuse Builder for a sequential review, or add other branches. Parallel agent nodes use separate threads so they do not submit overlapping work to one conversation. A human approval stage does not require an agent thread.
 
 New threads receive explicit handoffs such as the approved spec, task context, code changes, validation evidence, and PR URL. Sharing the worktree does not mean sharing conversation history or credentials. If review finds issues, the workflow can route back to the original Builder thread, preserving its context and existing worktree, then return to review.
 
@@ -57,10 +61,10 @@ New threads receive explicit handoffs such as the approved spec, task context, c
 2. **Generate a specification.** A planning skill produces a spec file with the proposed behavior, scope, and acceptance criteria. The workflow pauses for review.
 3. **Review the specification.** The user reads the file and either requests revisions or approves it. Approval advances the same worktree into the implementation and PR flow.
 4. **Implement and create a PR.** The same Builder thread executes the configured implementation, validation, and PR skills in order. The result includes the changes, validation evidence, and a link to the created GitHub pull request.
-5. **Run a review.** The review flow runs against the changes in the same worktree. The user can configure it to continue with the existing agent or start a fresh agent, potentially using a different provider. A fresh agent receives the approved spec, task brief, PR URL, changes, and validation results. It uses its own configured tools for any additional access.
+5. **Run reviews.** PR creation starts the selected review branches in the same worktree. In the branching example, Claude and OpenAI review concurrently in separate threads. Each receives the approved spec, task brief, PR URL and revision, changes, and validation results, and uses its own configured tools for any additional access. Combine findings waits for both reports before continuing.
 6. **Resolve findings.** Review findings can return the task to implementation and another review. The user can inspect the results and decide when the work is ready. Creating a PR, completing review, and merging are distinct milestones; this example does not assume automatic merging.
 
-The worktree provides continuity for the code. Agent sessions can change between stages without losing the task's specification, outputs, or history. Sequential stages should avoid agents making conflicting edits in the same worktree.
+The worktree provides continuity for the code. Agent sessions can change between stages without losing the task's specification, outputs, or history. Editing stages run sequentially in the shared worktree; parallel reviews inspect the same revision without conflicting edits.
 
 ## Agents bring their own tools
 
@@ -91,12 +95,12 @@ The Workflows sidebar includes an entry to the project's workflow templates. Tem
 For each task, the view should show:
 
 - The task title, source ticket, project, environment, and worktree.
-- The selected workflow, current stage, and active agent or provider.
+- The selected workflow, active stage nodes and branches, and their agents or providers.
 - Whether it is starting, running, awaiting approval, paused, blocked, failed, or complete.
 - The latest meaningful result, including the spec, validation results, PR, or review findings.
 - The next action the user can take and why it is needed.
 
-Opening an active task should reveal its execution progress, associated agent threads, shared worktree, and artifacts. The current-task mockup separates Overview, Threads, and Artifacts; these describe the current execution, not a past-run browser. Approvals should be attached to the artifact being reviewed, so the user can read a specification and approve it in context. The existing chat experience remains useful for directing an agent within a stage.
+Opening an active task should reveal its execution progress, associated agent threads, shared worktree, and artifacts. Parallel branches need individual status indicators and a visible join state showing which results are still pending. A single “Step 5 of 5” label is insufficient when multiple nodes are active. The current-task mockup separates Overview, Threads, and Artifacts; these describe the current execution, not a past-run browser. Approvals should be attached to the artifact being reviewed, so the user can read a specification and approve it in context. The existing chat experience remains useful for directing an agent within a stage.
 
 There is no saved archive of past workflow runs and no template version history in the initial product. The workflow sidebar focuses on current tasks, including those waiting for user input. Ordinary T3 Code thread history and files produced in the worktree remain useful independently; omitting a workflow-run archive does not mean deleting those conversations or artifacts.
 
@@ -108,12 +112,12 @@ The current [Paper designs](https://app.paper.design/file/01M1PYQ1380EBK0T3YNH8W
 
 [OpenAI Symphony](https://github.com/openai/symphony) provides inspiration for connecting tracked work to isolated agent execution. Its [service specification](https://github.com/openai/symphony/blob/main/SPEC.md) separates repository-owned workflow policy, workspace management, agent execution, scheduling, and observability. Its `WORKFLOW.md` combines configuration with an agent prompt template.
 
-Orchestrator should borrow the ideas of inspectable workflow definitions, isolated workspaces, and visible execution state. The sequential skill stages, artifact approval checkpoints, configurable agent handoffs, and T3 Code orchestration view described here are our proposed product direction. Symphony is a reference, not a commitment to adopt its implementation or configuration format.
+Orchestrator should borrow the ideas of inspectable workflow definitions, isolated workspaces, and visible execution state. The connected skill stages, parallel review branches, artifact approval checkpoints, configurable agent handoffs, and T3 Code orchestration view described here are our proposed product direction. Symphony is a reference, not a commitment to adopt its implementation or configuration format.
 
 ## Build on what makes T3 Code useful
 
 The experience should preserve T3 Code's open foundation, provider choice, performance, and support for local and remote environments. Workflow execution should belong to the environment running the agents and continue when a client disconnects. Web, desktop, and mobile clients should be able to inspect progress and handle relevant approvals against that shared state.
 
-The initial scope should prove one complete journey: configure a reusable sequential template in the project view, fill its variables and launch a worktree, generate and approve a spec, implement it, create a PR, and review it using configurable thread continuity. The user follows the active task through the Workflows sidebar and can open its agent threads when intervention is needed. Arbitrary parallel execution graphs and automatic tracker-based dispatch can wait until real workflows justify them.
+The initial scope should prove one complete journey: configure a reusable template of connected stages in the project view, fill its variables and launch a worktree, generate and approve a spec, implement it, create a PR, and start multiple selected review branches. Join their findings before completing or returning to Builder. The user follows the active task through the Workflows sidebar and can open its agent threads when intervention is needed. Concurrent editing in a shared worktree and automatic tracker-based dispatch can wait until real workflows justify them.
 
 Success means a user can start several tasks, understand where each one stands, and intervene at the moments they chose without repeatedly restating instructions or manually carrying context between agents.
