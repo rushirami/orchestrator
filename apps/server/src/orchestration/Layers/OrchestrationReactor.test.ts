@@ -12,7 +12,6 @@ import { ThreadDeletionReactor } from "../Services/ThreadDeletionReactor.ts";
 import * as ThreadSettlementReactor from "../ThreadSettlementReactor.ts";
 import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
-import * as AgentAwarenessRelay from "../../relay/AgentAwarenessRelay.ts";
 
 describe("OrchestrationReactor", () => {
   let runtime: ManagedRuntime.ManagedRuntime<OrchestrationReactor, never> | null = null;
@@ -74,15 +73,6 @@ describe("OrchestrationReactor", () => {
             drain: Effect.void,
           }),
         ),
-        Layer.provideMerge(
-          Layer.succeed(AgentAwarenessRelay.AgentAwarenessRelay, {
-            publishThread: () => Effect.void,
-            start: () => {
-              started.push("agent-awareness-relay");
-              return Effect.void;
-            },
-          }),
-        ),
       ),
     );
 
@@ -96,7 +86,6 @@ describe("OrchestrationReactor", () => {
       "checkpoint-reactor",
       "thread-deletion-reactor",
       "thread-settlement-reactor",
-      "agent-awareness-relay",
     ]);
 
     await Effect.runPromise(Scope.close(scope, Exit.void));
