@@ -5,13 +5,6 @@ import * as AppActivationIpc from "./methods/appActivation.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
 import * as PreviewIpc from "./methods/preview.ts";
 import {
-  checkForUpdate,
-  downloadUpdate,
-  getUpdateState,
-  installUpdate,
-  setUpdateChannel,
-} from "./methods/updates.ts";
-import {
   getAppBranding,
   getLocalEnvironmentBearerToken,
   getLocalEnvironmentBootstraps,
@@ -53,11 +46,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setTheme);
   yield* ipc.handle(showContextMenu);
   yield* ipc.handle(openExternal);
-  yield* ipc.handle(getUpdateState);
-  yield* ipc.handle(setUpdateChannel);
-  yield* ipc.handle(downloadUpdate);
-  yield* ipc.handle(installUpdate);
-  yield* ipc.handle(checkForUpdate);
   for (const previewMethod of PreviewIpc.methods) {
     yield* ipc.handle(previewMethod);
   }

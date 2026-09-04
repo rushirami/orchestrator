@@ -12,7 +12,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
-import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 
@@ -61,7 +60,6 @@ export class DesktopEnvironment extends Context.Service<
     readonly backendEntryPath: string;
     readonly backendCwd: string;
     readonly preloadPath: string;
-    readonly appUpdateYmlPath: string;
     readonly devServerUrl: Option.Option<URL>;
     readonly configuredBackendPort: Option.Option<number>;
     readonly commitHashOverride: Option.Option<string>;
@@ -91,7 +89,7 @@ function resolveDesktopAppStageLabel(input: {
     return "Dev";
   }
 
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Alpha";
+  return /-nightly\.\d{8}\.\d+$/.test(input.appVersion) ? "Nightly" : "Alpha";
 }
 
 function resolveDesktopAppBranding(input: {
@@ -207,9 +205,6 @@ const make = Effect.fn("desktop.environment.make")(function* (
     backendEntryPath: path.join(serverRoot, "apps/server/dist/bin.mjs"),
     backendCwd: input.isPackaged ? homeDirectory : appRoot,
     preloadPath: path.join(input.dirname, "preload.cjs"),
-    appUpdateYmlPath: input.isPackaged
-      ? path.join(resourcesPath, "app-update.yml")
-      : path.join(input.appPath, "dev-app-update.yml"),
     devServerUrl,
     configuredBackendPort: config.configuredBackendPort,
     commitHashOverride: config.commitHashOverride,

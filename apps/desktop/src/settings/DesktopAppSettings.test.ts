@@ -24,8 +24,6 @@ const DesktopSettingsPatch = Schema.Struct({
     ),
   ),
   mainWindowMaximized: Schema.optionalKey(Schema.Boolean),
-  updateChannel: Schema.optionalKey(Schema.Literals(["latest", "nightly"])),
-  updateChannelConfiguredByUser: Schema.optionalKey(Schema.Boolean),
   wslBackendEnabled: Schema.optionalKey(Schema.Boolean),
   wslMode: Schema.optionalKey(Schema.Literals(["local", "wsl"])),
   wslDistro: Schema.optionalKey(Schema.NullOr(Schema.String)),
@@ -97,22 +95,6 @@ describe("DesktopSettings", () => {
     ),
   );
 
-  it("defaults packaged nightly builds to the nightly update channel", () => {
-    assert.deepEqual(
-      DesktopAppSettings.resolveDefaultDesktopSettings("0.0.17-nightly.20260415.1"),
-      {
-        linuxPasswordStore: "auto",
-        mainWindowBounds: null,
-        mainWindowMaximized: false,
-        updateChannel: "nightly",
-        updateChannelConfiguredByUser: false,
-        wslBackendEnabled: false,
-        wslOnly: false,
-        wslDistro: null,
-      } satisfies DesktopAppSettings.DesktopSettings,
-    );
-  });
-
   it.effect("ignores legacy network exposure settings and drops them on the next save", () =>
     withSettings(
       Effect.gen(function* () {
@@ -122,7 +104,7 @@ describe("DesktopSettings", () => {
         yield* fs.makeDirectory(environment.stateDir, { recursive: true });
         yield* fs.writeFileString(
           environment.desktopSettingsPath,
-          '{"serverExposureMode":"network-accessible","tailscaleServeEnabled":true,"tailscaleServePort":443,"wslDistro":"Ubuntu"}',
+          '{"updateChannel":"nightly","updateChannelConfiguredByUser":true,"serverExposureMode":"network-accessible","tailscaleServeEnabled":true,"tailscaleServePort":443,"wslDistro":"Ubuntu"}',
         );
         const loaded = yield* settings.load;
         assert.equal(loaded.wslDistro, "Ubuntu");
@@ -131,6 +113,7 @@ describe("DesktopSettings", () => {
         yield* settings.setWslBackendEnabled(true);
         const saved = yield* fs.readFileString(environment.desktopSettingsPath);
         assert.notInclude(saved, "serverExposureMode");
+        assert.notInclude(saved, "updateChannel");
         assert.notInclude(saved, "tailscaleServe");
         assert.include(saved, "Ubuntu");
       }),
@@ -143,25 +126,20 @@ describe("DesktopSettings", () => {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* writeSettingsPatch({
           linuxPasswordStore: "gnome-libsecret",
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: true,
         });
 
         assert.deepEqual(yield* settings.load, {
           linuxPasswordStore: "gnome-libsecret",
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: true,
           wslBackendEnabled: false,
           wslOnly: false,
           wslDistro: null,
         } satisfies DesktopAppSettings.DesktopSettings);
 
-        const updateChannel = yield* settings.setUpdateChannel("nightly");
-        assert.isTrue(updateChannel.changed);
-        assert.equal(updateChannel.settings.updateChannel, "nightly");
-        assert.equal(updateChannel.settings.updateChannelConfiguredByUser, true);
+        const changed = yield* settings.setWslBackendEnabled(true);
+        assert.isTrue(changed.changed);
+        assert.equal(changed.settings.wslBackendEnabled, true);
       }),
     ),
   );
@@ -192,9 +170,8 @@ describe("DesktopSettings", () => {
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
 
-        const updateChannel = yield* settings.setUpdateChannel("latest");
-        assert.isFalse(updateChannel.changed);
-        assert.equal(updateChannel.settings.updateChannelConfiguredByUser, false);
+        const changed = yield* settings.setWslBackendEnabled(false);
+        assert.isFalse(changed.changed);
       }),
     ),
   );
@@ -235,8 +212,6 @@ describe("DesktopSettings", () => {
           linuxPasswordStore: "auto",
           mainWindowBounds: { x: 120, y: 80, width: 1280, height: 900 },
           mainWindowMaximized: false,
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
           wslOnly: false,
           wslDistro: null,
@@ -286,8 +261,6 @@ describe("DesktopSettings", () => {
             linuxPasswordStore: "auto",
             mainWindowBounds: null,
             mainWindowMaximized: false,
-            updateChannel: "nightly",
-            updateChannelConfiguredByUser: true,
             wslBackendEnabled: false,
             wslOnly: false,
             wslDistro: null,
@@ -318,53 +291,6 @@ describe("DesktopSettings", () => {
     ),
   );
 
-  it.effect("migrates legacy implicit update channels to the runtime default", () =>
-    withSettings(
-      Effect.gen(function* () {
-        const settings = yield* DesktopAppSettings.DesktopAppSettings;
-        yield* writeSettingsPatch({
-          updateChannel: "latest",
-        });
-
-        assert.deepEqual(yield* settings.load, {
-          linuxPasswordStore: "auto",
-          mainWindowBounds: null,
-          mainWindowMaximized: false,
-          updateChannel: "nightly",
-          updateChannelConfiguredByUser: false,
-          wslBackendEnabled: false,
-          wslOnly: false,
-          wslDistro: null,
-        } satisfies DesktopAppSettings.DesktopSettings);
-      }),
-      { appVersion: "0.0.17-nightly.20260415.1" },
-    ),
-  );
-
-  it.effect("preserves explicit stable update channel on nightly builds", () =>
-    withSettings(
-      Effect.gen(function* () {
-        const settings = yield* DesktopAppSettings.DesktopAppSettings;
-        yield* writeSettingsPatch({
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: true,
-        });
-
-        assert.deepEqual(yield* settings.load, {
-          linuxPasswordStore: "auto",
-          mainWindowBounds: null,
-          mainWindowMaximized: false,
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: true,
-          wslBackendEnabled: false,
-          wslOnly: false,
-          wslDistro: null,
-        } satisfies DesktopAppSettings.DesktopSettings);
-      }),
-      { appVersion: "0.0.17-nightly.20260415.1" },
-    ),
-  );
-
   it.effect("normalizes invalid persisted Tailscale Serve ports", () =>
     withSettings(
       Effect.gen(function* () {
@@ -375,8 +301,6 @@ describe("DesktopSettings", () => {
           linuxPasswordStore: "auto",
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
           wslOnly: false,
           wslDistro: null,

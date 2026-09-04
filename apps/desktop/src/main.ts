@@ -39,7 +39,6 @@ import * as ElectronProtocol from "./electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "./electron/ElectronSafeStorage.ts";
 import * as ElectronShell from "./electron/ElectronShell.ts";
 import * as ElectronTheme from "./electron/ElectronTheme.ts";
-import * as ElectronUpdater from "./electron/ElectronUpdater.ts";
 import * as ElectronWindow from "./electron/ElectronWindow.ts";
 import * as DesktopIpc from "./ipc/DesktopIpc.ts";
 import * as BrowserImport from "./preview/BrowserImport/BrowserImport.ts";
@@ -50,7 +49,6 @@ import * as DesktopAppSettings from "./settings/DesktopAppSettings.ts";
 import * as DesktopClientSettings from "./settings/DesktopClientSettings.ts";
 import * as DesktopShellEnvironment from "./shell/DesktopShellEnvironment.ts";
 import * as DesktopTelemetryPublisher from "./telemetry/DesktopTelemetryPublisher.ts";
-import * as DesktopUpdates from "./updates/DesktopUpdates.ts";
 import * as DesktopApplicationMenu from "./window/DesktopApplicationMenu.ts";
 import * as DesktopWindow from "./window/DesktopWindow.ts";
 import * as DesktopWslBackend from "./wsl/DesktopWslBackend.ts";
@@ -83,7 +81,6 @@ const electronLayer = Layer.mergeAll(
   ElectronSafeStorage.layer,
   ElectronShell.layer,
   ElectronTheme.layer,
-  ElectronUpdater.layer,
   ElectronWindow.layer,
   DesktopIpc.layer(Electron.ipcMain),
 );
@@ -150,7 +147,6 @@ const desktopApplicationLayer = Layer.mergeAll(
   DesktopLinuxUrlHandler.layer,
   DesktopShellEnvironment.layer,
 ).pipe(
-  Layer.provideMerge(DesktopUpdates.layer),
   Layer.provideMerge(desktopWslBackendLayer),
   Layer.provideMerge(desktopLocalEnvironmentAuthLayer),
 );

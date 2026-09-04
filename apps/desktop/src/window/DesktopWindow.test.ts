@@ -227,7 +227,6 @@ function makeTestLayer(input: {
         }
         return { settings: desktopSettings, changed };
       }),
-    setUpdateChannel: () => Effect.die("unexpected update channel change"),
     setWslBackendEnabled: () => Effect.die("unexpected WSL backend toggle"),
     setWslDistro: () => Effect.die("unexpected WSL distro change"),
     setWslOnly: () => Effect.die("unexpected WSL-only toggle"),

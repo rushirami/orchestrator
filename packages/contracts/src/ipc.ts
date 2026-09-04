@@ -973,12 +973,6 @@ export interface DesktopBridge {
   onQuitShortcut?: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
-  getUpdateState: () => Promise<DesktopUpdateState>;
-  setUpdateChannel: (channel: DesktopUpdateChannel) => Promise<DesktopUpdateState>;
-  checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
-  downloadUpdate: () => Promise<DesktopUpdateActionResult>;
-  installUpdate: () => Promise<DesktopUpdateActionResult>;
-  onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
   /** Present when the desktop shell accepts `t3 app` activation requests. */
   appActivation?: {
     setReady: (ready: boolean) => Promise<void>;

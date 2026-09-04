@@ -10,9 +10,6 @@ const trimNonEmptyOption = (value: string): Option.Option<string> => {
 const trimmedString = (name: string) =>
   Config.string(name).pipe(Config.option, Config.map(Option.flatMap(trimNonEmptyOption)));
 
-const optionalBoolean = (name: string) =>
-  Config.boolean(name).pipe(Config.option, Config.map(Option.getOrElse(() => false)));
-
 const compactEnv = (env: Readonly<Record<string, string | undefined>>): Record<string, string> =>
   Object.fromEntries(
     Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -28,11 +25,6 @@ export const DesktopConfig = Config.all({
   configuredBackendPort: Config.port("T3CODE_PORT").pipe(Config.option),
   commitHashOverride: trimmedString("T3CODE_COMMIT_HASH"),
   appImagePath: trimmedString("APPIMAGE"),
-  disableAutoUpdate: optionalBoolean("T3CODE_DISABLE_AUTO_UPDATE"),
-  mockUpdates: optionalBoolean("T3CODE_DESKTOP_MOCK_UPDATES"),
-  mockUpdateServerPort: Config.port("T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(
-    Config.withDefault(3000),
-  ),
 });
 
 export const layerTest = (env: Readonly<Record<string, string | undefined>>) =>
