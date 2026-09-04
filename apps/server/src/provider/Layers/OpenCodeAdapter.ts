@@ -2821,9 +2821,6 @@ export function makeOpenCodeAdapter(
                     config: {
                       type: "remote",
                       url: mcpSession.endpoint,
-                      headers: {
-                        Authorization: mcpSession.authorizationHeader,
-                      },
                       oauth: false,
                     },
                   }),

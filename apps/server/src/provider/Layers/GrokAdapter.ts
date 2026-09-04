@@ -1002,12 +1002,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
                       type: "http" as const,
                       name: "t3-code",
                       url: mcpSession.endpoint,
-                      headers: [
-                        {
-                          name: "Authorization",
-                          value: mcpSession.authorizationHeader,
-                        },
-                      ],
+                      headers: [],
                     },
                   ],
                 }

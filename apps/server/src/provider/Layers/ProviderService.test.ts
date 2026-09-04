@@ -2712,12 +2712,12 @@ describe("agent browser access", () => {
         Layer.provide(runtimeRepositoryLayer),
       );
       const providerLayer = makeProviderServiceLive({
-        issueMcpCredential: (request) =>
+        registerMcpContext: (request) =>
           Effect.sync(() => {
             issued.push(request.threadId);
             return undefined;
           }),
-        revokeMcpCredential: (revoked) => Effect.sync(() => void revokedThreads.push(revoked)),
+        clearMcpContext: (revoked) => Effect.sync(() => void revokedThreads.push(revoked)),
       }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),

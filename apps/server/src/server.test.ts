@@ -1,3 +1,4 @@
+import { registerActiveMcpContext } from "./mcp/McpSessionRegistry.ts";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
@@ -1186,6 +1187,48 @@ const NodeHttpServerTestWithWsDeflate = HttpServer.layerTestClient.pipe(
 );
 
 it.layer(NodeServices.layer)("server router seam", (it) => {
+  it.effect("initializes local MCP with provider routing context and no authentication", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const registered = yield* registerActiveMcpContext({
+        threadId: ThreadId.make("local-mcp-thread"),
+        providerInstanceId: ProviderInstanceId.make("codex"),
+      });
+      assert.isDefined(registered);
+      const init = jsonRequestBody({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "local-test", version: "1.0" },
+        },
+      });
+      const response = yield* fetchEffect(registered!.config.endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: init,
+      });
+      assert.equal(response.status, 200);
+      assert.isUndefined(response.headers["www-authenticate"]);
+      assert.isUndefined(response.headers["set-cookie"]);
+      yield* response.text;
+      for (const suffix of ["", "?context=unknown"]) {
+        const missing = yield* fetchEffect(yield* getHttpServerUrl(`/mcp${suffix}`), {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: "Bearer retired-token" },
+          body: init,
+        });
+        assert.equal(missing.status, 404);
+        assert.isUndefined(missing.headers["www-authenticate"]);
+      }
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("parks HTTP ingress until command readiness", () =>
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
