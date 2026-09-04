@@ -36,4 +36,3 @@ Pre-installed and wired into login shells (`~/.bashrc`/`~/.profile`): Node 24 (v
   environment (the server forwards `process.env` to the child; no interactive `claude auth login`
   needed). Provider probing runs at startup and refreshes roughly every 5 minutes — restart the dev
   server to pick up a newly installed provider CLI immediately.
-
