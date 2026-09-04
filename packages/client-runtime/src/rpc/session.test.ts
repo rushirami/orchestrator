@@ -28,8 +28,8 @@ import {
   AVAILABLE_CONNECTION_STATE,
   ConnectionBlockedError,
   ConnectionTransientError,
+  LocalConnectionTarget,
   type PreparedConnection,
-  PrimaryConnectionTarget,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
@@ -99,7 +99,7 @@ class TestWebSocket {
   }
 }
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",

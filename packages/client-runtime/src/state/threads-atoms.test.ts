@@ -23,9 +23,9 @@ import { Atom, AtomRegistry } from "effect/unstable/reactivity";
 import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
+  LocalConnectionTarget,
   type NetworkStatus,
   type PreparedConnection,
-  PrimaryConnectionTarget,
 } from "../connection/model.ts";
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
@@ -42,7 +42,7 @@ import {
   ThreadSnapshotLoader,
 } from "./threads.ts";
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",
@@ -145,12 +145,8 @@ const makeHarness = Effect.fn("TestThreadAtoms.makeHarness")(function* (options?
       new Map(),
     ),
     networkStatus: yield* SubscriptionRef.make<NetworkStatus>("online"),
-    start: Effect.void,
-    register: () => Effect.die("Unexpected environment registration"),
     registerPlatform: () => Effect.die("Unexpected environment registration"),
     reconcilePlatform: () => Effect.die("Unexpected environment reconciliation"),
-    remove: () => Effect.die("Unexpected environment removal"),
-    removeRelayEnvironments: () => Effect.die("Unexpected environment removal"),
     retryNow: () => Effect.void,
     state: () => SubscriptionRef.get(supervisor.state),
     stateChanges: () => SubscriptionRef.changes(supervisor.state),

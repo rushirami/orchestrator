@@ -14,8 +14,8 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import {
   AVAILABLE_CONNECTION_STATE,
+  LocalConnectionTarget,
   type PreparedConnection,
-  PrimaryConnectionTarget,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
@@ -47,7 +47,7 @@ const snapshotEvent = (config: ServerConfig): ServerConfigStreamEvent => ({
   config,
 });
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",

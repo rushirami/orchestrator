@@ -19,15 +19,15 @@ import {
   ConnectionBlockedError,
   type ConnectionTarget,
   ConnectionTransientError,
+  LocalConnectionTarget,
   type NetworkStatus,
   type PreparedConnection,
-  PrimaryConnectionTarget,
   type SupervisorConnectionState,
 } from "./model.ts";
 import * as EnvironmentSupervisor from "./supervisor.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",
@@ -36,7 +36,6 @@ const TARGET = new PrimaryConnectionTarget({
 
 const TARGET_ENTRY: ConnectionCatalogEntry = {
   target: TARGET,
-  profile: Option.none(),
 };
 
 const PREPARED_CONNECTION: PreparedConnection = {

@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import { type ConnectionCatalogEntry } from "./catalog.ts";
 import { appendClientConnectionParams } from "./clientMetadata.ts";
-import type { PreparedConnection, PrimaryConnectionTarget } from "./model.ts";
+import type { LocalConnectionTarget, PreparedConnection } from "./model.ts";
 import { type ConnectionAttemptError, ConnectionBlockedError } from "./model.ts";
 
 import { parseLocalBackendUrl } from "@t3tools/shared/localBackendUrl";
@@ -20,7 +20,7 @@ export class ConnectionResolver extends Context.Service<
 >()("@t3tools/client-runtime/connection/resolver/ConnectionResolver") {}
 
 function primarySocketUrl(
-  target: PrimaryConnectionTarget,
+  target: LocalConnectionTarget,
   clientMetadata: AuthClientPresentationMetadata | undefined,
 ): string {
   const url = parseLocalBackendUrl(target.wsBaseUrl, "ws:");
@@ -37,7 +37,7 @@ export const make = Effect.gen(function* () {
     entry: ConnectionCatalogEntry,
   ) {
     const target = entry.target;
-    if (target._tag !== "PrimaryConnectionTarget") {
+    if (target._tag !== "LocalConnectionTarget") {
       return yield* new ConnectionBlockedError({
         reason: "unsupported",
         detail: "Only desktop-managed local backends are supported.",

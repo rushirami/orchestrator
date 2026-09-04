@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
-  connectionCatalogDisplayUrl,
   type EnvironmentPresentation as BaseEnvironmentPresentation,
+  connectionCatalogDisplayUrl,
 } from "@t3tools/client-runtime/connection";
 import type { EnvironmentId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -17,7 +17,6 @@ export interface EnvironmentPresentation extends BaseEnvironmentPresentation {
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly displayUrl: string | null;
-  readonly relayManaged: boolean;
 }
 
 function projectEnvironmentPresentation(
@@ -29,7 +28,6 @@ function projectEnvironmentPresentation(
     environmentId,
     label: presentation.entry.target.label,
     displayUrl: connectionCatalogDisplayUrl(presentation.entry),
-    relayManaged: presentation.entry.target._tag === "RelayConnectionTarget",
   };
 }
 

@@ -1,16 +1,16 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
+  type OrchestrationShellSnapshot,
+  type OrchestrationThread,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
-  type OrchestrationShellSnapshot,
-  type OrchestrationThread,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 
-import { PrimaryConnectionTarget } from "../connection/model.ts";
+import { LocalConnectionTarget } from "../connection/model.ts";
 import {
   InvalidScopedProjectKeyError,
   InvalidScopedProjectRefCollectionKeyError,
@@ -19,14 +19,13 @@ import {
   parseProjectRefCollectionKey,
   parseThreadKey,
 } from "./entities.ts";
-import type { EnvironmentShellState } from "./shell.ts";
-import { EMPTY_ENVIRONMENT_THREAD_STATE, type EnvironmentThreadState } from "./threads.ts";
 import { createEnvironmentProjectAtoms } from "./projectEntities.ts";
-import { createEnvironmentSnapshotAtom } from "./snapshots.ts";
-import { createEnvironmentThreadDetailAtoms } from "./threadDetail.ts";
-import { mergeEnvironmentThread } from "./threadDetail.ts";
-import { createEnvironmentThreadShellAtoms } from "./threadShell.ts";
+import type { EnvironmentShellState } from "./shell.ts";
 import { applyShellStreamEvent } from "./shellReducer.ts";
+import { createEnvironmentSnapshotAtom } from "./snapshots.ts";
+import { createEnvironmentThreadDetailAtoms, mergeEnvironmentThread } from "./threadDetail.ts";
+import { EMPTY_ENVIRONMENT_THREAD_STATE, type EnvironmentThreadState } from "./threads.ts";
+import { createEnvironmentThreadShellAtoms } from "./threadShell.ts";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
 const PROJECT_ID = ProjectId.make("project-1");
@@ -163,13 +162,12 @@ function makeHarness(environmentIds: ReadonlyArray<EnvironmentId> = [ENVIRONMENT
       environmentIds.map((environmentId) => [
         environmentId,
         {
-          target: new PrimaryConnectionTarget({
+          target: new LocalConnectionTarget({
             environmentId,
             label: "Environment",
             httpBaseUrl: "https://example.test",
             wsBaseUrl: "wss://example.test",
           }),
-          profile: Option.none(),
         },
       ]),
     ),

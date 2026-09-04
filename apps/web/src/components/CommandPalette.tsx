@@ -1,5 +1,7 @@
 "use client";
 
+import { useAtomValue } from "@effect/atom-react";
+import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import {
   scopedThreadKey,
   scopeProjectRef,
@@ -13,9 +15,6 @@ import {
   getDefaultCloneUrl,
   normalizePastedCloneUrl,
 } from "@t3tools/client-runtime/operations/projects";
-import { connectionStatusText } from "@t3tools/client-runtime/connection";
-import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import {
   canPreloadBrowsePath,
   createBrowseNavigationCoordinator,
@@ -27,18 +26,20 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import {
   type DesktopWslState,
   type EnvironmentId,
   type EnvironmentMachineKind,
   type FilesystemBrowseResult,
+  PRIMARY_LOCAL_ENVIRONMENT_ID,
   type ProjectId,
+  resolveEnvironmentMachineKind,
   type SourceControlDiscoveryResult,
   type SourceControlProviderKind,
   type SourceControlRepositoryInfo,
-  PRIMARY_LOCAL_ENVIRONMENT_ID,
-  resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
+import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
@@ -55,6 +56,8 @@ import {
   TextSearchIcon,
 } from "lucide-react";
 import {
+  type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -63,31 +66,19 @@ import {
   useReducer,
   useRef,
   useState,
-  type KeyboardEvent,
-  type ReactNode,
 } from "react";
-import { useAtomValue } from "@effect/atom-react";
 
-import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
+import { onOpenCommandPalette } from "../commandPaletteBus";
+import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
+import { desktopLocalBackendId, isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useClientSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
-import { readLocalApi } from "../localApi";
-import { desktopLocalBackendId } from "../connection/desktopLocal";
-import { filesystemEnvironment } from "../state/filesystem";
-import { projectEnvironment } from "../state/projects";
-import { useEnvironmentQuery } from "../state/query";
-import { sourceControlEnvironment } from "../state/sourceControl";
-import { vcsEnvironment } from "../state/vcs";
-import { useAtomCommand } from "../state/use-atom-command";
-import { useAtomQueryRunner } from "../state/use-atom-query-runner";
-import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
-import { useProject, useProjects, useThreadShells } from "../state/entities";
-import { useThreadSearch } from "../state/queries";
-import * as ThreadPr from "./ThreadStatusIndicators";
+import { resolveShortcutCommand, threadJumpIndexFromCommand } from "../keybindings";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
+import { isPreviewFocused } from "../lib/previewFocus";
 import {
   appendBrowsePathSegment,
   ensureBrowseDirectoryPath,
@@ -99,10 +90,7 @@ import {
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
 } from "../lib/projectPaths";
-import { onOpenCommandPalette } from "../commandPaletteBus";
-import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { getLatestThreadForProject, sortThreads } from "../lib/threadSort";
 import {
   cn,
@@ -111,15 +99,37 @@ import {
   isWindowsPlatform,
   newProjectId,
 } from "../lib/utils";
+import { readLocalApi } from "../localApi";
+import { getProjectOrderKey, selectProjectGroupingSettings } from "../logicalProject";
+import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
+import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
+import {
+  buildSidebarProjectPickerEntries,
+  buildSidebarProjectSnapshots,
+} from "../sidebarProjectGrouping";
+import { useProject, useProjects, useThreadShells } from "../state/entities";
+import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
+import { filesystemEnvironment } from "../state/filesystem";
+import { projectEnvironment } from "../state/projects";
+import { useThreadSearch } from "../state/queries";
+import { useEnvironmentQuery } from "../state/query";
+import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
+import { sourceControlEnvironment } from "../state/sourceControl";
+import { useAtomCommand } from "../state/use-atom-command";
+import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import { vcsEnvironment } from "../state/vcs";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
-import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
+import type { Project } from "../types";
+import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import {
   applyWslEnvironmentConfiguration,
   parseWslUncPath,
   resolveProjectPickerTarget,
   resolveWslProjectSelection,
 } from "../wslPaths";
+import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
+import type { ChatComposerHandle } from "./chat/ChatComposer";
 import {
   ADDON_ICON_CLASS,
   browseInputEndPaddingClass,
@@ -127,11 +137,11 @@ import {
   buildProjectActionItems,
   buildRootGroups,
   buildThreadActionItems,
-  enumerateCommandPaletteItems,
   type CommandPaletteActionItem,
   type CommandPaletteOpenIntent,
   type CommandPaletteSubmenuItem,
   type CommandPaletteView,
+  enumerateCommandPaletteItems,
   filterCommandPaletteGroups,
   filterPinnedBrowseEntries,
   getCommandPaletteInputPlaceholder,
@@ -141,40 +151,29 @@ import {
   reduceCommandPaletteUiState,
   type SearchOverlayMode,
 } from "./CommandPalette.logic";
-import { orderItemsByPreferredIds, sortLogicalProjectsForSidebar } from "./Sidebar.logic";
-import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteContent } from "./CommandPaletteContent";
 import { CommandPaletteResults } from "./CommandPaletteResults";
-import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
-import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
+import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
+import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
-import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
+import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
+import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
+import { orderItemsByPreferredIds, sortLogicalProjectsForSidebar } from "./Sidebar.logic";
 import {
   COMMAND_PALETTE_META_ICON_CLASS,
   CommandPaletteMetaDot,
   ThreadCommandSubtitle,
 } from "./ThreadCommandSubtitle";
+import * as ThreadPr from "./ThreadStatusIndicators";
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
-import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
-import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
-import { resolveShortcutCommand, threadJumpIndexFromCommand } from "../keybindings";
-import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "./ui/command";
 import { Button } from "./ui/button";
+import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "./ui/command";
 import { Kbd, KbdGroup } from "./ui/kbd";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
-import type { ChatComposerHandle } from "./chat/ChatComposer";
-import { getProjectOrderKey, selectProjectGroupingSettings } from "../logicalProject";
-import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
-import {
-  buildSidebarProjectPickerEntries,
-  buildSidebarProjectSnapshots,
-} from "../sidebarProjectGrouping";
-import type { Project } from "../types";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 
@@ -730,17 +729,12 @@ function OpenCommandPaletteDialog(props: {
     () =>
       new Map(
         environments.map((environment) => {
-          const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
-          const isLocal = isPrimary || isDesktopLocalConnectionTarget(environment.entry.target);
+          const isPrimary = environment.entry.target.backendId === undefined;
           return [
             environment.environmentId,
             {
-              kind: isLocal ? "local" : "remote",
-              label: isPrimary
-                ? "Local"
-                : isLocal
-                  ? `${environment.label} (Local)`
-                  : environment.label,
+              kind: "local",
+              label: isPrimary ? "Local" : `${environment.label} (Local)`,
               machine: resolveEnvironmentMachineKind(environment.serverConfig),
             },
           ] as const;
@@ -826,7 +820,7 @@ function OpenCommandPaletteDialog(props: {
 
   const addProjectEnvironmentOptions = useMemo(() => {
     const options = environments.map((environment): AddProjectEnvironmentOption => {
-      const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
+      const isPrimary = environment.entry.target.backendId === undefined;
       return {
         environmentId: environment.environmentId,
         label: resolveEnvironmentOptionLabel({

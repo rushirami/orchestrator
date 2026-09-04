@@ -1,10 +1,10 @@
 import {
   ConnectionTransientError,
   Connectivity,
+  LocalConnectionRegistration,
+  LocalConnectionTarget,
   mapRemoteEnvironmentError,
   type PlatformConnectionRegistration,
-  PrimaryConnectionRegistration,
-  PrimaryConnectionTarget,
   Wakeups,
 } from "@t3tools/client-runtime/connection";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
@@ -94,14 +94,14 @@ const capabilitiesLayer = Layer.effectContext(
   }),
 );
 
-const loadPrimaryConnectionRegistration = Effect.fn(
-  "web.connectionPlatform.loadPrimaryConnectionRegistration",
+const loadLocalConnectionRegistration = Effect.fn(
+  "web.connectionPlatform.loadLocalConnectionRegistration",
 )(function* (resolved: PrimaryEnvironmentTarget) {
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({
     httpBaseUrl: resolved.target.httpBaseUrl,
   }).pipe(Effect.provide(primaryEnvironmentHttpLayer), Effect.mapError(mapRemoteEnvironmentError));
-  return new PrimaryConnectionRegistration({
-    target: new PrimaryConnectionTarget({
+  return new LocalConnectionRegistration({
+    target: new LocalConnectionTarget({
       environmentId: descriptor.environmentId,
       label: descriptor.label,
       httpBaseUrl: resolved.target.httpBaseUrl,
@@ -134,8 +134,8 @@ const loadSecondaryConnectionRegistration = Effect.fn(
     Effect.mapError(mapRemoteEnvironmentError),
   );
   const label = entry.label || descriptor.label;
-  return new PrimaryConnectionRegistration({
-    target: new PrimaryConnectionTarget({
+  return new LocalConnectionRegistration({
+    target: new LocalConnectionTarget({
       environmentId: descriptor.environmentId,
       backendId: entry.id,
       label,
@@ -231,7 +231,7 @@ const platformConnectionSourceLayer = Layer.effect(
           next.set(PRIMARY_LOCAL_ENVIRONMENT_ID, cached);
           registrations.push(cached.registration);
         } else {
-          const built = yield* loadPrimaryConnectionRegistration(primaryTarget).pipe(
+          const built = yield* loadLocalConnectionRegistration(primaryTarget).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("Could not discover the primary environment.", { error }),
             ),

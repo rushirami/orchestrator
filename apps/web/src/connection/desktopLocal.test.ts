@@ -1,4 +1,4 @@
-import { PrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
+import { LocalConnectionTarget } from "@t3tools/client-runtime/connection";
 import { EnvironmentId, PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -10,7 +10,7 @@ import {
 
 describe("desktop local connection identity", () => {
   it("preserves the desktop backend instance id", () => {
-    const target = new PrimaryConnectionTarget({
+    const target = new LocalConnectionTarget({
       backendId: "wsl:Ubuntu",
       httpBaseUrl: "http://127.0.0.1:4000",
       wsBaseUrl: "ws://127.0.0.1:4000",
@@ -23,7 +23,7 @@ describe("desktop local connection identity", () => {
   });
 
   it("does not classify the primary environment as desktop-local", () => {
-    const target = new PrimaryConnectionTarget({
+    const target = new LocalConnectionTarget({
       environmentId: EnvironmentId.make("environment-primary"),
       httpBaseUrl: "http://127.0.0.1:3773",
       label: "This device",

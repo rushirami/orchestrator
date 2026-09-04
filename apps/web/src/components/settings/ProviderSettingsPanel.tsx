@@ -155,11 +155,9 @@ function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }
 }
 
 function providerEnvironmentDetail(environment: EnvironmentPresentation): string {
-  if (environment.entry.target._tag === "PrimaryConnectionTarget") return "Primary device";
-  if (environment.relayManaged) return "T3 Connect";
-  if (environment.entry.target._tag === "SshConnectionTarget") return "SSH";
-  if (isDesktopLocalConnectionTarget(environment.entry.target)) return "Local device";
-  return environment.displayUrl ?? "Remote device";
+  return isDesktopLocalConnectionTarget(environment.entry.target)
+    ? "Local device"
+    : "Primary device";
 }
 
 const providerCardClassName = "rounded-xl border border-border/60 bg-card/40 shadow-xs/5";
@@ -312,7 +310,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
     }
   }, [searchTargetId, searchableEnvironmentId, selectedEnvironmentCanRenderSettings]);
   const onlyPrimaryDevice =
-    options.length === 1 && options[0]?.entry.target._tag === "PrimaryConnectionTarget";
+    options.length === 1 && options[0]?.entry.target.backendId === undefined;
   const deviceTabs =
     !onlyPrimaryDevice && options.length > 0 ? (
       <ScrollArea hideScrollbars scrollFade className="mx-3 h-11 min-w-0 rounded-none sm:mx-4">

@@ -25,8 +25,8 @@ import * as TestClock from "effect/testing/TestClock";
 
 import {
   AVAILABLE_CONNECTION_STATE,
+  LocalConnectionTarget,
   type PreparedConnection,
-  PrimaryConnectionTarget,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
@@ -41,7 +41,7 @@ import {
   ThreadSnapshotLoader,
 } from "./threads.ts";
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",

@@ -18,7 +18,7 @@ import {
   AVAILABLE_CONNECTION_STATE,
   ConnectionBlockedError,
   ConnectionTransientError,
-  PrimaryConnectionTarget,
+  LocalConnectionTarget,
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
@@ -27,22 +27,22 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
 import type * as RpcSession from "../rpc/session.ts";
 import {
-  environmentRpcKey,
   createAtomCommandScheduler,
   createEnvironmentQueryAtomFamily,
   createRuntimeCommand,
-  scheduleAtomCommandEffect,
+  environmentRpcKey,
   executeAtomCommand,
   executeAtomQuery,
   isAtomCommandInterrupted,
   mapAtomCommandResult,
   runAtomCommand,
+  scheduleAtomCommandEffect,
   settleAsyncResult,
   settlePromise,
   squashAtomCommandFailure,
 } from "./runtime.ts";
 
-const QUERY_ENVIRONMENT = new PrimaryConnectionTarget({
+const QUERY_ENVIRONMENT = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("query-environment"),
   label: "Query environment",
   httpBaseUrl: "https://query.example.test",

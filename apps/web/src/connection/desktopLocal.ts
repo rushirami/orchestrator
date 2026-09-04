@@ -1,18 +1,18 @@
 import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 import {
-  PRIMARY_LOCAL_ENVIRONMENT_ID,
   type DesktopBridge,
   type DesktopEnvironmentBootstrap,
+  PRIMARY_LOCAL_ENVIRONMENT_ID,
 } from "@t3tools/contracts";
 
 /** The desktop pool id routes operations such as the WSL folder picker. */
 export function isDesktopLocalConnectionTarget(target: ConnectionTarget): target is Extract<
   ConnectionTarget,
-  { readonly _tag: "PrimaryConnectionTarget" }
+  { readonly _tag: "LocalConnectionTarget" }
 > & {
   readonly backendId: string;
 } {
-  return target._tag === "PrimaryConnectionTarget" && target.backendId !== undefined;
+  return target._tag === "LocalConnectionTarget" && target.backendId !== undefined;
 }
 
 export function desktopLocalBackendId(target: ConnectionTarget): string | null {

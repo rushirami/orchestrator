@@ -2,11 +2,11 @@ import { describe, expect, it } from "@effect/vitest";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { type PreparedConnection, PrimaryConnectionTarget } from "../connection/model.ts";
+import { LocalConnectionTarget, type PreparedConnection } from "../connection/model.ts";
 import { remoteHttpClientLayer } from "../rpc/http.ts";
 import { fetchEnvironmentPullRequestDiff } from "./pullRequestDiffHttp.ts";
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test/base",

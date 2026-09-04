@@ -1,40 +1,25 @@
-import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import * as Option from "effect/Option";
+import { EnvironmentId } from "@t3tools/contracts";
+import { LocalConnectionTarget } from "./model.ts";
 
-import { BearerConnectionProfile, type ConnectionCatalogEntry } from "./catalog.ts";
-import {
-  BearerConnectionTarget,
-  ConnectionTransientError,
-  type SupervisorConnectionState,
-} from "./model.ts";
+import { type ConnectionCatalogEntry } from "./catalog.ts";
+import { ConnectionTransientError, type SupervisorConnectionState } from "./model.ts";
 import {
   connectionCatalogDisplayUrl,
   connectionPhaseMessage,
   connectionStatusText,
   connectionStatusTitle,
-  presentEnvironmentConnection,
   presentConnectionState,
+  presentEnvironmentConnection,
 } from "./presentation.ts";
 
-const TARGET = new BearerConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Remote environment",
-  connectionId: "connection-1",
+const TARGET = new LocalConnectionTarget({
+  environmentId: EnvironmentId.make("environment-local"),
+  label: "Local",
+  httpBaseUrl: "http://127.0.0.1:3777",
+  wsBaseUrl: "ws://127.0.0.1:3777",
 });
-
-const ENTRY: ConnectionCatalogEntry = {
-  target: TARGET,
-  profile: Option.some(
-    new BearerConnectionProfile({
-      connectionId: TARGET.connectionId,
-      environmentId: TARGET.environmentId,
-      label: TARGET.label,
-      httpBaseUrl: "https://environment.example.test",
-      wsBaseUrl: "wss://environment.example.test",
-    }),
-  ),
-};
+const ENTRY: ConnectionCatalogEntry = { target: TARGET };
 
 function supervisorState(overrides: Partial<SupervisorConnectionState>): SupervisorConnectionState {
   return {
@@ -51,8 +36,8 @@ function supervisorState(overrides: Partial<SupervisorConnectionState>): Supervi
 }
 
 describe("connection presentation", () => {
-  it("preserves profile display information without exposing credentials", () => {
-    expect(connectionCatalogDisplayUrl(ENTRY)).toBe("https://environment.example.test");
+  it("displays the local backend address", () => {
+    expect(connectionCatalogDisplayUrl(ENTRY)).toBe("http://127.0.0.1:3777");
   });
 
   it("distinguishes initial connection, reconnect, and retry errors", () => {
