@@ -1,5 +1,9 @@
 # T3 Code
 
+## Fork scope
+
+This fork is being reduced to a desktop-only application with a loopback backend. Mobile and the public marketing website are removed. The React UI in `apps/web` remains as Electron renderer code. Do not restore mobile, marketing, remote access, T3 authentication, or external analytics from upstream. The maintainer explicitly authorized these removals; upstream surface-preservation guidance below does not override this fork scope. Retain provider, pricing, theme, usage-limit and source-control integrations.
+
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
 
 You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.

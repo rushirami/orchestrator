@@ -9,15 +9,12 @@
 - [Review usage](./user/usage.md)
 - [Anonymous usage data](./user/telemetry.md)
 - [Customize a project icon](./user/project-settings.md)
-- [Mobile appearance](./user/mobile-appearance.md)
 - [Environment themes](./user/environment-theme.md)
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
 - [Source control integrations](./user/source-control.md)
 - [Background service (Linux)](./user/background-service.md)
 - Providers: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md) · [OpenCode](./user/providers-opencode.md)
-
-Mobile app: [apps/mobile/README.md](../apps/mobile/README.md)
 
 ---
 
@@ -31,7 +28,6 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Glossary](./internals/glossary.md)
 - [Scripts](./internals/scripts.md)
 - [Connection runtime](./internals/connection-runtime.md)
-- [Voice input](./internals/voice-input.md)
 - [Providers](./internals/providers.md)
 - [Remote environments](./internals/remote.md)
 - [Server updates](./internals/server-updates.md)
@@ -47,4 +43,3 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Release](./operations/release.md)
 - [Observability](./operations/observability.md)
 - [Relay observability](./operations/relay-observability.md)
-- [Mobile app store screenshots](./operations/mobile-app-store-screenshots.md)
