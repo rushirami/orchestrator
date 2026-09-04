@@ -105,8 +105,6 @@ const makeCliTestServerConfig = (baseDir: string) =>
       desktopBootstrapToken: undefined,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,
-      tailscaleServeEnabled: false,
-      tailscaleServePort: 443,
     } satisfies ServerConfig.ServerConfig["Service"];
   });
 
@@ -186,6 +184,14 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.include(output, "uninstall");
       assert.include(output, "update");
       assert.include(output, "status");
+    }),
+  );
+
+  it.effect("omits removed pairing and tunnel options from the CLI", () =>
+    Effect.gen(function* () {
+      const { output } = yield* captureStdout(runCli(["--help"]));
+      assert.notInclude(output, "tailscale-serve");
+      assert.notMatch(output, /\bpair\s/);
     }),
   );
 
