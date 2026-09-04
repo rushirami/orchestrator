@@ -51,6 +51,8 @@ describe("DesktopEnvironment", () => {
       );
 
       assert.equal(environment.isDevelopment, true);
+      assert.equal(Object.hasOwn(environment, "otlpTracesUrl"), false);
+      assert.equal(Object.hasOwn(environment, "otlpExportIntervalMs"), false);
       assert.equal(environment.appDataDirectory, "/Users/alice/Library/Application Support");
       assert.equal(environment.baseDir, "/tmp/t3");
       assert.equal(environment.stateDir, "/tmp/t3/userdata");
@@ -77,8 +79,6 @@ describe("DesktopEnvironment", () => {
       assert.deepEqual(environment.devRemoteT3ServerEntryPath, Option.some("/remote/server.mjs"));
       assert.deepEqual(environment.configuredBackendPort, Option.some(4949));
       assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
-      assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
-      assert.equal(environment.otlpExportIntervalMs, 2500);
     }),
   );
 

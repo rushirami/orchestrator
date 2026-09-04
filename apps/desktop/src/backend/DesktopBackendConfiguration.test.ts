@@ -3,11 +3,9 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -20,18 +18,11 @@ import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
 
 const PersistedServerObservabilitySettingsDocument = Schema.Struct({
-  observability: Schema.Struct({
-    otlpTracesUrl: Schema.String,
-    otlpMetricsUrl: Schema.String,
-  }),
+  observability: Schema.Struct({ otlpTracesUrl: Schema.String, otlpMetricsUrl: Schema.String }),
 });
 
 const encodePersistedServerObservabilitySettingsDocument = Schema.encodeEffect(
   Schema.fromJsonString(PersistedServerObservabilitySettingsDocument),
-);
-
-const isDesktopBackendObservabilitySettingsReadError = Schema.is(
-  DesktopBackendConfiguration.DesktopBackendObservabilitySettingsReadError,
 );
 
 const serverExposureLayer = Layer.succeed(DesktopServerExposure.DesktopServerExposure, {
@@ -735,7 +726,7 @@ describe("DesktopBackendConfiguration", () => {
     ),
   );
 
-  it.effect("resolvePrimary surfaces persisted backend observability endpoints", () =>
+  it.effect("resolvePrimary ignores obsolete exporter endpoints in persisted settings", () =>
     withHarness(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -749,15 +740,15 @@ describe("DesktopBackendConfiguration", () => {
           environment.serverSettingsPath,
           yield* encodePersistedServerObservabilitySettingsDocument({
             observability: {
-              otlpTracesUrl: " http://127.0.0.1:4318/v1/traces ",
-              otlpMetricsUrl: " http://127.0.0.1:4318/v1/metrics ",
+              otlpTracesUrl: "https://collector.example/v1/traces",
+              otlpMetricsUrl: "https://collector.example/v1/metrics",
             },
           }),
         );
 
         const config = yield* configuration.resolvePrimary;
-        assert.equal(config.bootstrap.otlpTracesUrl, "http://127.0.0.1:4318/v1/traces");
-        assert.equal(config.bootstrap.otlpMetricsUrl, "http://127.0.0.1:4318/v1/metrics");
+        assert.equal(Object.hasOwn(config.bootstrap, "otlpTracesUrl"), false);
+        assert.equal(Object.hasOwn(config.bootstrap, "otlpMetricsUrl"), false);
       }),
     ),
   );
@@ -767,71 +758,10 @@ describe("DesktopBackendConfiguration", () => {
       Effect.gen(function* () {
         const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
         const config = yield* configuration.resolvePrimary;
-
-        assert.isUndefined(config.bootstrap.otlpTracesUrl);
-        assert.isUndefined(config.bootstrap.otlpMetricsUrl);
+        assert.equal(Object.hasOwn(config.bootstrap, "otlpTracesUrl"), false);
+        assert.equal(Object.hasOwn(config.bootstrap, "otlpMetricsUrl"), false);
       }),
     ),
-  );
-
-  it.effect("logs structured context when persisted observability settings cannot be read", () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-desktop-backend-config-test-",
-      });
-      const settingsPath = path.join(baseDir, "userdata", "settings.json");
-      const cause = PlatformError.systemError({
-        _tag: "PermissionDenied",
-        module: "FileSystem",
-        method: "readFileString",
-        pathOrDescriptor: settingsPath,
-      });
-      const messages: Array<unknown> = [];
-      const logger = Logger.make(({ message }) => {
-        messages.push(message);
-      });
-      const failingFileSystemLayer = Layer.succeed(
-        FileSystem.FileSystem,
-        FileSystem.makeNoop({
-          readFileString: () => Effect.fail(cause),
-        }),
-      );
-
-      const config = yield* Effect.gen(function* () {
-        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
-        return yield* configuration.resolvePrimary;
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            DesktopBackendConfiguration.layer.pipe(
-              Layer.provideMerge(serverExposureLayer),
-              Layer.provideMerge(DesktopAppSettings.layerTest()),
-              Layer.provideMerge(DesktopWslServerTree.layerTest()),
-              Layer.provideMerge(DesktopWslEnvironment.layerTest()),
-              Layer.provideMerge(makeEnvironmentLayer(baseDir)),
-              Layer.provideMerge(failingFileSystemLayer),
-            ),
-            Logger.layer([logger], { mergeWithExisting: false }),
-          ),
-        ),
-      );
-
-      assert.isUndefined(config.bootstrap.otlpTracesUrl);
-      assert.isUndefined(config.bootstrap.otlpMetricsUrl);
-
-      const error = messages
-        .flatMap((message) => (Array.isArray(message) ? message : [message]))
-        .find(isDesktopBackendObservabilitySettingsReadError);
-      assert.isDefined(error);
-      assert.equal(error.settingsPath, settingsPath);
-      assert.equal(error.cause, cause);
-      assert.equal(
-        error.message,
-        `Failed to read persisted backend observability settings at ${settingsPath}.`,
-      );
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("resolvePrimary captures backend output in dev so child logs can be persisted", () =>
