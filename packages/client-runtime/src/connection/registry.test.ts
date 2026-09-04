@@ -1,9 +1,9 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   type DesktopSshEnvironmentTarget,
   EnvironmentId,
   type OrchestrationShellSnapshot,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -18,39 +18,38 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
-import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as TokenStore from "../authorization/tokenStore.ts";
+import * as Persistence from "../platform/persistence.ts";
+import * as RpcSession from "../rpc/session.ts";
+import { runDesktopCommitWithReconnectObserver } from "../state/server.ts";
 import {
   BearerConnectionCredential,
   BearerConnectionProfile,
   BearerConnectionRegistration,
+  type ConnectionCredential,
+  type ConnectionProfile,
   type ConnectionRegistration,
   PrimaryConnectionRegistration,
   RelayConnectionRegistration,
   SshConnectionProfile,
-  type ConnectionCredential,
-  type ConnectionProfile,
 } from "./catalog.ts";
 import * as Connectivity from "./connectivity.ts";
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import * as ConnectionDriver from "./driver.ts";
 import {
-  ConnectionTransientError,
   BearerConnectionTarget,
+  type ConnectionTarget,
+  ConnectionTransientError,
+  type PreparedConnection,
   PrimaryConnectionTarget,
   RelayConnectionTarget,
   SshConnectionTarget,
-  type ConnectionTarget,
-  type PreparedConnection,
   type SupervisorConnectionState,
 } from "./model.ts";
-import * as Persistence from "../platform/persistence.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
 import * as EnvironmentRegistry from "./registry.ts";
-import * as RpcSession from "../rpc/session.ts";
 import * as EnvironmentSupervisor from "./supervisor.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
-import { runDesktopCommitWithReconnectObserver } from "../state/server.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -174,7 +173,6 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
       ],
     ]),
   );
-  const disconnectedSshTargets = yield* Ref.make<ReadonlyArray<DesktopSshEnvironmentTarget>>([]);
 
   const targetStore = Persistence.ConnectionTargetStore.of({
     list: Ref.get(storedTargets).pipe(Effect.map((targets) => [...targets.values()])),
@@ -333,11 +331,6 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
         return next;
       }),
   });
-  const sshGateway = ClientCapabilities.SshEnvironmentGateway.of({
-    provision: () => Effect.die(new Error("SSH provisioning is not used.")),
-    prepare: () => Effect.die(new Error("SSH preparation is not used.")),
-    disconnect: (target) => Ref.update(disconnectedSshTargets, (current) => [...current, target]),
-  });
   const driver = ConnectionDriver.ConnectionDriver.of({
     connect: (entry, reportProgress) =>
       Effect.gen(function* () {
@@ -380,7 +373,6 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
         Layer.succeed(ConnectionProfileStore.ConnectionProfileStore, profileStore),
         Layer.succeed(ConnectionCredentialStore.ConnectionCredentialStore, credentialStore),
         Layer.succeed(TokenStore.RemoteDpopAccessTokenStore, tokenStore),
-        Layer.succeed(ClientCapabilities.SshEnvironmentGateway, sshGateway),
         Layer.succeed(Connectivity.Connectivity, connectivity),
         Layer.succeed(
           ConnectionWakeups.ConnectionWakeups,
@@ -405,7 +397,6 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
     profileReadCount,
     storedCredentials,
     storedRemoteTokens,
-    disconnectedSshTargets,
     networkStatus,
   };
 });
@@ -969,7 +960,7 @@ describe("EnvironmentRegistry", () => {
     }),
   );
 
-  it.effect("removes all owned SSH state only on explicit removal", () =>
+  it.effect("removes legacy SSH records locally", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness(
         [SSH_CONNECTION],
@@ -996,7 +987,6 @@ describe("EnvironmentRegistry", () => {
         expect((yield* Ref.get(harness.storedRemoteTokens)).has(SSH_CONNECTION.environmentId)).toBe(
           false,
         );
-        expect(yield* Ref.get(harness.disconnectedSshTargets)).toEqual([SSH_TARGET]);
       }).pipe(Effect.provide(harness.layer));
     }),
   );

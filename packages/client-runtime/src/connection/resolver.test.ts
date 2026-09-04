@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { type DesktopSshEnvironmentTarget, EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -14,7 +14,6 @@ import {
   type ConnectionCatalogEntry,
   type ConnectionCredential,
   type ConnectionProfile,
-  SshConnectionProfile,
 } from "./catalog.ts";
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import {
@@ -31,12 +30,6 @@ const ENDPOINT = {
   httpBaseUrl: "https://environment.example.test",
   wsBaseUrl: "wss://environment.example.test",
   providerKind: "cloudflare_tunnel" as const,
-};
-const SSH_TARGET: DesktopSshEnvironmentTarget = {
-  alias: "development",
-  hostname: "development.example.test",
-  username: "developer",
-  port: 22,
 };
 
 function catalogEntry(
@@ -76,7 +69,6 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
   readonly connectEnvironment?: ManagedRelay.ManagedRelayClient["Service"]["connectEnvironment"];
   readonly authorizeBearer?: RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization["Service"]["authorizeBearer"];
   readonly primaryBearerToken?: string;
-  readonly prepareSsh?: ClientCapabilities.SshEnvironmentGateway["Service"]["prepare"];
 }) => {
   const profiles = new Map(
     (options?.profiles ?? []).map((profile) => [profile.connectionId, profile]),
@@ -109,22 +101,6 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
           },
         })),
   });
-  const ssh = ClientCapabilities.SshEnvironmentGateway.of({
-    provision: () => Effect.die("unused"),
-    prepare:
-      options?.prepareSsh ??
-      (() =>
-        Effect.succeed({
-          bootstrap: {
-            target: SSH_TARGET,
-            httpBaseUrl: "http://127.0.0.1:4010",
-            wsBaseUrl: "ws://127.0.0.1:4010",
-            pairingToken: null,
-          },
-          bearerToken: "ssh-bearer",
-        })),
-    disconnect: () => Effect.void,
-  });
 
   const dependencies = Layer.mergeAll(
     Layer.succeed(ConnectionProfileStore.ConnectionProfileStore, profileStore),
@@ -153,7 +129,6 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
       }),
     ),
     Layer.succeed(RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization, remote),
-    Layer.succeed(ClientCapabilities.SshEnvironmentGateway, ssh),
     Layer.succeed(
       ManagedRelay.ManagedRelayClient,
       relayClient(
@@ -277,56 +252,19 @@ describe("ConnectionResolver", () => {
       expect(yield* Ref.get(bearerInputs)).toEqual([{ token: "secret-bearer", method: "direct" }]);
     }),
   );
-
-  it.effect("delegates SSH launch to the platform gateway before remote authorization", () =>
+  it.effect("rejects legacy SSH connections without authorizing or launching a remote", () =>
     Effect.gen(function* () {
-      const preparedTargets = yield* Ref.make<ReadonlyArray<DesktopSshEnvironmentTarget>>([]);
-      const connectionMethods = yield* Ref.make<ReadonlyArray<string>>([]);
-      const target = new SshConnectionTarget({
-        environmentId: ENVIRONMENT_ID,
-        label: "SSH",
-        connectionId: "ssh-1",
-      });
-      const profile = new SshConnectionProfile({
-        connectionId: "ssh-1",
-        environmentId: ENVIRONMENT_ID,
-        label: "SSH",
-        target: SSH_TARGET,
-      });
       const brokerLayer = yield* makeDependencies({
-        prepareSsh: (input) =>
-          Ref.update(preparedTargets, (values) => [...values, input.target]).pipe(
-            Effect.as({
-              bootstrap: {
-                target: input.target,
-                httpBaseUrl: "http://127.0.0.1:4010",
-                wsBaseUrl: "ws://127.0.0.1:4010",
-                pairingToken: null,
-              },
-              bearerToken: "ssh-bearer",
-            }),
-          ),
-        authorizeBearer: (input) =>
-          Ref.update(connectionMethods, (methods) => [...methods, input.connectionMethod]).pipe(
-            Effect.as({
-              environmentId: input.expectedEnvironmentId,
-              label: "SSH",
-              httpBaseUrl: input.httpBaseUrl,
-              socketUrl: "wss://environment.example.test/ws?wsTicket=bearer",
-              httpAuthorization: {
-                _tag: "Bearer" as const,
-                token: input.bearerToken,
-              },
-            }),
-          ),
+        authorizeBearer: () => Effect.die("Unexpected remote authorization"),
       });
       const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(brokerLayer));
-
-      expect(
-        (yield* broker.prepare(catalogEntry(target, Option.some(profile)))).socketUrl,
-      ).toContain("wsTicket=bearer");
-      expect(yield* Ref.get(preparedTargets)).toEqual([SSH_TARGET]);
-      expect(yield* Ref.get(connectionMethods)).toEqual(["ssh"]);
+      const target = new SshConnectionTarget({
+        environmentId: ENVIRONMENT_ID,
+        label: "Old SSH connection",
+        connectionId: "ssh-1",
+      });
+      const error = yield* broker.prepare(catalogEntry(target)).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "ConnectionBlockedError", reason: "unsupported" });
     }),
   );
 });

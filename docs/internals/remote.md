@@ -159,25 +159,12 @@ A T3-managed `tailscale serve` mapping exposes the server on the tailnet over HT
 resulting private-network endpoints are advertised for pairing. Connection then follows the ordinary
 bearer path.
 
-### Desktop-managed SSH access
+### Removed desktop SSH access
 
-SSH is an access and launch helper, not a separate environment type. `DesktopSshEnvironment`
-([apps/desktop/src/ssh/DesktopSshEnvironment.ts][sshenv]) exposes `discoverHosts`,
-`ensureEnvironment`, and `disconnectEnvironment`. It discovers targets from SSH config and known
-hosts, owns password/askpass prompts, and delegates lifecycle to `SshEnvironmentManager` in
-[packages/ssh/src/tunnel.ts][sshtunnel], which resolves the target, launches or reuses the remote T3
-server, opens a local tunnel, checks HTTP readiness, optionally issues a remote pairing token, and
-returns local HTTP/WS endpoints. Disconnect closes the tunnel and stops the remote server if the
-launcher started it; a server that was already running (marked `external`) is left running.
-
-The desktop main process owns this because it can spawn SSH, manage prompts, write launch scripts,
-and clean up forwards. The renderer connects through the forwarded URL like any other environment and
-needs no SSH-specific RPC path.
-
-Failure handling is explicit: SSH auth failure surfaces before an environment is saved, remote launch
-failure includes launcher output where available, forwarded-port failure leaves the environment
-disconnected rather than falling back to an unrelated endpoint, and reconnect restores the SSH bridge
-before reconnecting the WebSocket client.
+This fork no longer discovers SSH hosts, requests SSH passwords, installs remote servers, or opens
+SSH forwards. Legacy SSH records are rejected locally. Git operations may still use SSH through the
+retained source-control integration. WSL discovers its installed Node runtime locally through
+`apps/desktop/src/wsl/nodeEnvironment.ts`.
 
 ## Launch methods
 
@@ -251,6 +238,4 @@ These remain unbuilt and are listed to keep the model honest:
 [model]: ../../packages/client-runtime/src/connection/model.ts
 [onboarding]: ../../packages/client-runtime/src/connection/onboarding.ts
 [authremote]: ../../packages/client-runtime/src/authorization/remote.ts
-[sshenv]: ../../apps/desktop/src/ssh/DesktopSshEnvironment.ts
-[sshtunnel]: ../../packages/ssh/src/tunnel.ts
 [machine]: ../../apps/server/src/environment/ServerEnvironmentMachine.ts

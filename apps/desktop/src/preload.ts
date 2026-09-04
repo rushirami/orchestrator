@@ -11,22 +11,6 @@ import * as IpcChannels from "./ipc/channels.ts";
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Electron exposes the client platform in its sandboxed preload process.
 const clientPlatform = process.platform;
 
-function unwrapEnsureSshEnvironmentResult(result: unknown) {
-  if (
-    typeof result === "object" &&
-    result !== null &&
-    "type" in result &&
-    result.type === IpcChannels.SSH_PASSWORD_PROMPT_CANCELLED_RESULT
-  ) {
-    const message =
-      "message" in result && typeof result.message === "string"
-        ? result.message
-        : "SSH authentication cancelled.";
-    throw new Error(message);
-  }
-  return result as Awaited<ReturnType<DesktopBridge["ensureSshEnvironment"]>>;
-}
-
 contextBridge.exposeInMainWorld("desktopBridge", {
   getAppBranding: () => {
     const result = ipcRenderer.sendSync(IpcChannels.GET_APP_BRANDING_CHANNEL);
@@ -56,41 +40,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   setConnectionCatalog: (catalog) =>
     ipcRenderer.invoke(IpcChannels.SET_CONNECTION_CATALOG_CHANNEL, catalog),
   clearConnectionCatalog: () => ipcRenderer.invoke(IpcChannels.CLEAR_CONNECTION_CATALOG_CHANNEL),
-  discoverSshHosts: () => ipcRenderer.invoke(IpcChannels.DISCOVER_SSH_HOSTS_CHANNEL),
-  resolveSshHost: (alias) => ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_HOST_CHANNEL, alias),
-  ensureSshEnvironment: async (target, options) =>
-    unwrapEnsureSshEnvironmentResult(
-      await ipcRenderer.invoke(IpcChannels.ENSURE_SSH_ENVIRONMENT_CHANNEL, {
-        target,
-        ...(options === undefined ? {} : { options }),
-      }),
-    ),
-  disconnectSshEnvironment: (target) =>
-    ipcRenderer.invoke(IpcChannels.DISCONNECT_SSH_ENVIRONMENT_CHANNEL, target),
-  fetchSshEnvironmentDescriptor: (httpBaseUrl) =>
-    ipcRenderer.invoke(IpcChannels.FETCH_SSH_ENVIRONMENT_DESCRIPTOR_CHANNEL, { httpBaseUrl }),
-  bootstrapSshBearerSession: (httpBaseUrl, credential) =>
-    ipcRenderer.invoke(IpcChannels.BOOTSTRAP_SSH_BEARER_SESSION_CHANNEL, {
-      httpBaseUrl,
-      credential,
-    }),
-  fetchSshSessionState: (httpBaseUrl, bearerToken) =>
-    ipcRenderer.invoke(IpcChannels.FETCH_SSH_SESSION_STATE_CHANNEL, { httpBaseUrl, bearerToken }),
-  issueSshWebSocketTicket: (httpBaseUrl, bearerToken) =>
-    ipcRenderer.invoke(IpcChannels.ISSUE_SSH_WEBSOCKET_TOKEN_CHANNEL, { httpBaseUrl, bearerToken }),
-  onSshPasswordPrompt: (listener) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, request: unknown) => {
-      if (typeof request !== "object" || request === null) return;
-      listener(request as Parameters<typeof listener>[0]);
-    };
-
-    ipcRenderer.on(IpcChannels.SSH_PASSWORD_PROMPT_CHANNEL, wrappedListener);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.SSH_PASSWORD_PROMPT_CHANNEL, wrappedListener);
-    };
-  },
-  resolveSshPasswordPrompt: (requestId, password) =>
-    ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_PASSWORD_PROMPT_CHANNEL, { requestId, password }),
   getWslState: () => ipcRenderer.invoke(IpcChannels.GET_WSL_STATE_CHANNEL),
   setWslBackendEnabled: (enabled) =>
     ipcRenderer.invoke(IpcChannels.SET_WSL_BACKEND_ENABLED_CHANNEL, enabled),

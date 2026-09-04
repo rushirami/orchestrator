@@ -1,7 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - the executed suite runs the generated install script through a real POSIX shell.
 import { describe, it } from "@effect/vitest";
-import { afterAll, expect } from "vite-plus/test";
-import * as NodeChildProcess from "node:child_process";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -10,6 +8,8 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import * as NodeChildProcess from "node:child_process";
+import { afterAll, expect } from "vite-plus/test";
 
 import {
   buildWslNodeEnvPreamble,
@@ -167,16 +167,16 @@ describe("formatWslShellTransportFailureReason", () => {
 });
 
 describe("buildWslNodeEnvPreamble", () => {
-  it("passes the required Node engine range into the shared resolver", () => {
+  it("passes the required Node engine range into the WSL resolver", () => {
     const preamble = buildWslNodeEnvPreamble("^22.16 || ^23.11 || >=24.10");
 
     expect(preamble).toContain("T3_NODE_ENGINE_RANGE='^22.16 || ^23.11 || >=24.10'");
     expect(preamble.indexOf("T3_NODE_ENGINE_RANGE=")).toBeLessThan(
-      preamble.lastIndexOf("ensure_remote_node_path || true"),
+      preamble.lastIndexOf("ensure_wsl_node_path || true"),
     );
   });
 
-  it("keeps the shared resolver permissive when no Node engine range is provided", () => {
+  it("keeps the WSL resolver permissive when no Node engine range is provided", () => {
     expect(buildWslNodeEnvPreamble()).toContain("T3_NODE_ENGINE_RANGE=''");
   });
 });

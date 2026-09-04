@@ -24,9 +24,6 @@ the task commands.
 - `packages/client-runtime` (`@t3tools/client-runtime`): connection lifecycle, authorization, RPC
   session, environment registry, and Atom-based domain state shared by web and mobile. See its
   [README](../../packages/client-runtime/README.md).
-- `packages/ssh` (`@t3tools/ssh`): SSH config parsing, auth prompts, command execution, and the
-  tunnel/environment manager behind desktop-managed SSH environments.
-
 - `packages/effect-acp` (`effect-acp`): Effect client and agent implementation of the Agent Client
   Protocol, used by ACP-speaking provider drivers.
 - `packages/effect-codex-app-server` (`effect-codex-app-server`): Effect client for the

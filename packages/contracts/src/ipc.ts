@@ -1,113 +1,111 @@
 import * as Schema from "effect/Schema";
-import type { AssetCreateUrlInput,AssetCreateUrlResult } from "./assets.ts";
-import { AuthAccessTokenResult,AuthSessionState,AuthWebSocketTicketResult } from "./auth.ts";
+import type { AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
 import { EnvironmentId } from "./baseSchemas.ts";
 import type {
-BrowserImportResult,
-BrowserImportSource,
-BrowserImportSourceId,
+  BrowserImportResult,
+  BrowserImportSource,
+  BrowserImportSourceId,
 } from "./browserImport.ts";
 import { BrowserProfileId } from "./browserProfile.ts";
 import type {
-DesktopAppActivationRequest,
-DesktopAppActivationResponse,
+  DesktopAppActivationRequest,
+  DesktopAppActivationResponse,
 } from "./desktopAppActivation.ts";
-import { ExecutionEnvironmentDescriptor } from "./environment.ts";
-import type { FilesystemBrowseInput,FilesystemBrowseResult } from "./filesystem.ts";
+import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
 import type {
-GitPreparePullRequestThreadInput,
-GitPreparePullRequestThreadResult,
-GitPullRequestRefInput,
-GitResolvePullRequestResult,
-VcsCreateRefInput,
-VcsCreateRefResult,
-VcsCreateWorktreeInput,
-VcsCreateWorktreeResult,
-VcsInitInput,
-VcsListRefsInput,
-VcsListRefsResult,
-VcsPullInput,
-VcsPullResult,
-VcsRemoveWorktreeInput,
-VcsStatusInput,
-VcsStatusResult,
-VcsSwitchRefInput,
-VcsSwitchRefResult,
+  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestThreadResult,
+  GitPullRequestRefInput,
+  GitResolvePullRequestResult,
+  VcsCreateRefInput,
+  VcsCreateRefResult,
+  VcsCreateWorktreeInput,
+  VcsCreateWorktreeResult,
+  VcsInitInput,
+  VcsListRefsInput,
+  VcsListRefsResult,
+  VcsPullInput,
+  VcsPullResult,
+  VcsRemoveWorktreeInput,
+  VcsStatusInput,
+  VcsStatusResult,
+  VcsSwitchRefInput,
+  VcsSwitchRefResult,
 } from "./git.ts";
 import type {
-ClientOrchestrationCommand,
-OrchestrationGetFullThreadDiffInput,
-OrchestrationGetFullThreadDiffResult,
-OrchestrationGetTurnDiffInput,
-OrchestrationGetTurnDiffResult,
-OrchestrationShellSnapshot,
-OrchestrationShellStreamItem,
-OrchestrationSubscribeThreadInput,
-OrchestrationThreadStreamItem,
+  ClientOrchestrationCommand,
+  OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetFullThreadDiffResult,
+  OrchestrationGetTurnDiffInput,
+  OrchestrationGetTurnDiffResult,
+  OrchestrationShellSnapshot,
+  OrchestrationShellStreamItem,
+  OrchestrationSubscribeThreadInput,
+  OrchestrationThreadStreamItem,
 } from "./orchestration.ts";
 import type {
-DiscoveredLocalServerList,
-PreviewCloseInput,
-PreviewEvent,
-PreviewListInput,
-PreviewListResult,
-PreviewNavigateInput,
-PreviewOpenInput,
-PreviewRefreshInput,
-PreviewReportStatusInput,
-PreviewResizeInput,
-PreviewSessionSnapshot,
+  DiscoveredLocalServerList,
+  PreviewCloseInput,
+  PreviewEvent,
+  PreviewListInput,
+  PreviewListResult,
+  PreviewNavigateInput,
+  PreviewOpenInput,
+  PreviewRefreshInput,
+  PreviewReportStatusInput,
+  PreviewResizeInput,
+  PreviewSessionSnapshot,
 } from "./preview.ts";
 import {
-PreviewAutomationClickInput,
-PreviewAutomationEvaluateInput,
-PreviewAutomationHost,
-PreviewAutomationHostFocus,
-PreviewAutomationPressInput,
-PreviewAutomationResponse,
-PreviewAutomationScrollInput,
-PreviewAutomationSnapshot,
-PreviewAutomationStatus,
-PreviewAutomationStreamEvent,
-PreviewAutomationTypeInput,
-PreviewAutomationWaitForInput,
+  PreviewAutomationClickInput,
+  PreviewAutomationEvaluateInput,
+  PreviewAutomationHost,
+  PreviewAutomationHostFocus,
+  PreviewAutomationPressInput,
+  PreviewAutomationResponse,
+  PreviewAutomationScrollInput,
+  PreviewAutomationSnapshot,
+  PreviewAutomationStatus,
+  PreviewAutomationStreamEvent,
+  PreviewAutomationTypeInput,
+  PreviewAutomationWaitForInput,
 } from "./previewAutomation.ts";
 import type {
-ProjectListEntriesInput,
-ProjectListEntriesResult,
-ProjectReadFileInput,
-ProjectReadFileResult,
-ProjectSearchEntriesInput,
-ProjectSearchEntriesResult,
-ProjectWriteFileInput,
-ProjectWriteFileResult,
+  ProjectListEntriesInput,
+  ProjectListEntriesResult,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
+  ProjectSearchEntriesInput,
+  ProjectSearchEntriesResult,
+  ProjectWriteFileInput,
+  ProjectWriteFileResult,
 } from "./project.ts";
 import type {
-ReviewDiffFileContentsInput,
-ReviewDiffFileContentsResult,
-ReviewDiffPreviewInput,
-ReviewDiffPreviewResult,
+  ReviewDiffFileContentsInput,
+  ReviewDiffFileContentsResult,
+  ReviewDiffPreviewInput,
+  ReviewDiffPreviewResult,
 } from "./review.ts";
-import type { ClientSettings,QuitConfirmationMode } from "./settings.ts";
+import type { ClientSettings, QuitConfirmationMode } from "./settings.ts";
 import type {
-SourceControlCloneRepositoryInput,
-SourceControlCloneRepositoryResult,
-SourceControlPublishRepositoryInput,
-SourceControlPublishRepositoryResult,
-SourceControlRepositoryInfo,
-SourceControlRepositoryLookupInput,
+  SourceControlCloneRepositoryInput,
+  SourceControlCloneRepositoryResult,
+  SourceControlPublishRepositoryInput,
+  SourceControlPublishRepositoryResult,
+  SourceControlRepositoryInfo,
+  SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import type {
-TerminalAttachInput,
-TerminalAttachStreamEvent,
-TerminalClearInput,
-TerminalCloseInput,
-TerminalMetadataStreamEvent,
-TerminalOpenInput,
-TerminalResizeInput,
-TerminalRestartInput,
-TerminalSessionSnapshot,
-TerminalWriteInput,
+  TerminalAttachInput,
+  TerminalAttachStreamEvent,
+  TerminalClearInput,
+  TerminalCloseInput,
+  TerminalMetadataStreamEvent,
+  TerminalOpenInput,
+  TerminalResizeInput,
+  TerminalRestartInput,
+  TerminalSessionSnapshot,
+  TerminalWriteInput,
 } from "./terminal.ts";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -311,87 +309,6 @@ export const DesktopSshEnvironmentTargetSchema = Schema.Struct({
   port: Schema.NullOr(Schema.Number),
 });
 export type DesktopSshEnvironmentTarget = typeof DesktopSshEnvironmentTargetSchema.Type;
-
-export type DesktopSshHostSource = "ssh-config" | "known-hosts";
-export const DesktopSshHostSourceSchema = Schema.Literals(["ssh-config", "known-hosts"]);
-
-export interface DesktopDiscoveredSshHost extends DesktopSshEnvironmentTarget {
-  source: DesktopSshHostSource;
-}
-
-export const DesktopDiscoveredSshHostSchema = Schema.Struct({
-  alias: Schema.String,
-  hostname: Schema.String,
-  username: Schema.NullOr(Schema.String),
-  port: Schema.NullOr(Schema.Number),
-  source: DesktopSshHostSourceSchema,
-});
-
-export interface DesktopSshEnvironmentBootstrap {
-  target: DesktopSshEnvironmentTarget;
-  httpBaseUrl: string;
-  wsBaseUrl: string;
-  pairingToken: string | null;
-  remotePort?: number;
-  remoteServerKind?: "external" | "managed";
-}
-
-export const DesktopSshEnvironmentBootstrapSchema = Schema.Struct({
-  target: DesktopSshEnvironmentTargetSchema,
-  httpBaseUrl: Schema.String,
-  wsBaseUrl: Schema.String,
-  pairingToken: Schema.NullOr(Schema.String),
-  remotePort: Schema.optionalKey(Schema.Number),
-  remoteServerKind: Schema.optionalKey(Schema.Literals(["external", "managed"])),
-});
-
-export interface DesktopSshPasswordPromptRequest {
-  requestId: string;
-  destination: string;
-  username: string | null;
-  prompt: string;
-  expiresAt: string;
-}
-
-export const DesktopSshPasswordPromptCancelledType = "ssh-password-prompt-cancelled" as const;
-
-export const DesktopSshPasswordPromptCancelledResultSchema = Schema.Struct({
-  type: Schema.Literal(DesktopSshPasswordPromptCancelledType),
-  message: Schema.String,
-});
-
-export const DesktopSshEnvironmentEnsureOptionsSchema = Schema.Struct({
-  issuePairingToken: Schema.optionalKey(Schema.Boolean),
-});
-
-export const DesktopSshEnvironmentEnsureInputSchema = Schema.Struct({
-  target: DesktopSshEnvironmentTargetSchema,
-  options: Schema.optionalKey(DesktopSshEnvironmentEnsureOptionsSchema),
-});
-
-export const DesktopSshEnvironmentEnsureResultSchema = Schema.Union([
-  DesktopSshEnvironmentBootstrapSchema,
-  DesktopSshPasswordPromptCancelledResultSchema,
-]);
-
-export const DesktopSshHttpBaseUrlInputSchema = Schema.Struct({
-  httpBaseUrl: Schema.String,
-});
-
-export const DesktopSshBearerRequestInputSchema = Schema.Struct({
-  httpBaseUrl: Schema.String,
-  bearerToken: Schema.String,
-});
-
-export const DesktopSshBearerBootstrapInputSchema = Schema.Struct({
-  httpBaseUrl: Schema.String,
-  credential: Schema.String,
-});
-
-export const DesktopSshPasswordPromptResolutionInputSchema = Schema.Struct({
-  requestId: Schema.String,
-  password: Schema.NullOr(Schema.String),
-});
 
 export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
   environmentId: EnvironmentId,
@@ -1048,26 +965,6 @@ export interface DesktopBridge {
   getConnectionCatalog?: () => Promise<string | null>;
   setConnectionCatalog?: (catalog: string) => Promise<boolean>;
   clearConnectionCatalog?: () => Promise<void>;
-  discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
-  /** Resolves a suggested SSH alias before populating the connection form. */
-  resolveSshHost: (alias: string) => Promise<DesktopSshEnvironmentTarget>;
-  ensureSshEnvironment: (
-    target: DesktopSshEnvironmentTarget,
-    options?: { issuePairingToken?: boolean },
-  ) => Promise<DesktopSshEnvironmentBootstrap>;
-  disconnectSshEnvironment: (target: DesktopSshEnvironmentTarget) => Promise<void>;
-  fetchSshEnvironmentDescriptor: (httpBaseUrl: string) => Promise<ExecutionEnvironmentDescriptor>;
-  bootstrapSshBearerSession: (
-    httpBaseUrl: string,
-    credential: string,
-  ) => Promise<AuthAccessTokenResult>;
-  fetchSshSessionState: (httpBaseUrl: string, bearerToken: string) => Promise<AuthSessionState>;
-  issueSshWebSocketTicket: (
-    httpBaseUrl: string,
-    bearerToken: string,
-  ) => Promise<AuthWebSocketTicketResult>;
-  onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => () => void;
-  resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
   getWslState: () => Promise<DesktopWslState>;
   setWslBackendEnabled: (enabled: boolean) => Promise<DesktopWslState>;
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;

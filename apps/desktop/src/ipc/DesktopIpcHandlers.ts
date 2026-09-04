@@ -1,23 +1,14 @@
 import * as Effect from "effect/Effect";
 
 import * as DesktopIpc from "./DesktopIpc.ts";
+import * as AppActivationIpc from "./methods/appActivation.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
 import {
   clearConnectionCatalog,
   getConnectionCatalog,
   setConnectionCatalog,
 } from "./methods/connectionCatalog.ts";
-import {
-  bootstrapSshBearerSession,
-  disconnectSshEnvironment,
-  discoverSshHosts,
-  ensureSshEnvironment,
-  fetchSshEnvironmentDescriptor,
-  fetchSshSessionState,
-  issueSshWebSocketTicket,
-  resolveSshHost,
-  resolveSshPasswordPrompt,
-} from "./methods/sshEnvironment.ts";
+import * as PreviewIpc from "./methods/preview.ts";
 import {
   checkForUpdate,
   downloadUpdate,
@@ -27,8 +18,8 @@ import {
 } from "./methods/updates.ts";
 import {
   getAppBranding,
-  getLocalEnvironmentBootstraps,
   getLocalEnvironmentBearerToken,
+  getLocalEnvironmentBootstraps,
   getSystemLocale,
   getWindowFullscreenState,
   openExternal,
@@ -38,8 +29,6 @@ import {
   setTheme,
   showContextMenu,
 } from "./methods/window.ts";
-import * as PreviewIpc from "./methods/preview.ts";
-import * as AppActivationIpc from "./methods/appActivation.ts";
 import { getWslState, setWslBackendEnabled, setWslDistro, setWslOnly } from "./methods/wsl.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
@@ -60,17 +49,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(getConnectionCatalog);
   yield* ipc.handle(setConnectionCatalog);
   yield* ipc.handle(clearConnectionCatalog);
-
-  yield* ipc.handle(discoverSshHosts);
-  yield* ipc.handle(resolveSshHost);
-  yield* ipc.handle(ensureSshEnvironment);
-  yield* ipc.handle(disconnectSshEnvironment);
-  yield* ipc.handle(fetchSshEnvironmentDescriptor);
-  yield* ipc.handle(bootstrapSshBearerSession);
-  yield* ipc.handle(fetchSshSessionState);
-  yield* ipc.handle(issueSshWebSocketTicket);
-  yield* ipc.handle(resolveSshPasswordPrompt);
-
 
   yield* ipc.handle(getWslState);
   yield* ipc.handle(setWslBackendEnabled);
