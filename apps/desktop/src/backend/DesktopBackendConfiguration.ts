@@ -1,5 +1,3 @@
-import * as NodeOS from "node:os";
-
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -372,27 +370,6 @@ const runWslPreflight = Effect.fn("desktop.backendConfiguration.wslPreflight")(f
   } as const;
 });
 
-// True when the given IPv4 belongs to a Windows-side network
-// interface. In WSL2 mirrored mode the distro's eth0 IP equals the
-// host's, which is the signature we use to detect that mode and
-// switch the renderer URL to loopback.
-const isLocalHostIpv4 = (ip: string): boolean => {
-  const interfaces = NodeOS.networkInterfaces();
-  for (const list of Object.values(interfaces)) {
-    if (!list) continue;
-    for (const entry of list) {
-      // os.networkInterfaces() reports IPv4 `family` as the string "IPv4" on
-      // the Node build Electron ships (41 / Node 22, verified), but some Node
-      // builds report the numeric 4. Normalize to a string so a future runtime
-      // bump can't silently break mirrored-mode detection and leave the
-      // renderer pointed at the distro IP instead of loopback.
-      const family = String(entry.family);
-      if ((family === "IPv4" || family === "4") && entry.address === ip) return true;
-    }
-  }
-  return false;
-};
-
 const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolvePrimary")(
   function* (
     input: SharedBootstrapInput & {
@@ -412,9 +389,9 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       noBrowser: true,
       port: backendExposure.port,
       t3Home: environment.baseDir,
-      host: backendExposure.bindHost,
+      host: "127.0.0.1",
       desktopBootstrapToken: input.bootstrapToken,
-      tailscaleServeEnabled: backendExposure.tailscaleServeEnabled,
+      tailscaleServeEnabled: false,
       tailscaleServePort: backendExposure.tailscaleServePort,
       desktopTelemetryFd: 4,
       desktopTelemetryControlFd: 5,
@@ -437,7 +414,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       extendEnv: true,
       bootstrap,
       bootstrapDelivery: "fd3",
-      httpBaseUrl: backendExposure.httpBaseUrl,
+      httpBaseUrl: new URL(`http://127.0.0.1:${backendExposure.port}`),
       captureOutput: true,
       preflightFailure: Option.none(),
     } satisfies DesktopBackendManager.DesktopBackendStartConfig;
@@ -458,22 +435,9 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
   | FileSystem.FileSystem
 > {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
-  const wslEnvironment = yield* DesktopWslEnvironment.DesktopWslEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
 
-  // Bind to 0.0.0.0 inside WSL so the backend is reachable both via
-  // WSL2's automatic localhost forwarding (wslhost: Windows 127.0.0.1
-  // -> WSL 127.0.0.1) AND via the distro's eth0 IP directly from
-  // Windows. wslhost forwarding is unreliable on some Windows hosts:
-  // the desktop's readiness probe and the renderer's saved-env-style
-  // fetch both saw "Failed to fetch" when the backend only bound to
-  // 127.0.0.1 inside WSL. Binding to 0.0.0.0 plus advertising the
-  // WSL IP as the renderer-visible URL avoids that dependency.
-  // Security-wise this is acceptable for the local-only WSL backend:
-  // the network it exposes on is the WSL-vEthernet network, not the
-  // LAN; the primary owns LAN exposure when the user opts in.
-  const wslBindHost = "0.0.0.0";
-
+  // WSL uses Windows localhost forwarding; the backend never binds to its VM network.
   const bootstrap = {
     mode: "desktop" as const,
     noBrowser: true,
@@ -481,7 +445,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     // Omit t3Home so the Linux backend uses its own home dir instead of
     // the Windows-side baseDir (which would be a /mnt/c path and share
     // the SQLite file with the primary).
-    host: wslBindHost,
+    host: "127.0.0.1",
     desktopBootstrapToken: input.bootstrapToken,
     // PortSchema rejects 0, so when tailscale serve is disabled we still
     // need a valid number in this slot. The backend reads tailscaleServePort
@@ -550,18 +514,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
   const runningDistro = preflight._tag === "Ready" ? preflight.runningDistro : null;
   const distroForConfig = runningDistro ?? input.distro;
 
-  // Resolve the selected distro's IPv4 address. In mirrored mode the distro
-  // reports a host interface, so use loopback instead; a failed probe also
-  // falls back to loopback and preserves the previous behavior.
-  const distroIp = yield* wslEnvironment.getDistroIp(distroForConfig);
-  const usesSharedNetworkStack = Option.match(distroIp, {
-    onNone: () => false,
-    onSome: (ip) => isLocalHostIpv4(ip),
-  });
-  const rendererHost = usesSharedNetworkStack
-    ? "127.0.0.1"
-    : Option.getOrElse(distroIp, () => "127.0.0.1");
-  const httpBaseUrl = new URL(`http://${rendererHost}:${input.port}`);
+  const httpBaseUrl = new URL(`http://127.0.0.1:${input.port}`);
 
   const distroArgs = distroForConfig ? ["-d", distroForConfig] : [];
   const forwardedEnv: Record<string, string> = {};

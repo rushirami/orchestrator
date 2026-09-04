@@ -1,3 +1,4 @@
+import { resolveListenHost } from "./listenHost.ts";
 import { EnvironmentHttpApi, ProviderDriverKind } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -188,13 +189,14 @@ const ResourceDiagnosticsLayerLive = Layer.mergeAll(
 const HttpServerLive = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
+    const host = yield* resolveListenHost(config.host);
     if (typeof Bun !== "undefined") {
       const BunHttpServer = yield* Effect.promise(
         () => import("@effect/platform-bun/BunHttpServer"),
       );
       return BunHttpServer.layer({
         port: config.port,
-        hostname: config.host ?? "127.0.0.1",
+        hostname: host,
         gracefulShutdownTimeout: HTTP_PREEMPTIVE_SHUTDOWN_GRACE_MS,
         websocket: {
           // Negotiate permessage-deflate with clients that offer it; clients
@@ -217,7 +219,7 @@ const HttpServerLive = Layer.unwrap(
         Effect.promise(() => import("node:http")),
       ]);
       return NodeHttpServer.layer(() => guardHttpResponseWriteErrors(NodeHttp.createServer()), {
-        host: config.host ?? "127.0.0.1",
+        host: host,
         port: config.port,
         gracefulShutdownTimeout: HTTP_PREEMPTIVE_SHUTDOWN_GRACE_MS,
         // Negotiate permessage-deflate with clients that offer it; clients

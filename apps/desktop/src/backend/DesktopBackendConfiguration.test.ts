@@ -238,9 +238,9 @@ describe("DesktopBackendConfiguration", () => {
         assert.equal(first.bootstrap.mode, "desktop");
         assert.equal(first.bootstrap.noBrowser, true);
         assert.equal(first.bootstrap.port, 4888);
-        assert.equal(first.bootstrap.host, "0.0.0.0");
+        assert.equal(first.bootstrap.host, "127.0.0.1");
         assert.equal(first.bootstrap.t3Home, environment.baseDir);
-        assert.equal(first.bootstrap.tailscaleServeEnabled, true);
+        assert.equal(first.bootstrap.tailscaleServeEnabled, false);
         assert.equal(first.bootstrap.tailscaleServePort, 8443);
         assert.match(first.bootstrap.desktopBootstrapToken, /^[0-9a-f]{48}$/i);
         assert.equal(second.bootstrap.desktopBootstrapToken, first.bootstrap.desktopBootstrapToken);
@@ -362,7 +362,7 @@ describe("DesktopBackendConfiguration", () => {
 
       assert.equal(config.runningDistro, "Ubuntu");
       assert.deepEqual(config.args.slice(0, 2), ["-d", "Ubuntu"]);
-      assert.deepEqual(observedDistros, ["Ubuntu", "Ubuntu", "Ubuntu"]);
+      assert.deepEqual(observedDistros, ["Ubuntu", "Ubuntu"]);
       assert.isTrue(Option.isNone(config.preflightFailure));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -815,16 +815,13 @@ describe("DesktopBackendConfiguration", () => {
 
           assert.equal(config.executablePath, "wsl.exe");
           assert.equal(config.bootstrap.port, 5050);
-          // Binds to 0.0.0.0 inside WSL so the backend is reachable via
-          // both wslhost-forwarded localhost and the distro's eth0 IP.
-          assert.equal(config.bootstrap.host, "0.0.0.0");
+          // WSL uses localhost forwarding.
+          assert.equal(config.bootstrap.host, "127.0.0.1");
           assert.equal(config.bootstrap.tailscaleServeEnabled, false);
           assert.notProperty(config.bootstrap, "desktopTelemetryFd");
           assert.notProperty(config.bootstrap, "resourceMonitorPath");
-          // httpBaseUrl uses the resolved distro IP from the test stub,
-          // not localhost — the renderer reaches the backend directly to
-          // avoid relying on wslhost forwarding.
-          assert.equal(config.httpBaseUrl.href, "http://172.27.0.99:5050/");
+          // A VM address cannot become a renderer endpoint.
+          assert.equal(config.httpBaseUrl.href, "http://127.0.0.1:5050/");
           assert.equal(config.env.OPENAI_API_KEY, "openai-key");
           assert.equal(config.env.ANTHROPIC_API_KEY, "anthropic-key");
           // The existing WSLENV is preserved byte-for-byte (note the empty

@@ -1,3 +1,4 @@
+import { resolveListenHost } from "../listenHost.ts";
 import * as NetService from "@t3tools/shared/Net";
 import { DesktopBackendBootstrap, PortSchema } from "@t3tools/contracts";
 import * as Config from "effect/Config";
@@ -17,7 +18,7 @@ import * as ServerConfig from "../config.ts";
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";
 
 export const modeFlag = Flag.choice("mode", ServerConfig.RuntimeMode.literals).pipe(
-  Flag.withDescription("Runtime mode. `desktop` keeps loopback defaults unless overridden."),
+  Flag.withDescription("Runtime mode. All modes accept localhost connections only."),
   Flag.optional,
 );
 const portFlag = Flag.integer("port").pipe(
@@ -26,7 +27,7 @@ const portFlag = Flag.integer("port").pipe(
   Flag.optional,
 );
 const hostFlag = Flag.string("host").pipe(
-  Flag.withDescription("Host/interface to bind (for example 127.0.0.1, 0.0.0.0, or a Tailnet IP)."),
+  Flag.withDescription("Loopback interface: 127.0.0.1, localhost, or ::1."),
   Flag.optional,
 );
 export const baseDirFlag = Flag.string("base-dir").pipe(
@@ -310,13 +311,15 @@ export const resolveServerConfig = (
       () => 443,
     );
     const staticDir = devUrl ? undefined : yield* ServerConfig.resolveStaticDir();
-    const host = Option.getOrElse(
-      resolveOptionPrecedence(
-        normalizedFlags.host,
-        Option.fromUndefinedOr(env.host),
-        Option.fromUndefinedOr(bootstrap?.host),
+    const host = yield* resolveListenHost(
+      Option.getOrElse(
+        resolveOptionPrecedence(
+          normalizedFlags.host,
+          Option.fromUndefinedOr(env.host),
+          Option.fromUndefinedOr(bootstrap?.host),
+        ),
+        () => "127.0.0.1",
       ),
-      () => (mode === "desktop" ? "127.0.0.1" : undefined),
     );
     const logLevel = Option.getOrElse(cliLogLevel, () => env.logLevel);
 

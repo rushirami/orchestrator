@@ -60,6 +60,51 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
     );
   });
 
+  it.effect("rejects remote bind hosts from flags, environment, and desktop bootstrap", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-local-host-test-" });
+      for (const source of ["flag", "environment", "bootstrap"] as const) {
+        const bootstrapFd =
+          source === "bootstrap"
+            ? Option.some(
+                yield* openBootstrapFd(makeDesktopBootstrap({ host: "0.0.0.0", t3Home: baseDir })),
+              )
+            : Option.none<number>();
+        const error = yield* resolveServerConfig(
+          {
+            mode: Option.some("desktop"),
+            port: Option.some(4888),
+            host: source === "flag" ? Option.some("0.0.0.0") : Option.none(),
+            baseDir: Option.some(baseDir),
+            cwd: Option.some(baseDir),
+            devUrl: Option.none(),
+            noBrowser: Option.some(true),
+            bootstrapFd,
+            autoBootstrapProjectFromCwd: Option.none(),
+            logWebSocketEvents: Option.none(),
+            tailscaleServeEnabled: Option.none(),
+            tailscaleServePort: Option.none(),
+          },
+          Option.none(),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              NetService.layer,
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({
+                  env: source === "environment" ? { T3CODE_HOST: "192.168.1.2" } : {},
+                }),
+              ),
+            ),
+          ),
+          Effect.flip,
+        );
+        assert.equal(error._tag, "NonLoopbackListenHostError", source);
+      }
+    }),
+  );
+
   it.effect("falls back to effect/config values when flags are omitted", () =>
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
@@ -93,7 +138,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
                   T3CODE_LOG_LEVEL: "Warn",
                   T3CODE_MODE: "desktop",
                   T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
+                  T3CODE_HOST: "localhost",
                   T3CODE_HOME: baseDir,
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
                   T3CODE_DEV_ALLOWED_ORIGINS:
@@ -117,7 +162,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cwd: process.cwd(),
         baseDir,
         ...derivedPaths,
-        host: "0.0.0.0",
+        host: "127.0.0.1",
         staticDir: undefined,
         devUrl: new URL("http://127.0.0.1:5173"),
         devAllowedOrigins: ["https://host.example.ts.net", "https://phone.example.ts.net"],
@@ -166,7 +211,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
                   T3CODE_LOG_LEVEL: "Warn",
                   T3CODE_MODE: "desktop",
                   T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
+                  T3CODE_HOST: "localhost",
                   T3CODE_HOME: join(NodeOS.tmpdir(), "ignored-base"),
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
                   T3CODE_NO_BROWSER: "false",
@@ -282,7 +327,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       const fd = yield* openBootstrapFd(
         makeDesktopBootstrap({
           port: 4888,
-          host: "127.0.0.2",
+          host: "::1",
           t3Home: baseDir,
           noBrowser: true,
           desktopBootstrapToken: "desktop-token",
@@ -333,7 +378,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cwd: process.cwd(),
         baseDir,
         ...derivedPaths,
-        host: "127.0.0.2",
+        host: "::1",
         staticDir: resolved.staticDir,
         devUrl: undefined,
         noBrowser: true,
@@ -409,7 +454,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       const fd = yield* openBootstrapFd(
         makeDesktopBootstrap({
           port: 4888,
-          host: "127.0.0.2",
+          host: "::1",
           t3Home: "/tmp/t3-bootstrap-home",
           noBrowser: false,
           desktopBootstrapToken: "desktop-token",
@@ -593,7 +638,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cwd: process.cwd(),
         baseDir,
         ...derivedPaths,
-        host: undefined,
+        host: "127.0.0.1",
         staticDir: resolved.staticDir,
         devUrl: undefined,
         noBrowser: true,
