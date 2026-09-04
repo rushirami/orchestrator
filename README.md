@@ -1,6 +1,6 @@
 # Orchestrator — built on T3 Code
 
-This fork explores configurable agent workflows on top of T3 Code: connect tasks from tools such as Jira and GitHub, run skills in sequence within a worktree, and guide work through planning, approval, implementation, PR creation, and review.
+This fork explores configurable agent workflows on top of T3 Code: start with a task description or ticket URL, run skills in sequence within a worktree, and guide work through planning, approval, implementation, PR creation, and review. Agents use their existing tools and authentication for services such as Jira and GitHub; no separate Orchestrator account is required.
 
 Read the [Orchestrator vision](./vision.md) for the intended direction. These orchestration capabilities are proposed; the upstream T3 Code overview and setup instructions follow below.
 

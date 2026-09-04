@@ -14,20 +14,24 @@ Users should be able to reuse workflows across tasks and customize them for a pr
 
 ## An example: plan, build, and review
 
-1. **Start a task.** The user selects a ticket or describes the work, chooses a workflow, and creates a worktree. Relevant context from connected tools accompanies the task.
+1. **Start a task.** The user provides a ticket URL or describes the work, chooses a workflow, and creates a worktree. The first agent uses its configured tools to fetch relevant context and produce a task brief for later stages.
 2. **Generate a specification.** A planning skill produces a spec file with the proposed behavior, scope, and acceptance criteria. The workflow pauses for review.
 3. **Review the specification.** The user reads the file and either requests revisions or approves it. Approval advances the same worktree into the implementation and PR flow.
 4. **Implement and create a PR.** The agent executes the configured implementation, validation, and PR skills in order. The result includes the changes, validation evidence, and a link to the created GitHub pull request.
-5. **Run a review.** The review flow runs against the changes in the same worktree. The user can configure it to continue with the existing agent or start a fresh agent, potentially using a different provider. A fresh agent receives the approved spec, relevant task context, and the changes to review.
+5. **Run a review.** The review flow runs against the changes in the same worktree. The user can configure it to continue with the existing agent or start a fresh agent, potentially using a different provider. A fresh agent receives the approved spec, task brief, PR URL, changes, and validation results. It uses its own configured tools for any additional access.
 6. **Resolve findings.** Review findings can return the task to implementation and another review. The user can inspect the results and decide when the work is ready. Creating a PR, completing review, and merging are distinct milestones; this example does not assume automatic merging.
 
 The worktree provides continuity for the code. Agent sessions can change between stages without losing the task's specification, outputs, or history. Sequential stages should avoid agents making conflicting edits in the same worktree.
 
-## Connections to the tools users already use
+## Agents bring their own tools
 
-Jira and GitHub are the initial integration priorities. Jira can supply task descriptions, requirements, and status context. GitHub can supply issues, repository context, pull requests, checks, and review feedback. Other tools should fit the same model as needs become concrete.
+Orchestrator should require no separate Orchestrator account. Users bring their agents and configure tool access and authentication in those agents. Jira and GitHub are useful initial workflow examples, but Orchestrator does not need its own connections or credentials for them.
 
-Connections should support bringing context into a workflow and, where configured, publishing results back to the source tool. Users should be able to see which external task and PR belong to each run. Workflow configuration should make external actions and status updates explicit.
+An agent can use its configured MCP servers, CLIs, or other tools to read tickets, gather context, create PRs, and update external systems. MCP is an option, not a requirement. Skills describe the work and required capabilities; the agent uses the tools available in its environment. External actions are agent stages with configured skills, not a separate Orchestrator integration system.
+
+Orchestrator owns stage order, worktrees, approvals, retries, progress, and explicit handoffs between stages. Outputs such as the task brief, approved spec, validation results, and PR URL become inputs to later stages. Changing agents must not require rediscovering completed work or imply that credentials transfer between providers. If a stage cannot access a required tool, it should stop with a clear request for user action.
+
+The initial start mechanism is manual: provide a task reference or description and launch the workflow. Automatically starting runs when tracker issues change would require a separate watcher and is deferred. Underlying providers and external tools still require their own authentication.
 
 ## User control throughout the run
 
@@ -39,7 +43,7 @@ Agent continuity is a deliberate choice: retaining the existing agent preserves 
 
 ## A dedicated orchestration view
 
-Users need a precise overview of their orchestrated tasks and a way to act on the ones that need attention. **Orchestration** is the working name; whether it becomes a page or a tab remains open.
+Users need a precise overview of their orchestrated tasks and a way to act on the ones that need attention. A per-project **Orchestration** tab should let users design reusable workflows and inspect their runs. The designer supports adding and reordering stages, arranging skills, selecting agents, and configuring outputs, approvals, and transitions. **Inputs & start** defines the task references and descriptions supplied at launch; agent defaults select which agents execute the work using their existing tool setup.
 
 For each task, the view should show:
 
@@ -61,6 +65,6 @@ Orchestrator should borrow the ideas of inspectable workflow definitions, isolat
 
 The experience should preserve T3 Code's open foundation, provider choice, performance, and support for local and remote environments. Workflow execution should belong to the environment running the agents and continue when a client disconnects. Web, desktop, and mobile clients should be able to inspect progress and handle relevant approvals against that shared state.
 
-The initial scope should prove one complete journey: start a task with a reusable sequential workflow, generate and approve a spec, implement it, create a PR, and run a configurable review. A general visual workflow builder, arbitrary parallel execution graphs, and a large integration catalog can wait until real workflows justify them.
+The initial scope should prove one complete journey: configure a reusable sequential workflow in the project tab, start it manually, generate and approve a spec, implement it, create a PR, and run a configurable review. Arbitrary parallel execution graphs and automatic tracker-based dispatch can wait until real workflows justify them.
 
 Success means a user can start several tasks, understand where each one stands, and intervene at the moments they chose without repeatedly restating instructions or manually carrying context between agents.
