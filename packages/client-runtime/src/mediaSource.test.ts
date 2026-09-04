@@ -9,36 +9,14 @@ const attachmentId =
 
 describe("resolveMediaSource", () => {
   describe("direct URLs", () => {
-    it("keeps the authored URL and decodes the display name once", () => {
-      const href = "https://cdn.example.com/clip%20one%2520%2Emp4?signature=a%2fb#t=2";
-      expect(resolveMediaSource(href, { threadId })).toEqual({
-        kind: "video",
-        mimeType: "video/mp4",
-        name: "clip one%20.mp4",
-        reference: { kind: "url", url: href },
-        srcFragment: "#t=2",
-        access: "direct",
-        uri: href,
-      });
-    });
-
-    it("keeps protocol-relative URLs as authored; clients add the scheme", () => {
-      const href = "//cdn.example.com/clip.mp4?sig=1#t=2";
-      expect(resolveMediaSource(href, { threadId })).toMatchObject({
-        access: "direct",
-        uri: href,
-        reference: { kind: "url", url: href },
-      });
-    });
-
-    it("accepts extensionless image embeds only when asked", () => {
-      const href = "https://cdn.example.com/render?id=42";
+    it.each([
+      "https://cdn.example.com/clip.mp4?signature=private#t=2",
+      "//cdn.example.com/clip.mp4",
+      "https://cdn.example.com/render?id=42",
+      "http://127.0.0.1:3000/image.png",
+    ])("does not load authored network media %s", (href) => {
       expect(resolveMediaSource(href, { threadId })).toBeNull();
-      expect(resolveMediaSource(href, { threadId, imageEmbed: true })).toMatchObject({
-        kind: "image",
-        mimeType: "image/*",
-        name: "render",
-      });
+      expect(resolveMediaSource(href, { threadId, imageEmbed: true })).toBeNull();
     });
 
     it.each(["data:image/png;base64,AAAA", "blob:https://app.t3.codes/id"])(

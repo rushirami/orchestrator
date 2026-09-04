@@ -329,9 +329,7 @@ export function PullRequestActorAvatar({
   className?: string;
 }) {
   const login = actor?.login ?? "ghost";
-  const avatarUrl = actor?.avatarUrl ?? null;
-  return avatarUrl === null ? (
-    // Not every host reports an avatar, so the initial stands in where none arrives.
+  return (
     <span
       aria-hidden
       className={cn(
@@ -341,14 +339,6 @@ export function PullRequestActorAvatar({
     >
       {login.slice(0, 1).toUpperCase()}
     </span>
-  ) : (
-    <img
-      aria-hidden
-      alt=""
-      src={avatarUrl}
-      loading="lazy"
-      className={cn("size-4 shrink-0 rounded-full bg-muted object-cover", className)}
-    />
   );
 }
 

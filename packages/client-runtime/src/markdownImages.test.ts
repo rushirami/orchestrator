@@ -3,18 +3,15 @@ import { describe, expect, it } from "vite-plus/test";
 import { classifyMarkdownImageSource, markdownImageSourceFragment } from "./markdownImages.js";
 
 describe("classifyMarkdownImageSource", () => {
-  it.each([
-    "https://example.com/image.png",
-    "HTTP://example.com/image.png",
-    "data:image/png;base64,AAAA",
-    "blob:https://app.t3.codes/image-id",
-    "//cdn.example.com/image.png",
-  ])("keeps %s directly loadable", (uri) => {
-    expect(classifyMarkdownImageSource(uri, "/workspace/project")).toEqual({
-      _tag: "Direct",
-      uri,
-    });
-  });
+  it.each(["data:image/png;base64,AAAA", "blob:https://app.t3.codes/image-id"])(
+    "keeps %s directly loadable",
+    (uri) => {
+      expect(classifyMarkdownImageSource(uri, "/workspace/project")).toEqual({
+        _tag: "Direct",
+        uri,
+      });
+    },
+  );
 
   it.each([
     ["images/result.png", "/workspace/project", "/workspace/project/images/result.png"],
@@ -45,6 +42,10 @@ describe("classifyMarkdownImageSource", () => {
   });
 
   it.each([
+    "https://example.com/image.png",
+    "HTTP://example.com/image.png",
+    "//cdn.example.com/image.png",
+    "http://127.0.0.1:3000/image.png",
     null,
     "",
     "#image",
