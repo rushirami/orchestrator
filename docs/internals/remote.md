@@ -35,3 +35,10 @@ service. Startup still restores persisted provider sessions and local conversati
 The backend no longer opens a browser, prints pairing URLs or QR codes, or exposes `auth`
 and `serve` CLI commands. Desktop startup uses its local IPC readiness signal. The remaining
 local bootstrap/session handshake is internal and is being removed separately.
+
+`vp run dev` and `vp run dev:desktop` both run the desktop task and its internal Vite renderer.
+`vp run start` opens the built desktop app. The root standalone `dev:web` and `dev:server`
+tasks and dev-runner `--browser`/`--host` options are removed. Development retains deterministic
+loopback ports, collision handling, and isolated worktree data directories. The renderer gets
+backend endpoints from the desktop bridge; the runner clears inherited `VITE_HTTP_URL` and
+`VITE_WS_URL` values.
