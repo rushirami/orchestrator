@@ -12,6 +12,8 @@ A workflow is an ordered sequence of stages. Each stage runs one or more skills 
 
 Users should be able to reuse workflows across tasks and customize them for a project. Configuration should cover the skills and their order, the provider and agent used at each stage, expected outputs, and whether a transition happens automatically or waits for the user.
 
+Each task executes its stages sequentially. For the initial scope, Orchestrator imposes no concurrency limit across separate tasks and exposes no concurrent-runs setting.
+
 ## An example: plan, build, and review
 
 1. **Start a task.** The user provides a ticket URL or describes the work, chooses a workflow, and creates a worktree. The first agent uses its configured tools to fetch relevant context and produce a task brief for later stages.
