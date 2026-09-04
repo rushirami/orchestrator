@@ -208,7 +208,6 @@ export const resolveServerConfig = (
     yield* ServerConfig.ensureServerDirectories(derivedPaths);
     const serverTracePath = env.traceFile ?? derivedPaths.serverTracePath;
     yield* fs.makeDirectory(path.dirname(serverTracePath), { recursive: true });
-    const desktopBootstrapToken = bootstrap?.desktopBootstrapToken;
     const desktopTelemetryFd = bootstrap?.desktopTelemetryFd;
     const desktopTelemetryControlFd = bootstrap?.desktopTelemetryControlFd;
     const resourceMonitorPath = bootstrap?.resourceMonitorPath;
@@ -254,7 +253,7 @@ export const resolveServerConfig = (
       serverTracePath,
       host,
       devUrl,
-      desktopBootstrapToken,
+      desktopBootstrapToken: undefined,
       desktopTelemetryFd,
       desktopTelemetryControlFd,
       resourceMonitorPath,

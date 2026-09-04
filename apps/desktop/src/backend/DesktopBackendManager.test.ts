@@ -46,7 +46,6 @@ const baseConfig: DesktopBackendManager.DesktopBackendStartConfig = {
     port: 3773,
     t3Home: "/tmp/t3",
     host: "127.0.0.1",
-    desktopBootstrapToken: "token",
     desktopTelemetryFd: 4,
     desktopTelemetryControlFd: 5,
   },

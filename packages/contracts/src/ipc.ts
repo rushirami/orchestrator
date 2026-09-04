@@ -195,7 +195,6 @@ export interface DesktopEnvironmentBootstrap {
   runningDistro?: string | null;
   httpBaseUrl: string | null;
   wsBaseUrl: string | null;
-  bootstrapToken?: string;
 }
 
 export const DesktopEnvironmentBootstrapSchema = Schema.Struct({
@@ -204,7 +203,6 @@ export const DesktopEnvironmentBootstrapSchema = Schema.Struct({
   runningDistro: Schema.optionalKey(Schema.NullOr(Schema.String)),
   httpBaseUrl: Schema.NullOr(Schema.String),
   wsBaseUrl: Schema.NullOr(Schema.String),
-  bootstrapToken: Schema.optionalKey(Schema.String),
 });
 
 export const DesktopSshEnvironmentTargetSchema = Schema.Struct({
@@ -848,7 +846,6 @@ export interface DesktopBridge {
   // info (omits instances whose backend hasn't produced a config yet).
   // The primary backend is identified by id === PRIMARY_LOCAL_ENVIRONMENT_ID.
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
-  getLocalEnvironmentBearerToken: () => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
   getWslState: () => Promise<DesktopWslState>;

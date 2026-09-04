@@ -30,7 +30,6 @@ import * as DesktopState from "./app/DesktopState.ts";
 import * as DesktopBackendConfiguration from "./backend/DesktopBackendConfiguration.ts";
 import * as DesktopBackendEndpoint from "./backend/DesktopBackendEndpoint.ts";
 import * as DesktopBackendPool from "./backend/DesktopBackendPool.ts";
-import * as DesktopLocalEnvironmentAuth from "./backend/DesktopLocalEnvironmentAuth.ts";
 import * as ElectronApp from "./electron/ElectronApp.ts";
 import * as ElectronDialog from "./electron/ElectronDialog.ts";
 import * as ElectronMenu from "./electron/ElectronMenu.ts";
@@ -136,20 +135,13 @@ const desktopWslBackendLayer = DesktopWslBackend.layer.pipe(
   Layer.provideMerge(desktopBackendLayer),
 );
 
-const desktopLocalEnvironmentAuthLayer = DesktopLocalEnvironmentAuth.layer.pipe(
-  Layer.provideMerge(desktopBackendLayer),
-);
-
 const desktopApplicationLayer = Layer.mergeAll(
   DesktopLifecycle.layer,
   desktopAppActivationLayer,
   DesktopApplicationMenu.layer,
   DesktopLinuxUrlHandler.layer,
   DesktopShellEnvironment.layer,
-).pipe(
-  Layer.provideMerge(desktopWslBackendLayer),
-  Layer.provideMerge(desktopLocalEnvironmentAuthLayer),
-);
+).pipe(Layer.provideMerge(desktopWslBackendLayer));
 
 const desktopApplicationRuntimeLayer = desktopApplicationLayer.pipe(
   Layer.provideMerge(NodeServices.layer),

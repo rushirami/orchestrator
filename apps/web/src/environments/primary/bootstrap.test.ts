@@ -132,7 +132,6 @@ describe("environmentBootstrap", () => {
             id: "primary",
             label: "Local environment",
             httpBaseUrl: "http://127.0.0.1:3773",
-            bootstrapToken: "desktop-bootstrap-token",
           },
         ],
       },

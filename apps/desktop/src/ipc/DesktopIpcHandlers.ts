@@ -6,7 +6,6 @@ import { getClientSettings, setClientSettings } from "./methods/clientSettings.t
 import * as PreviewIpc from "./methods/preview.ts";
 import {
   getAppBranding,
-  getLocalEnvironmentBearerToken,
   getLocalEnvironmentBootstraps,
   getSystemLocale,
   getWindowFullscreenState,
@@ -30,7 +29,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handleSync(getSystemLocale);
   yield* ipc.handleSync(getWindowFullscreenState);
   yield* ipc.handleSync(getLocalEnvironmentBootstraps);
-  yield* ipc.handle(getLocalEnvironmentBearerToken);
 
   yield* ipc.handle(getClientSettings);
   yield* ipc.handle(setClientSettings);

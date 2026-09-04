@@ -10,7 +10,6 @@ export const DesktopBackendBootstrap = Schema.Struct({
   // own home directory instead.
   t3Home: Schema.optional(Schema.String),
   host: Schema.String,
-  desktopBootstrapToken: Schema.String,
   desktopTelemetryFd: Schema.optionalKey(PositiveInt),
   desktopTelemetryControlFd: Schema.optionalKey(PositiveInt),
   resourceMonitorPath: Schema.optionalKey(TrimmedNonEmptyString),

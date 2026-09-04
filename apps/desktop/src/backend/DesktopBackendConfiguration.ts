@@ -1,12 +1,9 @@
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
-import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import serverPackageJson from "../../../server/package.json" with { type: "json" };
 
@@ -140,10 +137,6 @@ const resolveResourceMonitorPath = Effect.fn(
 
   return Option.none<string>();
 });
-
-interface SharedBootstrapInput {
-  readonly bootstrapToken: string;
-}
 
 interface WslPreflightSuccess {
   readonly _tag: "Ready";
@@ -371,11 +364,9 @@ const runWslPreflight = Effect.fn("desktop.backendConfiguration.wslPreflight")(f
 });
 
 const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolvePrimary")(
-  function* (
-    input: SharedBootstrapInput & {
-      readonly resourceMonitorPath: Option.Option<string>;
-    },
-  ): Effect.fn.Return<
+  function* (input: {
+    readonly resourceMonitorPath: Option.Option<string>;
+  }): Effect.fn.Return<
     DesktopBackendManager.DesktopBackendStartConfig,
     never,
     DesktopEnvironment.DesktopEnvironment | DesktopBackendEndpoint.DesktopBackendEndpoint
@@ -389,7 +380,6 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       port: backendExposure.port,
       t3Home: environment.baseDir,
       host: "127.0.0.1",
-      desktopBootstrapToken: input.bootstrapToken,
       desktopTelemetryFd: 4,
       desktopTelemetryControlFd: 5,
       ...Option.match(input.resourceMonitorPath, {
@@ -418,191 +408,190 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
   },
 );
 
-const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl")(function* (
-  input: SharedBootstrapInput & {
+const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl")(
+  function* (input: {
     readonly port: number;
     readonly distro: string | null;
-  },
-): Effect.fn.Return<
-  DesktopBackendManager.DesktopBackendStartConfig,
-  never,
-  | DesktopEnvironment.DesktopEnvironment
-  | DesktopWslEnvironment.DesktopWslEnvironment
-  | DesktopWslServerTree.DesktopWslServerTree
-  | FileSystem.FileSystem
-> {
-  const environment = yield* DesktopEnvironment.DesktopEnvironment;
-  const fileSystem = yield* FileSystem.FileSystem;
+  }): Effect.fn.Return<
+    DesktopBackendManager.DesktopBackendStartConfig,
+    never,
+    | DesktopEnvironment.DesktopEnvironment
+    | DesktopWslEnvironment.DesktopWslEnvironment
+    | DesktopWslServerTree.DesktopWslServerTree
+    | FileSystem.FileSystem
+  > {
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    const fileSystem = yield* FileSystem.FileSystem;
 
-  // WSL uses Windows localhost forwarding; the backend never binds to its VM network.
-  const bootstrap = {
-    mode: "desktop" as const,
-    port: input.port,
-    // Omit t3Home so the Linux backend uses its own home dir instead of
-    // the Windows-side baseDir (which would be a /mnt/c path and share
-    // the SQLite file with the primary).
-    host: "127.0.0.1",
-    desktopBootstrapToken: input.bootstrapToken,
-    // The packaged sidecar is a Windows executable and cannot run inside the
-    // Linux WSL backend. Keep the field absent instead of passing an unusable
-    // `/mnt/.../*.exe` path; WSL resource telemetry is reported unavailable.
-    // See docs/architecture/resource-telemetry.md.
-  };
+    // WSL uses Windows localhost forwarding; the backend never binds to its VM network.
+    const bootstrap = {
+      mode: "desktop" as const,
+      port: input.port,
+      // Omit t3Home so the Linux backend uses its own home dir instead of
+      // the Windows-side baseDir (which would be a /mnt/c path and share
+      // the SQLite file with the primary).
+      host: "127.0.0.1",
+      // The packaged sidecar is a Windows executable and cannot run inside the
+      // Linux WSL backend. Keep the field absent instead of passing an unusable
+      // `/mnt/.../*.exe` path; WSL resource telemetry is reported unavailable.
+      // See docs/architecture/resource-telemetry.md.
+    };
 
-  // The archive is the primary packaged WSL path: it installs directly into
-  // the distro's ext4 filesystem. The server.asar extraction service is only
-  // consulted lazily if the archive is unavailable or cannot be staged.
-  const archivePath = environment.path.join(environment.resourcesPath, WSL_RUNTIME_ARCHIVE_NAME);
-  const archiveHashPath = environment.path.join(
-    environment.resourcesPath,
-    WSL_RUNTIME_ARCHIVE_HASH_NAME,
-  );
-
-  const hasArchive = environment.isPackaged
-    ? yield* fileSystem.exists(archivePath).pipe(Effect.orElseSucceed(() => false))
-    : false;
-  const archiveHash = hasArchive
-    ? yield* fileSystem.readFileString(archiveHashPath).pipe(
-        Effect.map(parseWslRuntimeArchiveHash),
-        Effect.orElseSucceed(() => null),
-      )
-    : null;
-  if (hasArchive && archiveHash === null) {
-    yield* Effect.logWarning(
-      "Ignoring the WSL runtime archive because its SHA-256 identity is missing or invalid; launching from the mounted server tree instead.",
-      { hashPath: archiveHashPath },
+    // The archive is the primary packaged WSL path: it installs directly into
+    // the distro's ext4 filesystem. The server.asar extraction service is only
+    // consulted lazily if the archive is unavailable or cannot be staged.
+    const archivePath = environment.path.join(environment.resourcesPath, WSL_RUNTIME_ARCHIVE_NAME);
+    const archiveHashPath = environment.path.join(
+      environment.resourcesPath,
+      WSL_RUNTIME_ARCHIVE_HASH_NAME,
     );
-  }
 
-  const preflight = yield* runWslPreflight({
-    distro: input.distro,
-    runtimeArchive:
-      archiveHash === null
-        ? null
-        : {
-            windowsPath: archivePath,
-            // The verified archive bytes are the cache identity. Release builds
-            // embed the release version and pnpm install metadata, so the
-            // archive changes on every update even when application logic does
-            // not. Later launches of that update still reuse this directory.
-            runtimeId: `sha256-${archiveHash}`,
-            sha256: archiveHash,
-          },
-    // Packaged builds ship a prebuilt Linux node-pty (built on Linux in CI and
-    // attached to the Windows artifact — see build-desktop-artifact.ts), so the
-    // WSL backend never needs a compiler, node-gyp, or network on first launch.
-    // Compiling from source is a dev-only convenience: a checkout has no shipped
-    // prebuilt, and developers have the toolchain. In packaged builds we instead
-    // surface a clear diagnostic if the prebuilt can't load (unsupported
-    // arch/distro), rather than silently dropping into a fragile runtime build.
-    allowBuild: !environment.isPackaged,
-  });
-
-  // Every operation after preflight uses the same concrete distro. In
-  // default-tracking mode this closes the race where the system default
-  // changes between probing and spawning the backend.
-  const runningDistro = preflight._tag === "Ready" ? preflight.runningDistro : null;
-  const distroForConfig = runningDistro ?? input.distro;
-
-  const httpBaseUrl = new URL(`http://127.0.0.1:${input.port}`);
-
-  const distroArgs = distroForConfig ? ["-d", distroForConfig] : [];
-  const forwardedEnv: Record<string, string> = {};
-  const forwardedEnvNames: string[] = [];
-  for (const name of WSL_FORWARDED_ENV_NAMES) {
-    const value = process.env[name];
-    if (value !== undefined && value.length > 0) {
-      forwardedEnv[name] = value;
-      forwardedEnvNames.push(name);
+    const hasArchive = environment.isPackaged
+      ? yield* fileSystem.exists(archivePath).pipe(Effect.orElseSucceed(() => false))
+      : false;
+    const archiveHash = hasArchive
+      ? yield* fileSystem.readFileString(archiveHashPath).pipe(
+          Effect.map(parseWslRuntimeArchiveHash),
+          Effect.orElseSucceed(() => null),
+        )
+      : null;
+    if (hasArchive && archiveHash === null) {
+      yield* Effect.logWarning(
+        "Ignoring the WSL runtime archive because its SHA-256 identity is missing or invalid; launching from the mounted server tree instead.",
+        { hashPath: archiveHashPath },
+      );
     }
-  }
 
-  // Build an explicit copy of process.env minus T3CODE_HOME (dev-runner
-  // exports the Windows-side base dir for the primary; if it leaks into
-  // the WSL backend the Linux side ends up sharing C:\Users\...\.t3 via
-  // /mnt/c, which means both backends read/write the same database and
-  // their env-ids collide).
-  const parentEnvWithoutT3Home: Record<string, string | undefined> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key === "T3CODE_HOME") continue;
-    parentEnvWithoutT3Home[key] = value;
-  }
-  const wslEnv = mergeWslEnv(parentEnvWithoutT3Home.WSLENV, forwardedEnvNames);
+    const preflight = yield* runWslPreflight({
+      distro: input.distro,
+      runtimeArchive:
+        archiveHash === null
+          ? null
+          : {
+              windowsPath: archivePath,
+              // The verified archive bytes are the cache identity. Release builds
+              // embed the release version and pnpm install metadata, so the
+              // archive changes on every update even when application logic does
+              // not. Later launches of that update still reuse this directory.
+              runtimeId: `sha256-${archiveHash}`,
+              sha256: archiveHash,
+            },
+      // Packaged builds ship a prebuilt Linux node-pty (built on Linux in CI and
+      // attached to the Windows artifact — see build-desktop-artifact.ts), so the
+      // WSL backend never needs a compiler, node-gyp, or network on first launch.
+      // Compiling from source is a dev-only convenience: a checkout has no shipped
+      // prebuilt, and developers have the toolchain. In packaged builds we instead
+      // surface a clear diagnostic if the prebuilt can't load (unsupported
+      // arch/distro), rather than silently dropping into a fragile runtime build.
+      allowBuild: !environment.isPackaged,
+    });
 
-  const baseConfig = {
-    executablePath: "wsl.exe",
-    entryPath:
-      preflight._tag === "Ready" ? preflight.windowsEntryPath : environment.backendEntryPath,
-    cwd: environment.backendCwd,
-    env: {
-      ...parentEnvWithoutT3Home,
-      ...backendChildEnvPatch(),
-      ...forwardedEnv,
-      ...(wslEnv !== undefined ? { WSLENV: wslEnv } : {}),
-    },
-    // env is already a complete process.env minus T3CODE_HOME; pass it
-    // verbatim instead of letting the spawner re-merge process.env on top.
-    extendEnv: false,
-    bootstrap,
-    bootstrapDelivery: "stdin" as const,
-    httpBaseUrl,
-    captureOutput: true,
-    ...(runningDistro !== null ? { runningDistro } : {}),
-  };
+    // Every operation after preflight uses the same concrete distro. In
+    // default-tracking mode this closes the race where the system default
+    // changes between probing and spawning the backend.
+    const runningDistro = preflight._tag === "Ready" ? preflight.runningDistro : null;
+    const distroForConfig = runningDistro ?? input.distro;
 
-  // Forward the dev-server URL as an explicit CLI flag so the WSL backend's
-  // config resolution lands in dev/ instead of userdata/. Inheriting through
-  // WSLENV is unreliable in practice (URL-shaped values with colons /
-  // slashes get translated unpredictably depending on flags), and the
-  // packaged build leaves devServerUrl as None anyway.
-  const devUrlArgs = Option.match(environment.devServerUrl, {
-    onNone: () => [] as ReadonlyArray<string>,
-    onSome: (url) => ["--dev-url", url.href],
-  });
+    const httpBaseUrl = new URL(`http://127.0.0.1:${input.port}`);
 
-  if (preflight._tag === "Failed") {
-    const retryLimit =
-      preflight.retryLimit ?? (preflight.fatal ? undefined : WSL_TRANSIENT_PREFLIGHT_RETRY_LIMIT);
+    const distroArgs = distroForConfig ? ["-d", distroForConfig] : [];
+    const forwardedEnv: Record<string, string> = {};
+    const forwardedEnvNames: string[] = [];
+    for (const name of WSL_FORWARDED_ENV_NAMES) {
+      const value = process.env[name];
+      if (value !== undefined && value.length > 0) {
+        forwardedEnv[name] = value;
+        forwardedEnvNames.push(name);
+      }
+    }
+
+    // Build an explicit copy of process.env minus T3CODE_HOME (dev-runner
+    // exports the Windows-side base dir for the primary; if it leaks into
+    // the WSL backend the Linux side ends up sharing C:\Users\...\.t3 via
+    // /mnt/c, which means both backends read/write the same database and
+    // their env-ids collide).
+    const parentEnvWithoutT3Home: Record<string, string | undefined> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (key === "T3CODE_HOME") continue;
+      parentEnvWithoutT3Home[key] = value;
+    }
+    const wslEnv = mergeWslEnv(parentEnvWithoutT3Home.WSLENV, forwardedEnvNames);
+
+    const baseConfig = {
+      executablePath: "wsl.exe",
+      entryPath:
+        preflight._tag === "Ready" ? preflight.windowsEntryPath : environment.backendEntryPath,
+      cwd: environment.backendCwd,
+      env: {
+        ...parentEnvWithoutT3Home,
+        ...backendChildEnvPatch(),
+        ...forwardedEnv,
+        ...(wslEnv !== undefined ? { WSLENV: wslEnv } : {}),
+      },
+      // env is already a complete process.env minus T3CODE_HOME; pass it
+      // verbatim instead of letting the spawner re-merge process.env on top.
+      extendEnv: false,
+      bootstrap,
+      bootstrapDelivery: "stdin" as const,
+      httpBaseUrl,
+      captureOutput: true,
+      ...(runningDistro !== null ? { runningDistro } : {}),
+    };
+
+    // Forward the dev-server URL as an explicit CLI flag so the WSL backend's
+    // config resolution lands in dev/ instead of userdata/. Inheriting through
+    // WSLENV is unreliable in practice (URL-shaped values with colons /
+    // slashes get translated unpredictably depending on flags), and the
+    // packaged build leaves devServerUrl as None anyway.
+    const devUrlArgs = Option.match(environment.devServerUrl, {
+      onNone: () => [] as ReadonlyArray<string>,
+      onSome: (url) => ["--dev-url", url.href],
+    });
+
+    if (preflight._tag === "Failed") {
+      const retryLimit =
+        preflight.retryLimit ?? (preflight.fatal ? undefined : WSL_TRANSIENT_PREFLIGHT_RETRY_LIMIT);
+      return {
+        ...baseConfig,
+        args: [...distroArgs, "--", "node", "--version"],
+        preflightFailure: Option.some({
+          reason: preflight.reason,
+          fatal: preflight.fatal,
+          ...(retryLimit === undefined ? {} : { retryLimit }),
+        }),
+      } satisfies DesktopBackendManager.DesktopBackendStartConfig;
+    }
+
+    // The WSL server spawns commands its providers reference by name — `npm`/`npx`
+    // for provider updates, and the installed CLIs themselves (e.g. `codex`). Those
+    // live in the resolved Node's bin dir, which `wsl.exe -- node` does NOT put on
+    // the process PATH, so `npm install -g ...` fails with NotFound. Pass the
+    // user PATH entries captured by the login-shell preflight. Every dynamic
+    // value is a separate argv entry under `wsl.exe --exec`; no shell command is
+    // involved, so Windows cannot mangle nested quotes and stdin remains reserved
+    // for the bootstrap envelope.
+    const lastSlash = preflight.nodePath.lastIndexOf("/");
+    const nodeBinDir = lastSlash > 0 ? preflight.nodePath.slice(0, lastSlash) : "/usr/bin";
+    const launchPath = `${nodeBinDir}:${WSL_SERVER_SYSTEM_PATH}:${preflight.resolvedPath}`;
+
     return {
       ...baseConfig,
-      args: [...distroArgs, "--", "node", "--version"],
-      preflightFailure: Option.some({
-        reason: preflight.reason,
-        fatal: preflight.fatal,
-        ...(retryLimit === undefined ? {} : { retryLimit }),
-      }),
+      args: [
+        ...distroArgs,
+        "--exec",
+        "env",
+        `PATH=${launchPath}`,
+        preflight.nodePath,
+        preflight.linuxEntryPath,
+        "--bootstrap-fd",
+        "0",
+        ...devUrlArgs,
+      ],
+      preflightFailure: Option.none(),
+      ...(preflight.runtimeId === undefined ? {} : { wslRuntimeId: preflight.runtimeId }),
     } satisfies DesktopBackendManager.DesktopBackendStartConfig;
-  }
-
-  // The WSL server spawns commands its providers reference by name — `npm`/`npx`
-  // for provider updates, and the installed CLIs themselves (e.g. `codex`). Those
-  // live in the resolved Node's bin dir, which `wsl.exe -- node` does NOT put on
-  // the process PATH, so `npm install -g ...` fails with NotFound. Pass the
-  // user PATH entries captured by the login-shell preflight. Every dynamic
-  // value is a separate argv entry under `wsl.exe --exec`; no shell command is
-  // involved, so Windows cannot mangle nested quotes and stdin remains reserved
-  // for the bootstrap envelope.
-  const lastSlash = preflight.nodePath.lastIndexOf("/");
-  const nodeBinDir = lastSlash > 0 ? preflight.nodePath.slice(0, lastSlash) : "/usr/bin";
-  const launchPath = `${nodeBinDir}:${WSL_SERVER_SYSTEM_PATH}:${preflight.resolvedPath}`;
-
-  return {
-    ...baseConfig,
-    args: [
-      ...distroArgs,
-      "--exec",
-      "env",
-      `PATH=${launchPath}`,
-      preflight.nodePath,
-      preflight.linuxEntryPath,
-      "--bootstrap-fd",
-      "0",
-      ...devUrlArgs,
-    ],
-    preflightFailure: Option.none(),
-    ...(preflight.runtimeId === undefined ? {} : { wslRuntimeId: preflight.runtimeId }),
-  } satisfies DesktopBackendManager.DesktopBackendStartConfig;
-});
+  },
+);
 
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -611,49 +600,17 @@ export const make = Effect.gen(function* () {
   const wslEnvironment = yield* DesktopWslEnvironment.DesktopWslEnvironment;
   const wslServerTree = yield* DesktopWslServerTree.DesktopWslServerTree;
   const settings = yield* DesktopAppSettings.DesktopAppSettings;
-  const crypto = yield* Crypto.Crypto;
-  // SynchronizedRef (not a plain Ref) so the read-generate-write is atomic.
-  // crypto.randomBytes is a yield point, and resolvePrimary + resolveWsl can
-  // resolve concurrently; with a plain Ref both could observe None, generate
-  // distinct tokens, and one would overwrite the other — leaving the two
-  // backends holding mismatched tokens and breaking the shared-token
-  // invariant the renderer relies on. modifyEffect serializes the whole
-  // get-or-create so the first caller wins and the rest reuse its token.
-  const tokenRef = yield* SynchronizedRef.make(Option.none<string>());
-  const getOrCreateBootstrapToken = SynchronizedRef.modifyEffect(tokenRef, (current) =>
-    Option.match(current, {
-      onSome: (token) => Effect.succeed([token, current] as const),
-      onNone: () =>
-        crypto.randomBytes(24).pipe(
-          Effect.map((bytes) => {
-            const token = Encoding.encodeHex(bytes);
-            return [token, Option.some(token)] as const;
-          }),
-        ),
-    }),
-  );
-
-  // Both resolvers share the same bootstrap token: the renderer holds a
-  // single token and uses it against whichever backend it's currently
-  // talking to.
-  const sharedInputs = Effect.gen(function* () {
-    const bootstrapToken = yield* getOrCreateBootstrapToken;
-    return { bootstrapToken } satisfies SharedBootstrapInput;
-  });
-
   const buildWslPrimaryConfig = Effect.gen(function* () {
     // wsl-only mode pipes the WSL backend through the same port the
     // Windows primary would normally take. That way the renderer
     // still loads from the local-only endpoint advertised by
-    // DesktopBackendEndpoint, and primary-aware code paths (cookie
-    // auth, the env switcher's "primary" id) keep working without
+    // DesktopBackendEndpoint, and the environment switcher keeps
+    // its primary id without
     // a parallel "secondary" registration.
     const backendExposure = yield* backendEndpoint.backendConfig;
     const persistedSettings = yield* settings.get;
-    const shared = yield* sharedInputs;
     yield* wslEnvironment.preWarm(persistedSettings.wslDistro);
     return yield* resolveWslStartConfig({
-      ...shared,
       port: backendExposure.port,
       distro: persistedSettings.wslDistro,
     }).pipe(
@@ -665,12 +622,11 @@ export const make = Effect.gen(function* () {
   });
 
   const buildWindowsPrimaryConfig = Effect.gen(function* () {
-    const shared = yield* sharedInputs;
     const resourceMonitorPath = yield* resolveResourceMonitorPath().pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
     );
-    return yield* resolvePrimaryStartConfig({ ...shared, resourceMonitorPath }).pipe(
+    return yield* resolvePrimaryStartConfig({ resourceMonitorPath }).pipe(
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
       Effect.provideService(DesktopBackendEndpoint.DesktopBackendEndpoint, backendEndpoint),
     );
@@ -718,8 +674,7 @@ export const make = Effect.gen(function* () {
     }).pipe(Effect.withSpan("desktop.backendConfiguration.resolvePrimaryLabel")),
     resolveWsl: (input) =>
       Effect.gen(function* () {
-        const shared = yield* sharedInputs;
-        return yield* resolveWslStartConfig({ ...shared, ...input }).pipe(
+        return yield* resolveWslStartConfig(input).pipe(
           Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
           Effect.provideService(DesktopWslEnvironment.DesktopWslEnvironment, wslEnvironment),
           Effect.provideService(DesktopWslServerTree.DesktopWslServerTree, wslServerTree),

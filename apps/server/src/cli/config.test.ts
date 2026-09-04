@@ -32,7 +32,6 @@ const makeDesktopBootstrap = (
   port: 4888,
   t3Home: "/tmp/t3-bootstrap-home",
   host: "127.0.0.1",
-  desktopBootstrapToken: "desktop-bootstrap-token",
   ...overrides,
 });
 
@@ -273,7 +272,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "127.0.0.1",
         devUrl: new URL("http://127.0.0.1:4173"),
-        desktopBootstrapToken: "desktop-bootstrap-token",
+        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
       });
@@ -289,7 +288,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           port: 4888,
           host: "::1",
           t3Home: baseDir,
-          desktopBootstrapToken: "desktop-token",
           desktopTelemetryFd: 4,
           desktopTelemetryControlFd: 5,
         }),
@@ -334,7 +332,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "::1",
         devUrl: undefined,
-        desktopBootstrapToken: "desktop-token",
+        desktopBootstrapToken: undefined,
         desktopTelemetryFd: 4,
         desktopTelemetryControlFd: 5,
         resourceMonitorPath: undefined,
@@ -402,7 +400,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           port: 4888,
           host: "::1",
           t3Home: "/tmp/t3-bootstrap-home",
-          desktopBootstrapToken: "desktop-token",
         }),
       );
       const derivedPaths = yield* deriveExplicitServerPaths(
@@ -453,7 +450,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "127.0.0.1",
         devUrl: new URL("http://127.0.0.1:4173"),
-        desktopBootstrapToken: "desktop-token",
+        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
       });
