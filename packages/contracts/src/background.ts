@@ -1,8 +1,8 @@
 import * as Schema from "effect/Schema";
 
 import {
-  AuthSessionId,
   EnvironmentId,
+  LocalClientId,
   RpcClientId,
   ThreadId,
   TrimmedNonEmptyString,
@@ -82,7 +82,7 @@ export const ClientActivityReportInput = Schema.Struct({
 export type ClientActivityReportInput = typeof ClientActivityReportInput.Type;
 
 export const ClientActivityLease = Schema.Struct({
-  sessionId: AuthSessionId,
+  sessionId: LocalClientId,
   rpcClientId: RpcClientId,
   clientId: ClientActivityClientId,
   clientKind: ClientKind,

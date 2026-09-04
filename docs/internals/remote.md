@@ -42,3 +42,10 @@ tasks and dev-runner `--browser`/`--host` options are removed. Development retai
 loopback ports, collision handling, and isolated worktree data directories. The renderer gets
 backend endpoints from the desktop bridge; the runner clears inherited `VITE_HTTP_URL` and
 `VITE_WS_URL` values.
+
+WebSocket RPC no longer authenticates T3 sessions or checks access scopes. The renderer attaches
+a per-window UUID as `clientId`, retained across socket and factory recreation in that window.
+The server uses it to route provider setup flows and local activity leases. It is not a secret
+or access credential. Requests lacking a valid ID get a fresh connection identity. Provider
+sign-in ownership survives reconnects, while Host/Origin checks remain the ingress boundary.
+The auth-access subscription and server-config auth descriptor are removed.

@@ -1,15 +1,15 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
   ServerConfig,
-  type ServerConfig as ServerConfigType,
   ServerConfigStreamEvent,
   type ServerConfigStreamEvent as ServerConfigStreamEventType,
+  type ServerConfig as ServerConfigType,
   WS_METHODS,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -28,14 +28,14 @@ import {
   AVAILABLE_CONNECTION_STATE,
   ConnectionBlockedError,
   ConnectionTransientError,
-  PrimaryConnectionTarget,
   type PreparedConnection,
+  PrimaryConnectionTarget,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
-import * as RpcSession from "./session.ts";
 import { makeEnvironmentServerConfigState } from "../state/server.ts";
 import { applyServerConfigProjection } from "../state/serverConfigProjection.ts";
+import * as RpcSession from "./session.ts";
 
 type SocketEventType = "open" | "message" | "close" | "error";
 type SocketEvent = {
@@ -128,12 +128,6 @@ const SERVER_CONFIG: ServerConfigType = {
       repositoryIdentity: true,
       connectionProbe: true,
     },
-  },
-  auth: {
-    policy: "loopback-browser",
-    bootstrapMethods: ["one-time-token"],
-    sessionMethods: ["browser-session-cookie", "bearer-access-token"],
-    sessionCookieName: "t3_session",
   },
   cwd: "/tmp/workspace",
   keybindingsConfigPath: "/tmp/workspace/keybindings.json",
@@ -266,7 +260,10 @@ describe("RpcSessionFactory", () => {
       const readyFiber = yield* Effect.forkChild(session.ready);
       const socket = yield* awaitSocket(sockets);
 
-      expect(socket.url).toBe(PREPARED.socketUrl);
+      const socketUrl = new URL(socket.url);
+      expect(socketUrl.searchParams.get("clientId")).toMatch(/^[0-9a-f-]{36}$/);
+      socketUrl.searchParams.delete("clientId");
+      expect(socketUrl.toString()).toBe(PREPARED.socketUrl);
       socket.open();
       yield* completeInitialConfig(socket);
       yield* Fiber.join(readyFiber);

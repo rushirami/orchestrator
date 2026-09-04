@@ -2219,54 +2219,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("does not allow management-only access tokens to operate the environment", () =>
-    Effect.gen(function* () {
-      yield* buildAppUnderTest();
-
-      const { response: exchangeResponse, body: tokenBody } = yield* exchangeAccessToken(
-        defaultDesktopBootstrapToken,
-        { scope: "access:write" },
-      );
-      assert.equal(exchangeResponse.status, 200);
-      assert.equal(tokenBody.scope, "access:write");
-      assert.isDefined(tokenBody.access_token);
-
-      const overbroadPairingResponse = yield* HttpClient.post("/api/auth/pairing-token", {
-        headers: {
-          authorization: `Bearer ${tokenBody.access_token ?? ""}`,
-        },
-        body: yield* HttpBody.json({}),
-      });
-      const overbroadPairingBody = (yield* overbroadPairingResponse.json) as {
-        readonly requiredScope: string;
-      };
-      const pairingResponse = yield* HttpClient.post("/api/auth/pairing-token", {
-        headers: {
-          authorization: `Bearer ${tokenBody.access_token ?? ""}`,
-        },
-        body: yield* HttpBody.json({ scopes: ["access:write"] }),
-      });
-      const wsTicketResponse = yield* HttpClient.post("/api/auth/websocket-ticket", {
-        headers: {
-          authorization: `Bearer ${tokenBody.access_token ?? ""}`,
-        },
-      });
-      const wsTicketBody = (yield* wsTicketResponse.json) as { readonly ticket: string };
-      assert.equal(overbroadPairingResponse.status, 403);
-      assert.equal(overbroadPairingBody.requiredScope, "orchestration:read");
-      assert.equal(pairingResponse.status, 200);
-      assert.equal(wsTicketResponse.status, 200);
-      const wsUrl = `${yield* getWsServerUrl("/ws", { authenticated: false })}?wsTicket=${encodeURIComponent(wsTicketBody.ticket)}`;
-      const rpcError = yield* Effect.flip(
-        Effect.scoped(withWsRpcClient(wsUrl, (client) => client[WS_METHODS.serverGetConfig]({}))),
-      );
-      assert.equal(rpcError._tag, "EnvironmentAuthorizationError");
-      if (rpcError._tag === "EnvironmentAuthorizationError") {
-        assert.equal(rpcError.requiredScope, "orchestration:read");
-      }
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
   it.effect("includes CORS headers on desktop auth success responses", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
@@ -2525,76 +2477,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const reused = yield* exchangeAccessToken(created.credential, { scope: "terminal:operate" });
       assert.equal(reused.response.status, 401);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
-  it.effect("returns only pairing metadata in access-read WebSocket snapshots and updates", () =>
-    Effect.gen(function* () {
-      const changesSubscribed = yield* Deferred.make<void>();
-      yield* buildAppUnderTest({
-        onPairingChangesSubscribed: Deferred.succeed(changesSubscribed, undefined).pipe(
-          Effect.asVoid,
-        ),
-      });
-      const ownerCookie = yield* getAuthenticatedSessionCookieHeader();
-      const createLink = Effect.gen(function* () {
-        const response = yield* HttpClient.post("/api/auth/pairing-token", {
-          headers: { cookie: ownerCookie },
-          body: yield* HttpBody.json({}),
-        });
-        assert.equal(response.status, 200);
-        return (yield* response.json) as { id: string; credential: string };
-      });
-      const initialLink = yield* createLink;
-      const reader = yield* exchangeAccessToken(defaultDesktopBootstrapToken, {
-        scope: "access:read",
-      });
-      assert.equal(reader.body.scope, "access:read");
-      const ticketResponse = yield* HttpClient.post("/api/auth/websocket-ticket", {
-        headers: { authorization: `Bearer ${reader.body.access_token ?? ""}` },
-      });
-      assert.equal(ticketResponse.status, 200);
-      const { ticket } = (yield* ticketResponse.json) as { ticket: string };
-      const wsUrl = `${yield* getWsServerUrl("/ws", { authenticated: false })}?wsTicket=${encodeURIComponent(ticket)}`;
-      const frames: string[] = [];
-      yield* withWsRpcClient(
-        wsUrl,
-        (client) =>
-          Effect.gen(function* () {
-            const snapshotReceived = yield* Deferred.make<void>();
-            const eventsFiber = yield* client.subscribeAuthAccess({}).pipe(
-              Stream.tap((event) =>
-                event.type === "snapshot"
-                  ? Deferred.succeed(snapshotReceived, undefined)
-                  : Effect.void,
-              ),
-              Stream.takeUntil((event) => event.type === "pairingLinkUpserted"),
-              Stream.runCollect,
-              Effect.forkChild,
-            );
-            yield* Deferred.await(snapshotReceived);
-            yield* Deferred.await(changesSubscribed);
-            const liveLink = yield* createLink;
-            const events = yield* Fiber.join(eventsFiber);
-            const snapshot = events.find((event) => event.type === "snapshot");
-            const update = events.find((event) => event.type === "pairingLinkUpserted");
-            assert.isDefined(snapshot);
-            assert.isDefined(update);
-            assert.isTrue(
-              snapshot?.payload.pairingLinks.some((link) => link.id === initialLink.id),
-            );
-            assert.equal(update?.payload.id, liveLink.id);
-            // Inspect the wire frames so client schema decoding cannot hide a leak.
-            assert.notInclude(frames.join(""), '"credential"');
-            assert.notInclude(frames.join(""), initialLink.credential);
-            assert.notInclude(frames.join(""), liveLink.credential);
-            const paired = yield* exchangeAccessToken(liveLink.credential, {
-              scope: AuthStandardClientScopes.join(" "),
-            });
-            assert.equal(paired.response.status, 200);
-          }),
-        (frame) => frames.push(frame),
-      );
-    }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("lists and revokes pairing links for access management sessions", () =>
@@ -2941,7 +2823,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.equal(response.environment.environmentId, testEnvironmentDescriptor.environmentId);
-      assert.equal(response.auth.policy, "desktop-managed-local");
       assert.equal(response.shellResumeCompletionMarker, true);
       assert.isUndefined(response.shellRevealInFileManager);
       assert.isUndefined(response.shellRevealInFileManagerKind);
@@ -3010,26 +2891,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   );
 
   it.effect(
-    "rejects websocket rpc handshake when a session token is only provided via query string",
-    () =>
-      Effect.gen(function* () {
-        yield* buildAppUnderTest();
-
-        const { cookie } = yield* bootstrapBrowserSession();
-        assert.isDefined(cookie);
-        const sessionToken = extractSessionTokenFromSetCookie(cookie ?? "");
-        const wsUrl = `${yield* getWsServerUrl("/ws", { authenticated: false })}?token=${encodeURIComponent(sessionToken)}`;
-
-        const error = yield* Effect.flip(
-          Effect.scoped(withWsRpcClient(wsUrl, (client) => client[WS_METHODS.serverGetConfig]({}))),
-        );
-
-        assert.equal(error._tag, "RpcClientError");
-        assertInclude(String(error), "SocketOpenError");
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
-  it.effect(
     "accepts websocket rpc handshake with a dedicated websocket ticket in the query string",
     () =>
       Effect.gen(function* () {
@@ -3053,7 +2914,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         );
 
         assert.equal(response.environment.environmentId, testEnvironmentDescriptor.environmentId);
-        assert.equal(response.auth.policy, "desktop-managed-local");
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -3609,7 +3469,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     ).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("rejects websocket rpc handshake when session authentication is missing", () =>
+  it.effect("serves local workspace requests without session credentials", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -3632,95 +3492,12 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         ).pipe(Effect.result),
       );
 
-      assertTrue(result._tag === "Failure");
-      const failureMessage = String(result.failure);
-      assertTrue(
-        failureMessage.includes("SocketOpenError") || failureMessage.includes("SocketCloseError"),
-      );
-      assertTrue(
-        failureMessage.includes("Unauthorized") ||
-          failureMessage.includes("An error occurred during Open"),
-      );
+      assertTrue(result._tag === "Success");
+      assert.isTrue(result.success.entries.some((entry) => entry.path === "needle-file.ts"));
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("provider setup lets read-only clients observe installation but not change setup", () =>
-    Effect.gen(function* () {
-      let installStarts = 0;
-      let authCalls = 0;
-      yield* buildAppUnderTest({
-        layers: {
-          providerInstanceRegistry: {
-            getInstance: (instanceId) =>
-              Effect.succeed(
-                instanceId === providerSetupInstanceId ? providerSetupInstance : undefined,
-              ),
-          },
-          antigravityInstallation: {
-            start: Effect.sync(() => {
-              installStarts += 1;
-              return providerSetupInstallState;
-            }),
-            changes: Stream.succeed(providerSetupInstallState),
-          },
-          providerAuth: {
-            start: () =>
-              Effect.sync(() => {
-                authCalls += 1;
-                return providerSetupAuthState;
-              }),
-            subscribe: () =>
-              Stream.fromEffect(
-                Effect.sync(() => {
-                  authCalls += 1;
-                  return providerSetupAuthState;
-                }),
-              ),
-          },
-        },
-      });
-      const token = yield* exchangeAccessToken(defaultDesktopBootstrapToken, {
-        scope: "orchestration:read",
-      });
-      assert.equal(token.response.status, 200);
-      const ticketResponse = yield* HttpClient.post("/api/auth/websocket-ticket", {
-        headers: { authorization: `Bearer ${token.body.access_token ?? ""}` },
-      });
-      const { ticket } = yield* responseJsonEffect<{ readonly ticket: string }>(ticketResponse);
-      const wsUrl = `${yield* getWsServerUrl("/ws", { authenticated: false })}?wsTicket=${encodeURIComponent(ticket)}`;
-      yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
-          Effect.gen(function* () {
-            const observed = yield* client[WS_METHODS.providerInstallSubscribe]({
-              instanceId: providerSetupInstanceId,
-            }).pipe(Stream.runHead, Effect.map(Option.getOrThrow));
-            assert.deepEqual(observed, providerSetupInstallState);
-            const errors = [
-              yield* client[WS_METHODS.providerInstallStart]({
-                instanceId: providerSetupInstanceId,
-              }).pipe(Effect.flip),
-              yield* client[WS_METHODS.providerAuthStart]({
-                instanceId: providerSetupInstanceId,
-              }).pipe(Effect.flip),
-              yield* client[WS_METHODS.providerAuthSubscribe]({
-                instanceId: providerSetupInstanceId,
-              }).pipe(Stream.runHead, Effect.flip),
-            ];
-            for (const error of errors) {
-              assert.equal(error._tag, "EnvironmentAuthorizationError");
-              if (error._tag === "EnvironmentAuthorizationError") {
-                assert.equal(error.requiredScope, "orchestration:operate");
-              }
-            }
-          }),
-        ),
-      );
-      assert.equal(installStarts, 0);
-      assert.equal(authCalls, 0);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
-  it.effect("provider setup binds private sign-in to the authenticated websocket session", () =>
+  it.effect("provider setup binds sign-in to the local window identity across reconnects", () =>
     Effect.gen(function* () {
       const flowId = "private-sign-in-flow";
       const callbackUrl = "http://127.0.0.1:51234/?state=test-state&code=test-code";
@@ -3789,38 +3566,15 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           },
         },
       });
-      const firstCookie = yield* getAuthenticatedSessionCookieHeader();
-      const secondCookie = yield* getAuthenticatedSessionCookieHeader();
-      const firstClients = yield* HttpClient.get("/api/auth/clients", {
-        headers: { cookie: firstCookie },
-      }).pipe(
-        Effect.flatMap(
-          responseJsonEffect<
-            ReadonlyArray<{ readonly sessionId: string; readonly current: boolean }>
-          >,
-        ),
-      );
-      const secondClients = yield* HttpClient.get("/api/auth/clients", {
-        headers: { cookie: secondCookie },
-      }).pipe(
-        Effect.flatMap(
-          responseJsonEffect<
-            ReadonlyArray<{ readonly sessionId: string; readonly current: boolean }>
-          >,
-        ),
-      );
-      const firstOwner = firstClients.find((session) => session.current)?.sessionId;
-      const secondOwner = secondClients.find((session) => session.current)?.sessionId;
-      assert.isString(firstOwner);
-      assert.isString(secondOwner);
-      assert.notEqual(firstOwner, secondOwner);
+      const firstOwner = "11111111-1111-4111-8111-111111111111";
+      const secondOwner = "22222222-2222-4222-8222-222222222222";
       const baseWsUrl = yield* getWsServerUrl("/ws", { authenticated: false });
       const target = {
         instanceId: providerSetupInstanceId,
         ownerSessionId: "client-supplied-owner",
       };
       yield* Effect.scoped(
-        withWsRpcClient(appendSessionCookieToWsUrl(baseWsUrl, firstCookie), (client) =>
+        withWsRpcClient(`${baseWsUrl}?clientId=${firstOwner}`, (client) =>
           Effect.gen(function* () {
             const started = yield* client[WS_METHODS.providerAuthStart](target);
             assert.equal(started.flowId, flowId);
@@ -3830,7 +3584,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             );
             assert.equal(ownState.authorizationUrl, waiting.authorizationUrl);
             yield* Effect.scoped(
-              withWsRpcClient(appendSessionCookieToWsUrl(baseWsUrl, secondCookie), (otherClient) =>
+              withWsRpcClient(`${baseWsUrl}?clientId=${secondOwner}`, (otherClient) =>
                 Effect.gen(function* () {
                   const otherState = yield* otherClient[WS_METHODS.providerAuthSubscribe](
                     target,
@@ -3859,12 +3613,22 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           }),
         ),
       );
+      // A new socket from the same window resumes its provider setup flow without a T3 session.
+      const reconnected = yield* Effect.scoped(
+        withWsRpcClient(`${baseWsUrl}?clientId=${firstOwner}`, (client) =>
+          client[WS_METHODS.providerAuthSubscribe](target).pipe(
+            Stream.runHead,
+            Effect.map(Option.getOrThrow),
+          ),
+        ),
+      );
+      assert.equal(reconnected.authorizationUrl, waiting.authorizationUrl);
       assert.deepEqual(forwardedCallbacks, [callbackUrl]);
       assert.deepEqual(logoutInstances, [providerSetupInstanceId]);
       assert.isTrue(calls.every((call) => call.instanceId === providerSetupInstanceId));
       assert.deepEqual(
         calls.map((call) => call.ownerSessionId),
-        [firstOwner, firstOwner, secondOwner, secondOwner, firstOwner, firstOwner],
+        [firstOwner, firstOwner, secondOwner, secondOwner, firstOwner, firstOwner, firstOwner],
       );
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );

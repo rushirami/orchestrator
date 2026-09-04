@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
-  AuthSessionId,
-  RpcClientId,
-  type HostPowerSnapshot,
   type ClientActivityReportInput,
+  type HostPowerSnapshot,
+  LocalClientId,
+  RpcClientId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -82,7 +82,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport(),
       );
@@ -102,11 +102,11 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport(),
       );
-      yield* policy.removeRpcClient(AuthSessionId.make("session-1"), RpcClientId.make(1));
+      yield* policy.removeRpcClient(LocalClientId.make("session-1"), RpcClientId.make(1));
 
       const snapshot = yield* policy.snapshot;
       assert.equal(snapshot.activeForegroundLeaseCount, 0);
@@ -120,21 +120,21 @@ describe("BackgroundPolicy", () => {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       const rpcClientId = RpcClientId.make(1);
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         rpcClientId,
         makeReport({ clientId: "client-1" }),
       );
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-2"),
+        LocalClientId.make("session-2"),
         rpcClientId,
         makeReport({ clientId: "client-2" }),
       );
 
-      yield* policy.removeRpcClient(AuthSessionId.make("session-1"), rpcClientId);
+      yield* policy.removeRpcClient(LocalClientId.make("session-1"), rpcClientId);
 
       const snapshot = yield* policy.snapshot;
       assert.equal(snapshot.activeForegroundLeaseCount, 1);
-      assert.equal(snapshot.leases[0]?.sessionId, AuthSessionId.make("session-2"));
+      assert.equal(snapshot.leases[0]?.sessionId, LocalClientId.make("session-2"));
       assert.equal(snapshot.leases[0]?.clientId, "client-2");
     }).pipe(Effect.provide(makeLayer(nominalHostPower))),
   );
@@ -174,11 +174,11 @@ describe("BackgroundPolicy", () => {
         );
         yield* Effect.yieldNow;
         const reportFiber = yield* policy
-          .reportClientActivity(AuthSessionId.make("session-1"), RpcClientId.make(1), makeReport())
+          .reportClientActivity(LocalClientId.make("session-1"), RpcClientId.make(1), makeReport())
           .pipe(Effect.forkChild);
         yield* Deferred.await(firstSnapshotStarted);
         const removeFiber = yield* policy
-          .removeRpcClient(AuthSessionId.make("session-1"), RpcClientId.make(1))
+          .removeRpcClient(LocalClientId.make("session-1"), RpcClientId.make(1))
           .pipe(Effect.forkChild);
         yield* Effect.yieldNow;
         yield* Deferred.succeed(releaseFirstSnapshot, undefined);
@@ -195,7 +195,7 @@ describe("BackgroundPolicy", () => {
   it.effect("bounds client-id churn for one websocket connection", () =>
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
-      const sessionId = AuthSessionId.make("session-1");
+      const sessionId = LocalClientId.make("session-1");
       const rpcClientId = RpcClientId.make(1);
       for (
         let index = 0;
@@ -228,7 +228,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport(),
       );
@@ -246,7 +246,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport(),
       );
@@ -271,7 +271,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport({ focused: false, visible: false }),
       );
@@ -288,7 +288,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport({ focused: false, recentlyInteracted: true }),
       );
@@ -304,7 +304,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport({ focused: false, recentlyInteracted: false }),
       );
@@ -322,7 +322,7 @@ describe("BackgroundPolicy", () => {
       Effect.gen(function* () {
         const policy = yield* BackgroundPolicy.BackgroundPolicy;
         yield* policy.reportClientActivity(
-          AuthSessionId.make("session-1"),
+          LocalClientId.make("session-1"),
           RpcClientId.make(1),
           makeReport({ focused: false, visible: false }),
         );
@@ -337,7 +337,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport(),
       );
@@ -361,7 +361,7 @@ describe("BackgroundPolicy", () => {
     Effect.gen(function* () {
       const policy = yield* BackgroundPolicy.BackgroundPolicy;
       yield* policy.reportClientActivity(
-        AuthSessionId.make("session-1"),
+        LocalClientId.make("session-1"),
         RpcClientId.make(1),
         makeReport(),
       );

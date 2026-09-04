@@ -1,8 +1,8 @@
 import {
   type ServerConfig,
   type ServerConfigStreamEvent,
-  WsSubscribeServerConfigRpc,
   WS_METHODS,
+  WsSubscribeServerConfigRpc,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -23,7 +23,6 @@ import * as RpcClientError from "effect/unstable/rpc/RpcClientError";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as Socket from "effect/unstable/socket/Socket";
 
-import { makeWsRpcProtocolClient, type WsRpcProtocolClient } from "./protocol.ts";
 import type {
   ConnectionAttemptError,
   ConnectionTransientError,
@@ -38,6 +37,7 @@ import {
   type ServerConfigProjection,
   withoutEnvironmentThemes,
 } from "../state/serverConfigProjection.ts";
+import { makeWsRpcProtocolClient, type WsRpcProtocolClient } from "./protocol.ts";
 
 const SOCKET_OPEN_TIMEOUT = "15 seconds";
 
@@ -161,7 +161,9 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
         Effect.asVoid,
       ),
     });
-    const socketLayer = Socket.layerWebSocket(connection.socketUrl, {
+    const socketUrl = new URL(connection.socketUrl);
+    socketUrl.searchParams.set("clientId", localRendererClientId());
+    const socketLayer = Socket.layerWebSocket(socketUrl.toString(), {
       openTimeout: SOCKET_OPEN_TIMEOUT,
     }).pipe(Layer.provide(Layer.succeed(Socket.WebSocketConstructor, webSocketConstructor)));
     const protocolLayer = Layer.effect(
@@ -341,3 +343,9 @@ export const layerWithOptions = (options: RpcSessionOptions) =>
   Layer.effect(RpcSessionFactory, make(options));
 
 export const layer = layerWithOptions({});
+
+let rendererClientId: string | undefined;
+function localRendererClientId(): string {
+  // @effect-diagnostics-next-line cryptoRandomUUID:off - window identity survives factory rebuilds and is not an access credential.
+  return (rendererClientId ??= globalThis.crypto.randomUUID());
+}

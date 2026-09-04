@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { ServerAuthDescriptor } from "./auth.ts";
 import {
   ForwardCompatibleArray,
   IsoDateTime,
@@ -536,7 +535,6 @@ export function environmentThemeFileHasColors(file: EnvironmentThemeFile): boole
 
 export const ServerConfig = Schema.Struct({
   environment: ExecutionEnvironmentDescriptor,
-  auth: ServerAuthDescriptor,
   cwd: TrimmedNonEmptyString,
   keybindingsConfigPath: TrimmedNonEmptyString,
   keybindings: ResolvedKeybindingsConfig,
