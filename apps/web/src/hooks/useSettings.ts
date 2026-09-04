@@ -9,21 +9,7 @@
  * access is intentionally named as such so environment-sensitive consumers
  * cannot silently read the wrong server's settings.
  */
-import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import {
-  DEFAULT_SERVER_SETTINGS,
-  type EnvironmentId,
-  ServerSettings,
-  type ServerSettingsPatch,
-} from "@t3tools/contracts";
-import {
-  type ClientSettingsPatch,
-  type ClientSettings,
-  DEFAULT_CLIENT_SETTINGS,
-  type EnvironmentIdentificationMode,
-  type UnifiedSettings,
-} from "@t3tools/contracts/settings";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import {
   findSharedSettingsMismatches,
@@ -31,7 +17,26 @@ import {
   splitSharedServerPatch,
   supportsSharedSettingsSync,
 } from "@t3tools/client-runtime/state/shared-settings";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type EnvironmentId,
+  ServerSettings,
+  type ServerSettingsPatch,
+} from "@t3tools/contracts";
+import {
+  type ClientSettings,
+  type ClientSettingsPatch,
+  DEFAULT_CLIENT_SETTINGS,
+  type EnvironmentIdentificationMode,
+  type UnifiedSettings,
+} from "@t3tools/contracts/settings";
+import * as Struct from "effect/Struct";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { toastManager } from "~/components/ui/toast";
 import { ensureLocalApi } from "~/localApi";
+import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
+import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
+import { useAtomCommand } from "~/state/use-atom-command";
 import {
   getThemeDefinition,
   getThemePreviewSidebarArtwork,
@@ -39,12 +44,6 @@ import {
   subscribeToThemePreview,
   themeAllowsSidebarArtwork,
 } from "~/themePalette";
-import * as Struct from "effect/Struct";
-import { toastManager } from "~/components/ui/toast";
-import { isHostedStaticApp } from "~/hostedPairing";
-import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
-import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
-import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
@@ -355,17 +354,11 @@ export function usePrimarySettings<T = UnifiedSettings>(
 }
 
 export const PRIMARY_SETTINGS_UNAVAILABLE_MESSAGE =
-  "This setting is saved on a server, and the hosted app is not anchored to one. Change it from the desktop app or from the server's own address.";
+  "Reconnect to the local backend to change this setting.";
 
-/**
- * Whether primary-scoped server settings have a server to live on. The
- * hosted app connects to every environment as a remote, so it has no primary:
- * `usePrimarySettings` reads schema defaults there and writes have nowhere
- * to go. Desktop and server-served web always have one.
- */
+/** Whether the local backend is available for settings updates. */
 export function usePrimarySettingsAvailable(): boolean {
-  const primaryEnvironment = usePrimaryEnvironment();
-  return primaryEnvironment !== null || !isHostedStaticApp();
+  return usePrimaryEnvironment() !== null;
 }
 
 /** Environments that can receive a shared settings write right now. */

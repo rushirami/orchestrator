@@ -1,8 +1,10 @@
-import { ArchiveIcon, ArchiveX, ChevronRightIcon, LoaderIcon, SettingsIcon } from "lucide-react";
-import { Link, useNavigate } from "@tanstack/react-router";
-import type { CSSProperties, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  isAtomCommandInterrupted,
+  settlePromise,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   type BackgroundActivityProfile,
   type DesktopUpdateChannel,
@@ -11,12 +13,6 @@ import {
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import {
-  isAtomCommandInterrupted,
-  settlePromise,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
 import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
@@ -30,8 +26,8 @@ import {
   MAX_PROMPT_FONT_SIZE,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MAX_TERMINAL_FONT_SIZE,
-  MIN_CODE_FONT_SIZE,
   MIN_APPEARANCE_CONTRAST,
+  MIN_CODE_FONT_SIZE,
   MIN_GLASS_OPACITY,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PANEL_ANIMATION_DURATION_MS,
@@ -42,10 +38,24 @@ import {
 } from "@t3tools/contracts/settings";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import { createModelSelection } from "@t3tools/shared/model";
+import { Link, useNavigate } from "@tanstack/react-router";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
-import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
+import { ArchiveIcon, ArchiveX, ChevronRightIcon, LoaderIcon, SettingsIcon } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DEFAULT_CODE_FONT_STACK,
+  DEFAULT_SANS_FONT_STACK,
+  isFontFamilyAvailable,
+  isMonospaceFamily,
+  resolveDefaultFamilyLabel,
+  resolveTerminalFontPreference,
+  resolveTerminalFontSizePreference,
+  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+} from "../../appearanceFonts";
+import { APP_VERSION } from "../../branding";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -53,25 +63,20 @@ import {
   isDesktopUpdateButtonDisabled,
   resolveDesktopUpdateButtonAction,
 } from "../../components/desktopUpdate.logic";
-import { ProviderModelPicker } from "../chat/ProviderModelPicker";
-import { TraitsPicker } from "../chat/TraitsPicker";
-import {
-  resolveEnvironmentIdentificationPillLabel,
-  useEnvironmentStageLabel,
-} from "../SidebarStageBackdrop";
 import { isElectron } from "../../env";
-import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
 import {
   readAppearanceModePreference,
   readThemeHalves,
   readThemePreference,
   useTheme,
 } from "../../hooks/useTheme";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
-import { useDesktopUpdateState } from "../../state/desktopUpdate";
+import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
+import { isMacPlatform } from "../../lib/utils";
+import { ensureLocalApi, readLocalApi } from "../../localApi";
 import {
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
@@ -82,17 +87,22 @@ import {
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
 } from "../../providerInstances";
-import { ensureLocalApi, readLocalApi } from "../../localApi";
-import { isMacPlatform } from "../../lib/utils";
+import { useDesktopUpdateState } from "../../state/desktopUpdate";
+import { useProjects } from "../../state/entities";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import {
   primaryServerConfigAtom,
   primaryServerObservabilityAtom,
   primaryServerProvidersAtom,
 } from "../../state/server";
-import { useProjects } from "../../state/entities";
-import { usePrimaryEnvironmentId } from "../../state/environments";
-import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
+import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { TraitsPicker } from "../chat/TraitsPicker";
+import { ProjectFavicon } from "../ProjectFavicon";
+import {
+  resolveEnvironmentIdentificationPillLabel,
+  useEnvironmentStageLabel,
+} from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
@@ -107,19 +117,6 @@ import {
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
 import {
-  DEFAULT_CODE_FONT_STACK,
-  DEFAULT_SANS_FONT_STACK,
-  isFontFamilyAvailable,
-  isMonospaceFamily,
-  resolveDefaultFamilyLabel,
-  resolveTerminalFontPreference,
-  resolveTerminalFontSizePreference,
-  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-} from "../../appearanceFonts";
-import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
-import { SharedSettingsMismatchAlert } from "./SharedSettingsMismatchAlert";
-import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
-import {
   NumberField,
   NumberFieldDecrement,
   NumberFieldGroup,
@@ -130,7 +127,19 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ThemeLibrary } from "./ThemeSettings";
+import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
+import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
+import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
+import {
+  PolicyTooltip,
+  SettingResetButton,
+  SETTINGS_PICKER_TRIGGER_CLASSNAME,
+  SettingsPageContainer,
+  SettingsRow,
+  SettingsSection,
+  useSettingsSearchTarget,
+  useSettingsSearchTargetId,
+} from "./settingsLayout";
 import {
   backgroundActivityOverrideSettings,
   backgroundActivitySharedPolicySettings,
@@ -138,28 +147,18 @@ import {
   formatDiagnosticsDescription,
   getChangedBrowserSettingLabels,
   getChangedTypographySettingLabels,
-  normalizeIntervalSeconds,
-  PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
   hasChangedBackgroundActivitySettings,
   isProjectGroupingEnabled,
+  normalizeIntervalSeconds,
   projectGroupingModeFromToggle,
+  PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
   readLastEnabledProjectGroupingMode,
   rememberEnabledProjectGroupingMode,
   resolveBackgroundActivityProfileOption,
 } from "./SettingsPanels.logic";
-import {
-  PolicyTooltip,
-  SETTINGS_PICKER_TRIGGER_CLASSNAME,
-  SettingResetButton,
-  SettingsPageContainer,
-  SettingsRow,
-  SettingsSection,
-  useSettingsSearchTarget,
-  useSettingsSearchTargetId,
-} from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
-import { ProjectFavicon } from "../ProjectFavicon";
-import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
+import { SharedSettingsMismatchAlert } from "./SharedSettingsMismatchAlert";
+import { ThemeLibrary } from "./ThemeSettings";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
@@ -258,7 +257,6 @@ function AboutVersionSection() {
 
   const hasDesktopBridge = typeof window !== "undefined" && Boolean(window.desktopBridge);
   const selectedUpdateChannel = updateState?.channel ?? "latest";
-  const selectedHostedAppChannel = hasDesktopBridge ? null : HOSTED_APP_CHANNEL;
 
   const handleUpdateChannelChange = useCallback(
     (channel: DesktopUpdateChannel) => {
@@ -442,34 +440,6 @@ function AboutVersionSection() {
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="latest">
                   Stable
-                </SelectItem>
-                <SelectItem hideIndicator value="nightly">
-                  Nightly
-                </SelectItem>
-              </SelectPopup>
-            </Select>
-          }
-        />
-      ) : selectedHostedAppChannel ? (
-        <SettingsRow
-          title="Update track"
-          description="Switches the hosted app release channel."
-          control={
-            <Select
-              value={selectedHostedAppChannel}
-              onValueChange={(value) => {
-                if (value === selectedHostedAppChannel) return;
-                window.location.assign(
-                  buildHostedChannelSelectionUrl({ channel: value as HostedAppChannel }),
-                );
-              }}
-            >
-              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Update track">
-                <SelectValue>{HOSTED_APP_CHANNEL_LABEL}</SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="latest">
-                  Latest
                 </SelectItem>
                 <SelectItem hideIndicator value="nightly">
                   Nightly
@@ -2877,7 +2847,7 @@ export function GeneralSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="about" title="About">
-        {isElectron || HOSTED_APP_CHANNEL ? (
+        {isElectron ? (
           <AboutVersionSection />
         ) : (
           <SettingsRow

@@ -41,7 +41,6 @@ import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
 import { useClientSettings } from "../hooks/useSettings";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
-import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -49,8 +48,8 @@ import {
 } from "../logicalProject";
 import { configureClientTracing } from "../observability/clientTracing";
 import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
-import { readProject, setActiveEnvironmentId, useActiveEnvironmentId } from "../state/entities";
-import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
+import { readProject, setActiveEnvironmentId } from "../state/entities";
+import { usePrimaryEnvironment } from "../state/environments";
 import {
   primaryServerConfigAtom,
   primaryServerConfigEventAtom,
@@ -61,23 +60,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useUiStateStore } from "../uiStateStore";
 
 export const Route = createRootRoute({
-  beforeLoad: async ({ location }) => {
-    if (location.pathname === "/pair" && hasHostedPairingRequest(new URL(window.location.href))) {
-      return {
-        authGateState: {
-          status: "hosted-pairing",
-        } as const,
-      };
-    }
-
-    if (isHostedStaticApp(new URL(window.location.href))) {
-      return {
-        authGateState: {
-          status: "hosted-static",
-        } as const,
-      };
-    }
-
+  beforeLoad: async () => {
     const authGateState = await resolveInitialServerAuthGateState();
     return {
       authGateState,
@@ -113,7 +96,7 @@ function RootRouteView() {
     );
   }
 
-  if (authGateState.status !== "authenticated" && authGateState.status !== "hosted-static") {
+  if (authGateState.status !== "authenticated") {
     return (
       <>
         <DocumentTitleSync />
@@ -142,7 +125,6 @@ function RootRouteView() {
         {primaryEnvironmentAuthenticated ? <DesktopAppActivationCoordinator /> : null}
         <ConfirmDialogHost />
         <SlowRpcRequestToastCoordinator />
-        <HostedStaticEnvironmentBootstrap />
         {primaryEnvironmentAuthenticated ? <EventRouter /> : null}
         {primaryEnvironmentAuthenticated ? <PlanAgentSelectionHeal /> : null}
         {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
@@ -229,34 +211,6 @@ function DocumentTitleSync() {
   useEffect(() => {
     document.title = title;
   }, [title]);
-
-  return null;
-}
-
-function HostedStaticEnvironmentBootstrap() {
-  const { environments } = useEnvironments();
-  const activeEnvironmentId = useActiveEnvironmentId();
-
-  useEffect(() => {
-    if (
-      environments.some(
-        (environment) => environment.entry.target._tag === "PrimaryConnectionTarget",
-      )
-    ) {
-      return;
-    }
-
-    if (activeEnvironmentId) {
-      return;
-    }
-
-    const firstSavedEnvironment = environments[0];
-    if (!firstSavedEnvironment) {
-      return;
-    }
-
-    setActiveEnvironmentId(firstSavedEnvironment.environmentId);
-  }, [activeEnvironmentId, environments]);
 
   return null;
 }

@@ -6,29 +6,31 @@ import * as Schema from "effect/Schema";
 
 import * as NetService from "@t3tools/shared/Net";
 import * as Crypto from "effect/Crypto";
+import * as DesktopBackendEndpoint from "../backend/DesktopBackendEndpoint.ts";
+import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
-import * as DesktopAppActivation from "./DesktopAppActivation.ts";
-import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
+import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
+import * as DesktopRemoteUpdates from "../updates/DesktopRemoteUpdates.ts";
+import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
-import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
+import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
+import * as DesktopAppActivation from "./DesktopAppActivation.ts";
+import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLifecycle from "./DesktopLifecycle.ts";
 import * as DesktopLinuxUrlHandler from "./DesktopLinuxUrlHandler.ts";
 import * as DesktopObservability from "./DesktopObservability.ts";
 import * as DesktopPreReadyPlatform from "./DesktopPreReadyPlatform.ts";
 import * as DesktopShutdown from "./DesktopShutdown.ts";
-import * as DesktopBackendEndpoint from "../backend/DesktopBackendEndpoint.ts";
-import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
-import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopState from "./DesktopState.ts";
-import * as DesktopRemoteUpdates from "../updates/DesktopRemoteUpdates.ts";
-import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
-import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
+
+import { removeLegacyConnections } from "./DesktopLegacyConnectionCleanup.ts";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
 const MAX_TCP_PORT = 65_535;
@@ -61,8 +63,7 @@ export class DesktopDevelopmentBackendPortRequiredError extends Schema.TaggedErr
   }
 }
 
-const { logInfo: logBootstrapInfo, logWarning: logBootstrapWarning } =
-  DesktopObservability.makeComponentLogger("desktop-bootstrap");
+const { logInfo: logBootstrapInfo } = DesktopObservability.makeComponentLogger("desktop-bootstrap");
 
 const { logInfo: logStartupInfo, logError: logStartupError } =
   DesktopObservability.makeComponentLogger("desktop-startup");
@@ -245,6 +246,9 @@ const startup = Effect.gen(function* () {
   yield* electronApp.setPath("userData", userDataPath);
   yield* logStartupInfo("runtime logging configured", { logDir: environment.logDir });
   yield* desktopSettings.load;
+  yield* removeLegacyConnections(environment.stateDir).pipe(
+    Effect.catch((error) => logStartupError("Could not remove legacy connection files", { error })),
+  );
 
   if (linuxElectronOptions !== null) {
     yield* logStartupInfo("linux password store configured", {

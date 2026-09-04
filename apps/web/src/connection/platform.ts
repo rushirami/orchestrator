@@ -25,6 +25,7 @@ import {
   type DesktopEnvironmentBootstrap,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
 } from "@t3tools/contracts";
+import { parseLocalBackendUrl } from "@t3tools/shared/localBackendUrl";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -43,7 +44,6 @@ import {
   type PrimaryEnvironmentTarget,
   readPrimaryEnvironmentTarget,
 } from "../environments/primary/target";
-import { isHostedStaticApp } from "../hostedPairing";
 import { acknowledgeRpcRequest, trackRpcRequestSent } from "../rpc/requestLatencyState";
 import { clientPresentationMetadata } from "./clientMetadata";
 import {
@@ -55,31 +55,9 @@ import { connectionStorageLayer } from "./storage";
 
 let nextObservedRpcRequestId = 0;
 
-function currentNetworkStatus(): "unknown" | "offline" | "online" {
-  if (typeof navigator === "undefined") {
-    return "unknown";
-  }
-  return navigator.onLine ? "online" : "offline";
-}
-
 const connectivityLayer = Connectivity.layer({
-  status: Effect.sync(currentNetworkStatus),
-  changes: Stream.callback((queue) =>
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const online = () => Queue.offerUnsafe(queue, "online");
-        const offline = () => Queue.offerUnsafe(queue, "offline");
-        window.addEventListener("online", online);
-        window.addEventListener("offline", offline);
-        return { online, offline };
-      }),
-      ({ online, offline }) =>
-        Effect.sync(() => {
-          window.removeEventListener("online", online);
-          window.removeEventListener("offline", offline);
-        }),
-    ).pipe(Effect.asVoid),
-  ),
+  status: Effect.succeed("online"),
+  changes: Stream.never,
 });
 
 const wakeupsLayer = Wakeups.layer({
@@ -105,7 +83,7 @@ const wakeupsLayer = Wakeups.layer({
 function clientMetadata() {
   return clientPresentationMetadata({
     appVersion: APP_VERSION,
-    hosted: isHostedStaticApp(),
+    hosted: false,
     identity: {
       userAgent: navigator.userAgent,
       platform: navigator.platform,
@@ -170,8 +148,17 @@ const loadSecondaryConnectionRegistration = Effect.fn(
       detail: `Desktop-local backend ${entry.id} is not ready yet.`,
     });
   }
-  const httpBaseUrl = entry.httpBaseUrl;
-  const wsBaseUrl = entry.wsBaseUrl;
+  const { httpBaseUrl, wsBaseUrl } = yield* Effect.try({
+    try: () => ({
+      httpBaseUrl: parseLocalBackendUrl(entry.httpBaseUrl!, "http:").href,
+      wsBaseUrl: parseLocalBackendUrl(entry.wsBaseUrl!, "ws:").href,
+    }),
+    catch: () =>
+      new ConnectionTransientError({
+        reason: "endpoint-unavailable",
+        detail: "The local backend supplied an invalid loopback endpoint.",
+      }),
+  });
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({ httpBaseUrl }).pipe(
     Effect.mapError(mapRemoteEnvironmentError),
   );
@@ -311,11 +298,6 @@ export function secondaryRegistrationsToRetainAfterTopologyRead(
 const platformConnectionSourceLayer = Layer.effect(
   PlatformConnectionSource,
   Effect.gen(function* () {
-    if (isHostedStaticApp()) {
-      return PlatformConnectionSource.of({
-        registrations: Stream.empty,
-      });
-    }
     const cacheRef = yield* Ref.make(new Map<string, CachedPlatformRegistration>());
 
     // Resolve the full set of platform-managed environments the host currently

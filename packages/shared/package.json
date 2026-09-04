@@ -246,6 +246,10 @@
     "./nodeSqliteClient": {
       "types": "./src/nodeSqliteClient.ts",
       "import": "./src/nodeSqliteClient.ts"
+    },
+    "./localBackendUrl": {
+      "types": "./src/localBackendUrl.ts",
+      "import": "./src/localBackendUrl.ts"
     }
   },
   "scripts": {

@@ -310,22 +310,6 @@ export const DesktopSshEnvironmentTargetSchema = Schema.Struct({
 });
 export type DesktopSshEnvironmentTarget = typeof DesktopSshEnvironmentTargetSchema.Type;
 
-export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
-  environmentId: EnvironmentId,
-  label: Schema.String,
-  wsBaseUrl: Schema.String,
-  httpBaseUrl: Schema.String,
-  createdAt: Schema.String,
-  lastConnectedAt: Schema.NullOr(Schema.String),
-  desktopSsh: Schema.optionalKey(DesktopSshEnvironmentTargetSchema),
-  relayManaged: Schema.optionalKey(
-    Schema.Struct({
-      relayUrl: Schema.String,
-    }),
-  ),
-});
-export type PersistedSavedEnvironmentRecord = typeof PersistedSavedEnvironmentRecordSchema.Type;
-
 export interface PickFolderOptions {
   initialPath?: string | null;
   // When set, the desktop dialog opens against the named backend's
@@ -962,9 +946,6 @@ export interface DesktopBridge {
   getLocalEnvironmentBearerToken: () => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
-  getConnectionCatalog?: () => Promise<string | null>;
-  setConnectionCatalog?: (catalog: string) => Promise<boolean>;
-  clearConnectionCatalog?: () => Promise<void>;
   getWslState: () => Promise<DesktopWslState>;
   setWslBackendEnabled: (enabled: boolean) => Promise<DesktopWslState>;
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
