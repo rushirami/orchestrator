@@ -10,6 +10,7 @@ export class PrimaryConnectionTarget extends Schema.TaggedClass<PrimaryConnectio
   "PrimaryConnectionTarget",
   {
     ...ConnectionTargetBase,
+    backendId: Schema.optionalKey(Schema.String),
     httpBaseUrl: Schema.String,
     wsBaseUrl: Schema.String,
   },

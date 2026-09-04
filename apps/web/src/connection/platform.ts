@@ -1,9 +1,4 @@
-import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
 import {
-  BearerConnectionCredential,
-  BearerConnectionProfile,
-  BearerConnectionRegistration,
-  BearerConnectionTarget,
   ConnectionTransientError,
   Connectivity,
   mapRemoteEnvironmentError,
@@ -17,7 +12,6 @@ import {
   ClientPresentation,
   EnvironmentOwnedDataCleanup,
   PlatformConnectionSource,
-  PrimaryEnvironmentAuth,
 } from "@t3tools/client-runtime/platform";
 import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
 import {
@@ -26,7 +20,6 @@ import {
   PRIMARY_LOCAL_ENVIRONMENT_ID,
 } from "@t3tools/contracts";
 import { parseLocalBackendUrl } from "@t3tools/shared/localBackendUrl";
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -38,7 +31,6 @@ import { FetchHttpClient } from "effect/unstable/http";
 
 import { APP_VERSION } from "../branding";
 import { clearComposerDraftsEnvironment } from "../composerDraftStore";
-import { readDesktopPrimaryBearerToken } from "../environments/primary/desktopAuth";
 import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 import {
   type PrimaryEnvironmentTarget,
@@ -47,7 +39,6 @@ import {
 import { acknowledgeRpcRequest, trackRpcRequestSent } from "../rpc/requestLatencyState";
 import { clientPresentationMetadata } from "./clientMetadata";
 import {
-  desktopLocalConnectionId,
   type DesktopSecondaryBootstrapsRead,
   readDesktopSecondaryBootstrapsResult,
 } from "./desktopLocal";
@@ -99,20 +90,7 @@ const capabilitiesLayer = Layer.effectContext(
       metadata: clientMetadata(),
       scopes: AuthStandardClientScopes,
     });
-    const primaryAuth = PrimaryEnvironmentAuth.of({
-      bearerToken: Effect.tryPromise({
-        try: readDesktopPrimaryBearerToken,
-        catch: (cause) =>
-          new ConnectionTransientError({
-            reason: "remote-unavailable",
-            detail: `Could not load the desktop primary credential: ${String(cause)}`,
-          }),
-      }).pipe(Effect.map(Option.fromNullishOr)),
-    });
-
-    return Context.make(PrimaryEnvironmentAuth, primaryAuth).pipe(
-      Context.add(ClientPresentation, presentation),
-    );
+    return Context.make(ClientPresentation, presentation);
   }),
 );
 
@@ -132,17 +110,10 @@ const loadPrimaryConnectionRegistration = Effect.fn(
   });
 });
 
-// A desktop-local secondary backend (e.g. a parallel WSL backend) lives on its
-// own loopback origin, so — unlike the same-origin primary — it authenticates
-// with a bearer token minted from the bootstrap credential the desktop issues.
 const loadSecondaryConnectionRegistration = Effect.fn(
   "web.connectionPlatform.loadSecondaryConnectionRegistration",
 )(function* (entry: DesktopEnvironmentBootstrap) {
-  if (
-    entry.httpBaseUrl === null ||
-    entry.wsBaseUrl === null ||
-    entry.bootstrapToken === undefined
-  ) {
+  if (entry.httpBaseUrl === null || entry.wsBaseUrl === null) {
     return yield* new ConnectionTransientError({
       reason: "endpoint-unavailable",
       detail: `Desktop-local backend ${entry.id} is not ready yet.`,
@@ -162,72 +133,24 @@ const loadSecondaryConnectionRegistration = Effect.fn(
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({ httpBaseUrl }).pipe(
     Effect.mapError(mapRemoteEnvironmentError),
   );
-  const issuedAtEpochMs = yield* Clock.currentTimeMillis;
-  const access = yield* bootstrapRemoteBearerSession({
-    httpBaseUrl,
-    credential: entry.bootstrapToken,
-    scopes: AuthStandardClientScopes,
-    clientMetadata: clientMetadata(),
-  }).pipe(Effect.mapError(mapRemoteEnvironmentError));
-  // Keep the desktop pool's stable backend id in the connection id. The
-  // descriptor environment id still scopes projects and RPC state, while the
-  // backend id lets desktop-only operations (notably the WSL folder picker)
-  // route back to the instance that owns the environment.
-  const connectionId = desktopLocalConnectionId(entry.id);
-  // Prefer the desktop's bootstrap label (it identifies the backend and distro,
-  // e.g. "WSL: Ubuntu") over the generic descriptor label, so consumers can show
-  // a meaningful name without recovering it from the bootstrap list later.
   const label = entry.label || descriptor.label;
-  return {
-    registration: new BearerConnectionRegistration({
-      target: new BearerConnectionTarget({
-        environmentId: descriptor.environmentId,
-        label,
-        connectionId,
-      }),
-      profile: new BearerConnectionProfile({
-        connectionId,
-        environmentId: descriptor.environmentId,
-        label,
-        httpBaseUrl,
-        wsBaseUrl,
-      }),
-      credential: new BearerConnectionCredential({ token: access.access_token }),
+  return new PrimaryConnectionRegistration({
+    target: new PrimaryConnectionTarget({
+      environmentId: descriptor.environmentId,
+      backendId: entry.id,
+      label,
+      httpBaseUrl,
+      wsBaseUrl,
     }),
-    expiresAtEpochMs: secondaryBearerExpiresAtEpochMs(issuedAtEpochMs, access.expires_in),
-    refreshAtEpochMs: secondaryBearerRefreshAtEpochMs(issuedAtEpochMs, access.expires_in),
-  };
+  });
 });
 
-// Poll cadence for the desktop bootstrap topology. There is no change event on
-// the bridge, so the renderer polls; successful registrations are cached by a
-// signature of their endpoint + token until bearer credentials approach expiry.
+// Re-read the desktop-owned topology; cache only unchanged endpoints.
 const PLATFORM_POLL_INTERVAL = "3 seconds";
-const SECONDARY_BEARER_REFRESH_SKEW_MS = 5_000;
-
-export function secondaryBearerExpiresAtEpochMs(
-  issuedAtEpochMs: number,
-  expiresInSeconds: number,
-): number {
-  return issuedAtEpochMs + Math.max(0, expiresInSeconds * 1_000);
-}
-
-export function secondaryBearerRefreshAtEpochMs(
-  issuedAtEpochMs: number,
-  expiresInSeconds: number,
-): number {
-  return Math.max(
-    issuedAtEpochMs,
-    secondaryBearerExpiresAtEpochMs(issuedAtEpochMs, expiresInSeconds) -
-      SECONDARY_BEARER_REFRESH_SKEW_MS,
-  );
-}
 
 interface CachedPlatformRegistration {
   readonly signature: string;
   readonly registration: PlatformConnectionRegistration;
-  readonly expiresAtEpochMs?: number;
-  readonly refreshAtEpochMs?: number;
 }
 
 export type PrimaryEnvironmentTargetRead =
@@ -260,39 +183,18 @@ export function primaryRegistrationToRetainAfterTopologyRead(
 export function canReuseCachedPlatformRegistration(
   cached: CachedPlatformRegistration,
   signature: string,
-  nowEpochMs: number,
 ): boolean {
-  return (
-    cached.signature === signature &&
-    (cached.refreshAtEpochMs === undefined || nowEpochMs < cached.refreshAtEpochMs)
-  );
-}
-
-export function canRetainCachedPlatformRegistrationAfterRefreshFailure(
-  cached: CachedPlatformRegistration,
-  signature: string,
-  nowEpochMs: number,
-): boolean {
-  return (
-    cached.signature === signature &&
-    cached.expiresAtEpochMs !== undefined &&
-    nowEpochMs < cached.expiresAtEpochMs
-  );
+  return cached.signature === signature;
 }
 
 export function secondaryRegistrationsToRetainAfterTopologyRead(
   previous: ReadonlyMap<string, CachedPlatformRegistration>,
   topologyRead: DesktopSecondaryBootstrapsRead,
-  nowEpochMs: number,
 ): ReadonlyMap<string, CachedPlatformRegistration> {
   if (topologyRead._tag === "Success") {
     return new Map();
   }
-  return new Map(
-    [...previous].filter(
-      ([, cached]) => cached.expiresAtEpochMs !== undefined && nowEpochMs < cached.expiresAtEpochMs,
-    ),
-  );
+  return new Map([...previous].filter(([id]) => id !== PRIMARY_LOCAL_ENVIRONMENT_ID));
 }
 
 const platformConnectionSourceLayer = Layer.effect(
@@ -300,13 +202,10 @@ const platformConnectionSourceLayer = Layer.effect(
   Effect.gen(function* () {
     const cacheRef = yield* Ref.make(new Map<string, CachedPlatformRegistration>());
 
-    // Resolve the full set of platform-managed environments the host currently
-    // reports: the primary (same-origin cookie auth) plus any desktop-local
-    // backends running alongside it (bearer auth). Reused registrations come
-    // from the cache; a failed entry is skipped and retried on the next poll.
+    // Failed topology reads retain the last successful desktop-owned endpoints.
+    // Individual discovery failures are retried on the next poll.
     const buildPlatformRegistrations = Effect.gen(function* () {
       const previous = yield* Ref.get(cacheRef);
-      const nowEpochMs = yield* Clock.currentTimeMillis;
       const next = new Map<string, CachedPlatformRegistration>();
       const registrations: Array<PlatformConnectionRegistration> = [];
 
@@ -328,10 +227,7 @@ const platformConnectionSourceLayer = Layer.effect(
         const primaryTarget = primaryTopologyRead.target;
         const signature = `primary|${primaryTarget.target.httpBaseUrl}|${primaryTarget.target.wsBaseUrl}`;
         const cached = previous.get(PRIMARY_LOCAL_ENVIRONMENT_ID);
-        if (
-          cached !== undefined &&
-          canReuseCachedPlatformRegistration(cached, signature, nowEpochMs)
-        ) {
+        if (cached !== undefined && canReuseCachedPlatformRegistration(cached, signature)) {
           next.set(PRIMARY_LOCAL_ENVIRONMENT_ID, cached);
           registrations.push(cached.registration);
         } else {
@@ -353,7 +249,6 @@ const platformConnectionSourceLayer = Layer.effect(
       for (const [id, cached] of secondaryRegistrationsToRetainAfterTopologyRead(
         previous,
         topologyRead,
-        nowEpochMs,
       )) {
         next.set(id, cached);
         registrations.push(cached.registration);
@@ -365,12 +260,9 @@ const platformConnectionSourceLayer = Layer.effect(
         });
       } else {
         for (const bootstrap of topologyRead.bootstraps) {
-          const signature = `${bootstrap.httpBaseUrl}|${bootstrap.wsBaseUrl}|${bootstrap.bootstrapToken ?? ""}`;
+          const signature = `${bootstrap.httpBaseUrl}|${bootstrap.wsBaseUrl}`;
           const cached = previous.get(bootstrap.id);
-          if (
-            cached !== undefined &&
-            canReuseCachedPlatformRegistration(cached, signature, nowEpochMs)
-          ) {
+          if (cached !== undefined && canReuseCachedPlatformRegistration(cached, signature)) {
             next.set(bootstrap.id, cached);
             registrations.push(cached.registration);
             continue;
@@ -385,15 +277,9 @@ const platformConnectionSourceLayer = Layer.effect(
             Effect.option,
           );
           if (Option.isSome(built)) {
-            const cacheEntry = { signature, ...built.value };
+            const cacheEntry = { signature, registration: built.value };
             next.set(bootstrap.id, cacheEntry);
-            registrations.push(built.value.registration);
-          } else if (
-            cached !== undefined &&
-            canRetainCachedPlatformRegistrationAfterRefreshFailure(cached, signature, nowEpochMs)
-          ) {
-            next.set(bootstrap.id, cached);
-            registrations.push(cached.registration);
+            registrations.push(built.value);
           }
         }
       }

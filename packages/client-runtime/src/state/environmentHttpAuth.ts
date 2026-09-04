@@ -11,20 +11,13 @@ export interface EnvironmentHttpAuthHeaders {
   readonly dpop?: string;
 }
 
-/**
- * Primary/local environments with no bearer or DPoP credential authenticate the
- * browser via a session cookie. A cross-origin `fetch` does not send cookies by
- * default, so those requests must opt into credentialed mode; bearer/DPoP
- * connections carry their credential in a header and need no cookies. Applied
- * per-request via `FetchHttpClient.RequestInit`, which the fetch client reads
- * from the fiber context at request time.
- */
+/** Local renderer requests never send browser cookies. */
 export const withEnvironmentCredentials = <A, E, R>(
   authorization: PreparedHttpAuthorization | null,
   request: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   authorization === null
-    ? request.pipe(Effect.provideService(FetchHttpClient.RequestInit, { credentials: "include" }))
+    ? request.pipe(Effect.provideService(FetchHttpClient.RequestInit, { credentials: "omit" }))
     : request;
 
 /**

@@ -2,101 +2,41 @@ import { describe, expect, it } from "@effect/vitest";
 import { PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
 
 import {
-  canRetainCachedPlatformRegistrationAfterRefreshFailure,
   canReuseCachedPlatformRegistration,
   primaryRegistrationToRetainAfterTopologyRead,
   readPrimaryEnvironmentTargetResult,
-  secondaryBearerExpiresAtEpochMs,
-  secondaryBearerRefreshAtEpochMs,
   secondaryRegistrationsToRetainAfterTopologyRead,
 } from "./platform.ts";
 
-describe("desktop-local bearer cache", () => {
+describe("desktop-local topology cache", () => {
   const registration = {} as never;
+  const primary = { signature: "primary", registration };
+  const secondary = { signature: "wsl", registration };
+  const previous = new Map([
+    [PRIMARY_LOCAL_ENVIRONMENT_ID, primary],
+    ["wsl:Ubuntu", secondary],
+  ]);
 
-  it("refreshes a secondary bearer before it expires", () => {
-    const issuedAtEpochMs = 10_000;
-    const refreshAtEpochMs = secondaryBearerRefreshAtEpochMs(issuedAtEpochMs, 60);
-    const expiresAtEpochMs = secondaryBearerExpiresAtEpochMs(issuedAtEpochMs, 60);
-    const cached = {
-      expiresAtEpochMs,
-      signature: "secondary-signature",
-      registration,
-      refreshAtEpochMs,
-    };
-
-    expect(refreshAtEpochMs).toBe(65_000);
-    expect(canReuseCachedPlatformRegistration(cached, cached.signature, 64_999)).toBe(true);
-    expect(canReuseCachedPlatformRegistration(cached, cached.signature, 65_000)).toBe(false);
-    expect(
-      canRetainCachedPlatformRegistrationAfterRefreshFailure(cached, cached.signature, 69_999),
-    ).toBe(true);
-    expect(
-      canRetainCachedPlatformRegistrationAfterRefreshFailure(cached, cached.signature, 70_000),
-    ).toBe(false);
+  it("reuses only unchanged endpoints", () => {
+    expect(canReuseCachedPlatformRegistration(secondary, "wsl")).toBe(true);
+    expect(canReuseCachedPlatformRegistration(secondary, "changed")).toBe(false);
   });
 
-  it("does not cache credentials whose lifetime is shorter than the refresh skew", () => {
-    const refreshAtEpochMs = secondaryBearerRefreshAtEpochMs(10_000, 3);
-    const cached = {
-      expiresAtEpochMs: secondaryBearerExpiresAtEpochMs(10_000, 3),
-      signature: "secondary-signature",
-      registration,
-      refreshAtEpochMs,
-    };
-
-    expect(refreshAtEpochMs).toBe(10_000);
-    expect(canReuseCachedPlatformRegistration(cached, cached.signature, 10_000)).toBe(false);
-  });
-
-  it("retains only unexpired secondaries after a topology read failure", () => {
-    const valid = {
-      expiresAtEpochMs: 20_000,
-      signature: "valid-secondary",
-      registration,
-      refreshAtEpochMs: 15_000,
-    };
-    const previous = new Map([
-      ["valid-secondary", valid],
-      [
-        "expired-secondary",
-        {
-          expiresAtEpochMs: 10_000,
-          signature: "expired-secondary",
-          registration,
-          refreshAtEpochMs: 5_000,
-        },
-      ],
-    ]);
-
+  it("retains secondaries after a topology read failure without duplicating the primary", () => {
     expect(
-      secondaryRegistrationsToRetainAfterTopologyRead(
-        previous,
-        { _tag: "Failure", cause: new Error("IPC unavailable") },
-        10_000,
-      ),
-    ).toEqual(new Map([["valid-secondary", valid]]));
+      secondaryRegistrationsToRetainAfterTopologyRead(previous, {
+        _tag: "Failure",
+        cause: new Error("IPC unavailable"),
+      }),
+    ).toEqual(new Map([["wsl:Ubuntu", secondary]]));
   });
 
   it("treats a successful empty topology as authoritative removal", () => {
-    const previous = new Map([
-      [
-        "secondary",
-        {
-          expiresAtEpochMs: 20_000,
-          signature: "secondary",
-          registration,
-          refreshAtEpochMs: 15_000,
-        },
-      ],
-    ]);
-
     expect(
-      secondaryRegistrationsToRetainAfterTopologyRead(
-        previous,
-        { _tag: "Success", bootstraps: [] },
-        10_000,
-      ),
+      secondaryRegistrationsToRetainAfterTopologyRead(previous, {
+        _tag: "Success",
+        bootstraps: [],
+      }),
     ).toEqual(new Map());
   });
 });

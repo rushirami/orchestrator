@@ -1,21 +1,16 @@
-import {
-  AuthOrchestrationOperateScope,
-  AuthOrchestrationReadScope,
-  EnvironmentHttpApi,
-} from "@t3tools/contracts";
+import { EnvironmentHttpApi } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 
-import { projectThreadDetailSnapshot } from "./ActivityPayloadProjection.ts";
-import { cleanupFailedUploadedAttachments, normalizeDispatchCommand } from "./Normalizer.ts";
 import {
   annotateEnvironmentRequest,
   failEnvironmentInternal,
   failEnvironmentInvalidRequest,
   failEnvironmentNotFound,
-  requireEnvironmentScope,
 } from "../auth/http.ts";
+import { projectThreadDetailSnapshot } from "./ActivityPayloadProjection.ts";
+import { cleanupFailedUploadedAttachments, normalizeDispatchCommand } from "./Normalizer.ts";
 import { OrchestrationEngineService } from "./Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./Services/ProjectionSnapshotQuery.ts";
 
@@ -31,7 +26,6 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
         "snapshot",
         Effect.fn("environment.orchestration.snapshot")(function* (args) {
           yield* annotateEnvironmentRequest(args.endpoint.name);
-          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
           // Serve the lightweight command read model (thread bodies empty)
           // instead of the fully hydrated snapshot. Hydrating every message
           // and activity payload in the database has OOM-killed servers, and
@@ -50,7 +44,6 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
         "shellSnapshot",
         Effect.fn("environment.orchestration.shellSnapshot")(function* (args) {
           yield* annotateEnvironmentRequest(args.endpoint.name);
-          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
           return yield* projectionSnapshotQuery
             .getShellSnapshot()
             .pipe(
@@ -64,7 +57,6 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
         "threadSnapshot",
         Effect.fn("environment.orchestration.threadSnapshot")(function* (args) {
           yield* annotateEnvironmentRequest(args.endpoint.name);
-          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
           const snapshot = yield* projectionSnapshotQuery
             .getThreadDetailSnapshot(
               args.params.threadId,
@@ -92,7 +84,6 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
         "dispatch",
         Effect.fn("environment.orchestration.dispatch")(function* (args) {
           yield* annotateEnvironmentRequest(args.endpoint.name);
-          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
           const normalizedCommand = yield* normalizeDispatchCommand(args.payload).pipe(
             Effect.catch(() => failEnvironmentInvalidRequest("invalid_command")),
           );

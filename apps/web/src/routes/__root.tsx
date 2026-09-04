@@ -35,7 +35,6 @@ import {
   ToastProvider,
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
-import { resolveInitialServerAuthGateState } from "../environments/primary";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
@@ -60,12 +59,6 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useUiStateStore } from "../uiStateStore";
 
 export const Route = createRootRoute({
-  beforeLoad: async () => {
-    const authGateState = await resolveInitialServerAuthGateState();
-    return {
-      authGateState,
-    };
-  },
   component: RootRouteView,
   errorComponent: RootRouteErrorView,
   head: () => ({
@@ -75,8 +68,6 @@ export const Route = createRootRoute({
 
 function RootRouteView() {
   const pathname = useLocation({ select: (location) => location.pathname });
-  const { authGateState } = Route.useRouteContext();
-  const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -86,24 +77,6 @@ function RootRouteView() {
       window.cancelAnimationFrame(frame);
     };
   }, [pathname]);
-
-  if (pathname === "/pair" || pathname === "/connect" || pathname.startsWith("/connect/")) {
-    return (
-      <>
-        <DocumentTitleSync />
-        <Outlet />
-      </>
-    );
-  }
-
-  if (authGateState.status !== "authenticated") {
-    return (
-      <>
-        <DocumentTitleSync />
-        <Outlet />
-      </>
-    );
-  }
 
   const appShell = (
     <CommandPalette>
@@ -121,13 +94,13 @@ function RootRouteView() {
         <EnvironmentThemeSync />
         <GlassAppearanceSync />
         <FontAppearanceSync />
-        {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
-        {primaryEnvironmentAuthenticated ? <DesktopAppActivationCoordinator /> : null}
+        <LocalTracingBootstrap />
+        <DesktopAppActivationCoordinator />
         <ConfirmDialogHost />
         <SlowRpcRequestToastCoordinator />
-        {primaryEnvironmentAuthenticated ? <EventRouter /> : null}
-        {primaryEnvironmentAuthenticated ? <PlanAgentSelectionHeal /> : null}
-        {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
+        <EventRouter />
+        <PlanAgentSelectionHeal />
+        <ProviderUpdateLaunchNotification />
         {appShell}
         {/* Above the router: a theme draft is judged by walking the app, so the
             editor has to survive navigation away from settings. */}
@@ -321,7 +294,7 @@ function errorReport(error: unknown, pathname: string): string {
   return lines.join("\n");
 }
 
-function AuthenticatedTracingBootstrap() {
+function LocalTracingBootstrap() {
   useEffect(() => {
     void configureClientTracing();
   }, []);

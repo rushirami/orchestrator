@@ -393,14 +393,14 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
       headers: OptionalBearerHeaders,
       success: OrchestrationReadModel,
       error: EnvironmentOrchestrationSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }),
   )
   .add(
     HttpApiEndpoint.get("shellSnapshot", "/api/orchestration/shell", {
       headers: OptionalBearerHeaders,
       success: OrchestrationShellSnapshot,
       error: EnvironmentOrchestrationSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }),
   )
   .add(
     HttpApiEndpoint.get("threadSnapshot", "/api/orchestration/threads/:threadId", {
@@ -409,7 +409,7 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
       payload: EnvironmentOrchestrationThreadSnapshotQuery,
       success: OrchestrationThreadDetailSnapshot,
       error: EnvironmentOrchestrationThreadSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }),
   )
   .add(
     HttpApiEndpoint.post("dispatch", "/api/orchestration/dispatch", {
@@ -417,7 +417,7 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
       payload: ClientOrchestrationCommand,
       success: DispatchResult,
       error: EnvironmentOrchestrationDispatchErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }),
   ) {}
 
 /** Large, compressible pull-request payloads travel over HTTP rather than the RPC socket. */
@@ -433,7 +433,7 @@ export class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullReque
       EnvironmentScopeRequiredError,
       EnvironmentInternalError,
     ],
-  }).middleware(EnvironmentAuthenticatedAuth),
+  }),
 ) {}
 
 export class EnvironmentHttpApi extends HttpApi.make("environment")

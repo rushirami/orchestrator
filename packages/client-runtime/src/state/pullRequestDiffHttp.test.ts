@@ -61,7 +61,7 @@ describe("fetchEnvironmentPullRequestDiff", () => {
       const [request, init] = calls[0]!;
       expect(String(request)).toBe("https://environment.example.test/api/pull-requests/diff");
       expect(init.method).toBe("POST");
-      expect(init.credentials).toBe("include");
+      expect(init.credentials).toBe("omit");
 
       const body =
         typeof init.body === "string"

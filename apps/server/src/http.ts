@@ -1,9 +1,5 @@
 import Mime from "@effect/platform-node/Mime";
-import {
-  AuthOrchestrationOperateScope,
-  AuthOrchestrationReadScope,
-  EnvironmentHttpApi,
-} from "@t3tools/contracts";
+import { EnvironmentHttpApi } from "@t3tools/contracts";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -15,7 +11,6 @@ import {
   HttpMiddleware,
   HttpRouter,
   HttpServerRequest,
-  HttpServerRespondable,
   HttpServerResponse,
 } from "effect/unstable/http";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
@@ -28,13 +23,7 @@ import {
   validateAttachmentUploadToken,
 } from "./assets/AttachmentUpload.ts";
 import { type OpenMediaFile, statMediaFile, streamMediaFile } from "./assets/MediaFile.ts";
-import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
-import {
-  annotateEnvironmentRequest,
-  failEnvironmentAuthInvalid,
-  failEnvironmentInternal,
-  failEnvironmentScopeRequired,
-} from "./auth/http.ts";
+import { annotateEnvironmentRequest } from "./auth/http.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
 
@@ -215,28 +204,6 @@ export const httpCompressionLayer = HttpRouter.middleware(HttpMiddleware.compres
   global: true,
 });
 
-const authenticateRawRouteWithScope = (
-  scope: typeof AuthOrchestrationReadScope | typeof AuthOrchestrationOperateScope,
-) =>
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-    const session = yield* serverAuth.authenticateHttpRequest(request).pipe(
-      Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-        failEnvironmentAuthInvalid(
-          EnvironmentAuth.serverAuthCredentialReason(error),
-          EnvironmentAuth.serverAuthDpopFailureReason(error),
-        ),
-      ),
-      Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
-        failEnvironmentInternal("internal_error", error),
-      ),
-    );
-    if (!session.scopes.includes(scope)) {
-      return yield* failEnvironmentScopeRequired(scope);
-    }
-  });
-
 export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
   EnvironmentHttpApi,
   "metadata",
@@ -261,7 +228,6 @@ export const clientTraceRouteLayer = HttpRouter.add(
   "POST",
   CLIENT_TRACES_PATH,
   Effect.gen(function* () {
-    yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
     const request = yield* HttpServerRequest.HttpServerRequest;
     const browserTraceCollector = yield* BrowserTraceCollector.BrowserTraceCollector;
     const bodyJson = cast<unknown, OtlpTracer.TraceData>(yield* request.json);
@@ -280,13 +246,7 @@ export const clientTraceRouteLayer = HttpRouter.add(
     );
 
     return HttpServerResponse.empty({ status: 204 });
-  }).pipe(
-    Effect.catchTags({
-      EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
-      EnvironmentInternalError: HttpServerRespondable.toResponse,
-      EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
-    }),
-  ),
+  }),
 );
 
 export const assetRouteLayer = HttpRouter.add(

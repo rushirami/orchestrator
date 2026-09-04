@@ -1605,7 +1605,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("serves snapshots for MCP handoff thread IDs above the router default", () =>
+  it.effect("serves local snapshots without credentials for long MCP handoff thread IDs", () =>
     Effect.gen(function* () {
       const threadId = ThreadId.make(
         "thread:mcp:abfba0d2-b591-4b7e-aad1-e943d89811fa:handoff%3A0ae5edf4-2ea3-4ee3-ba7c-48de3ac92896%3A2026-08-24T17%3A08%3A52.138Z:0",
@@ -1629,7 +1629,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const response = yield* fetchEffect(
         yield* getHttpServerUrl(`/api/orchestration/threads/${encodeURIComponent(threadId)}`),
-        { headers: { cookie: yield* getAuthenticatedSessionCookieHeader() } },
       );
       const snapshot = yield* responseJsonEffect<{
         readonly thread: { readonly id: ThreadId };
@@ -3047,7 +3046,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const response = yield* HttpClient.post("/api/observability/v1/traces", {
         headers: {
-          cookie: yield* getAuthenticatedSessionCookieHeader(),
           "content-type": "application/json",
           origin: "t3code://app",
         },

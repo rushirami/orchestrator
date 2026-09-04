@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as PairRouteImport } from './routes/pair'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
@@ -36,11 +35,6 @@ const UsageRoute = UsageRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PairRoute = PairRouteImport.update({
-  id: '/pair',
-  path: '/pair',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -121,7 +115,6 @@ const ChatEnvironmentIdThreadIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
-  '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -139,7 +132,6 @@ export interface FileRoutesByFullPath {
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesByTo {
-  '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/pull-requests': typeof ChatPullRequestsRoute
@@ -160,7 +152,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_chat': typeof ChatRouteWithChildren
-  '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
@@ -182,7 +173,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/pair'
     | '/settings'
     | '/usage'
     | '/pull-requests'
@@ -200,7 +190,6 @@ export interface FileRouteTypes {
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/pair'
     | '/settings'
     | '/usage'
     | '/pull-requests'
@@ -220,7 +209,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_chat'
-    | '/pair'
     | '/settings'
     | '/usage'
     | '/_chat/pull-requests'
@@ -241,7 +229,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   ChatRoute: typeof ChatRouteWithChildren
-  PairRoute: typeof PairRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   UsageRoute: typeof UsageRoute
   ProjectsProjectKeyRoute: typeof ProjectsProjectKeyRoute
@@ -261,13 +248,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pair': {
-      id: '/pair'
-      path: '/pair'
-      fullPath: '/pair'
-      preLoaderRoute: typeof PairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_chat': {
@@ -424,7 +404,6 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRouteWithChildren,
-  PairRoute: PairRoute,
   SettingsRoute: SettingsRouteWithChildren,
   UsageRoute: UsageRoute,
   ProjectsProjectKeyRoute: ProjectsProjectKeyRoute,

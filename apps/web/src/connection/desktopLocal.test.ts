@@ -1,21 +1,19 @@
-import {
-  BearerConnectionTarget,
-  PrimaryConnectionTarget,
-} from "@t3tools/client-runtime/connection";
+import { PrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { EnvironmentId, PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   createDesktopSecondaryBootstrapsReader,
   desktopLocalBackendId,
-  desktopLocalConnectionId,
   isDesktopLocalConnectionTarget,
 } from "./desktopLocal";
 
 describe("desktop local connection identity", () => {
   it("preserves the desktop backend instance id", () => {
-    const target = new BearerConnectionTarget({
-      connectionId: desktopLocalConnectionId("wsl:Ubuntu"),
+    const target = new PrimaryConnectionTarget({
+      backendId: "wsl:Ubuntu",
+      httpBaseUrl: "http://127.0.0.1:4000",
+      wsBaseUrl: "ws://127.0.0.1:4000",
       environmentId: EnvironmentId.make("environment-wsl"),
       label: "WSL (Ubuntu)",
     });
