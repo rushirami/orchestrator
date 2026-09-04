@@ -25,12 +25,8 @@ import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 
-import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
-import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
-import { environmentAuthenticatedAuthLayer } from "./auth/http.ts";
 import { cli } from "./bin.ts";
 import * as ServerConfig from "./config.ts";
-import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { orchestrationHttpApiLayer } from "./orchestration/http.ts";
@@ -77,7 +73,6 @@ const makeCliTestServerConfig = (baseDir: string) =>
       baseDir,
       ...derivedPaths,
       devUrl: undefined,
-      desktopBootstrapToken: undefined,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,
     } satisfies ServerConfig.ServerConfig["Service"];
@@ -106,19 +101,11 @@ const withLiveProjectCliServer = <A, E, R>(baseDir: string, run: () => Effect.Ef
     const config = yield* makeCliTestServerConfig(baseDir);
     const routesLayer = HttpApiBuilder.layer(ProjectCliHttpApi).pipe(
       Layer.provide(orchestrationHttpApiLayer),
-      Layer.provide(environmentAuthenticatedAuthLayer),
     );
     const appLayer = HttpRouter.serve(routesLayer, {
       disableListenLog: true,
       disableLogger: true,
     }).pipe(
-      Layer.provideMerge(
-        EnvironmentAuth.layer.pipe(
-          Layer.provideMerge(SqlitePersistenceLayerLive),
-          Layer.provide(ServerEnvironment.identityLayer),
-          Layer.provide(ServerSecretStore.layer),
-        ),
-      ),
       Layer.provideMerge(makeProjectPersistenceLayer(config)),
       Layer.provideMerge(
         NodeHttpServer.layer(NodeHttp.createServer, {

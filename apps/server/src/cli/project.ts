@@ -301,9 +301,7 @@ const findActiveProjectTarget = Effect.fn("findActiveProjectTarget")(function* (
 const fetchLiveOrchestrationSnapshot = (origin: string) =>
   Effect.gen(function* () {
     const client = yield* makeLiveServerClient(origin);
-    return yield* client.orchestration.snapshot({
-      headers: {},
-    });
+    return yield* client.orchestration.snapshot();
   }).pipe(
     withProjectCliLiveServerTimeout,
     Effect.mapError(projectCommandErrorFromLiveServerRequest),
@@ -313,7 +311,6 @@ const dispatchLiveOrchestrationCommand = (origin: string, command: ProjectCliDis
   Effect.gen(function* () {
     const client = yield* makeLiveServerClient(origin);
     yield* client.orchestration.dispatch({
-      headers: {},
       payload: command,
     } as Parameters<typeof client.orchestration.dispatch>[0]);
   }).pipe(

@@ -31,7 +31,7 @@ export const fetchEnvironmentPullRequestDiff = Effect.fn(
   return yield* executeEnvironmentHttpRequest(
     requestUrl,
     input.timeoutMs ?? DEFAULT_PULL_REQUEST_DIFF_TIMEOUT_MS,
-    withoutEnvironmentCredentials(client.pullRequests.diff({ payload: input.diff, headers: {} })),
+    withoutEnvironmentCredentials(client.pullRequests.diff({ payload: input.diff })),
   );
 });
 

@@ -19,7 +19,6 @@ import * as Stream from "effect/Stream";
 import { HttpServer } from "effect/unstable/http";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import * as EnvironmentAuth from "../src/auth/EnvironmentAuth.ts";
 import * as ServerConfig from "../src/config.ts";
 import * as ServerEnvironment from "../src/environment/ServerEnvironment.ts";
 import * as Keybindings from "../src/keybindings.ts";
@@ -84,9 +83,6 @@ const startupDependencies = Layer.mergeAll(
       platform: { os: "linux", arch: "x64" },
       capabilities: {},
     } as never),
-  }),
-  Layer.mock(EnvironmentAuth.EnvironmentAuth)({
-    issueStartupPairingUrl: (baseUrl: string) => Effect.succeed(`${baseUrl}/pair`),
   }),
   Layer.mock(ExternalLauncher.ExternalLauncher)({
     launchBrowser: () => Effect.void,

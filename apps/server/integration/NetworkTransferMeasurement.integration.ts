@@ -96,11 +96,7 @@ export interface WebSocketTransferTotals {
 }
 
 export interface WebSocketTransferRecorder {
-  readonly connect: (
-    url: string,
-    protocols: string | string[] | undefined,
-    cookie: string,
-  ) => globalThis.WebSocket;
+  readonly connect: (url: string, protocols: string | string[] | undefined) => globalThis.WebSocket;
   readonly totals: () => WebSocketTransferTotals;
   readonly negotiatedExtensions: () => string;
   /** Resolves once the upgrade completes, so totals taken after it exclude the upgrade response. */
@@ -133,9 +129,8 @@ export function makeWebSocketTransferRecorder(): WebSocketTransferRecorder {
   });
 
   return {
-    connect: (url, protocols, cookie) => {
+    connect: (url, protocols) => {
       const nextSocket = new NodeSocket.NodeWS.WebSocket(url, protocols, {
-        headers: { cookie },
         perMessageDeflate: true,
       }) as NodeWebSocketWithTransport;
       socket = nextSocket;
@@ -178,11 +173,10 @@ export function transferDelta(
 
 export function countingWsRpcProtocolLayer(input: {
   readonly url: string;
-  readonly cookie: string;
   readonly recorder: WebSocketTransferRecorder;
 }) {
   const webSocketConstructorLayer = Layer.succeed(Socket.WebSocketConstructor, (url, protocols) =>
-    input.recorder.connect(url, protocols, input.cookie),
+    input.recorder.connect(url, protocols),
   );
   return RpcClient.layerProtocolSocket().pipe(
     Layer.provide(
@@ -212,12 +206,12 @@ export interface MeasuredWsClient {
  * a reconnect measurement needs.
  */
 export const openMeasuredWsClient = Effect.fn("TransferBudget.openMeasuredWsClient")(
-  function* (input: { readonly url: string; readonly cookie: string }) {
+  function* (input: { readonly url: string }) {
     const recorder = makeWebSocketTransferRecorder();
     const parent = yield* Effect.scope;
     const scope = yield* Scope.fork(parent);
     const protocol = yield* Layer.buildWithScope(
-      countingWsRpcProtocolLayer({ url: input.url, cookie: input.cookie, recorder }),
+      countingWsRpcProtocolLayer({ url: input.url, recorder }),
       scope,
     );
     const client = yield* makeCountingWsRpcClient.pipe(

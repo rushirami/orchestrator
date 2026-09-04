@@ -23,8 +23,8 @@ import {
   validateAttachmentUploadToken,
 } from "./assets/AttachmentUpload.ts";
 import { type OpenMediaFile, statMediaFile, streamMediaFile } from "./assets/MediaFile.ts";
-import { annotateEnvironmentRequest } from "./auth/http.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
+import { annotateEnvironmentRequest } from "./environmentHttpErrors.ts";
 import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
 
 const CLIENT_TRACES_PATH = "/api/observability/v1/traces";

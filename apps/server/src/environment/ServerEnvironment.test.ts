@@ -52,7 +52,6 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     logWebSocketEvents: false,
     port: 0,
     host: undefined,
-    desktopBootstrapToken: undefined,
     devUrl: undefined,
   } satisfies ServerConfig.ServerConfig["Service"];
 });

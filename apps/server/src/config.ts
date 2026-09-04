@@ -69,7 +69,6 @@ export class ServerConfig extends Context.Service<
     readonly cwd: string;
     readonly baseDir: string;
     readonly devUrl: URL | undefined;
-    readonly desktopBootstrapToken: string | undefined;
     readonly desktopTelemetryFd?: number | undefined;
     readonly desktopTelemetryControlFd?: number | undefined;
     readonly resourceMonitorPath?: string | undefined;
@@ -183,7 +182,6 @@ const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
     logWebSocketEvents: false,
     port: 0,
     host: undefined,
-    desktopBootstrapToken: undefined,
     desktopTelemetryFd: undefined,
     desktopTelemetryControlFd: undefined,
     resourceMonitorPath: undefined,

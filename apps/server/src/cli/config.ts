@@ -253,7 +253,6 @@ export const resolveServerConfig = (
       serverTracePath,
       host,
       devUrl,
-      desktopBootstrapToken: undefined,
       desktopTelemetryFd,
       desktopTelemetryControlFd,
       resourceMonitorPath,

@@ -1,12 +1,9 @@
 import {
   EnvironmentHttpApi,
   EnvironmentHttpCommonError,
-  type EnvironmentAuthInvalidError,
   type EnvironmentInternalError,
-  type EnvironmentOperationForbiddenError,
   type EnvironmentRequestInvalidError,
   type EnvironmentResourceNotFoundError,
-  type EnvironmentScopeRequiredError,
 } from "@t3tools/contracts";
 import { httpHeaderRedactionLayer } from "@t3tools/shared/httpObservability";
 import * as Data from "effect/Data";
@@ -68,9 +65,6 @@ export class RemoteEnvironmentAuthTimeoutError extends Data.TaggedError(
 
 export type RemoteEnvironmentRequestError =
   | EnvironmentRequestInvalidError
-  | EnvironmentAuthInvalidError
-  | EnvironmentScopeRequiredError
-  | EnvironmentOperationForbiddenError
   | EnvironmentResourceNotFoundError
   | EnvironmentInternalError
   | RemoteEnvironmentAuthFetchError

@@ -29,7 +29,7 @@ export const fetchEnvironmentShellSnapshot = Effect.fn(
   return yield* executeEnvironmentHttpRequest(
     requestUrl,
     input.timeoutMs ?? DEFAULT_SHELL_SNAPSHOT_TIMEOUT_MS,
-    withoutEnvironmentCredentials(client.orchestration.shellSnapshot({ headers: {} })),
+    withoutEnvironmentCredentials(client.orchestration.shellSnapshot()),
   );
 });
 

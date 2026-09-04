@@ -10,8 +10,6 @@ import { localRequestBoundaryLayer } from "./localRequestBoundary.ts";
 
 import * as NetService from "@t3tools/shared/Net";
 import * as NativeAppIconResolver from "./assets/NativeAppIconResolver.ts";
-import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
-import { authHttpApiLayer, environmentAuthenticatedAuthLayer } from "./auth/http.ts";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as HostPowerMonitor from "./background/HostPowerMonitor.ts";
@@ -361,12 +359,6 @@ const ServerEnvironmentLayerLive = ServerEnvironment.layer.pipe(
   Layer.provide(ServerSecretStore.layer),
 );
 
-const AuthLayerLive = EnvironmentAuth.layer.pipe(
-  Layer.provideMerge(PersistenceLayerLive),
-  Layer.provide(ServerEnvironmentLayerLive),
-  Layer.provide(ServerSecretStore.layer),
-);
-
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   // Subscribes to `account.rate-limits.updated` so usage bars track live
   // telemetry instead of waiting for the next status probe.
@@ -451,7 +443,6 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(Layer.mergeAll(NativeAppIconResolver.layer, ProjectFaviconResolverLayerLive)),
   Layer.provideMerge(RepositoryIdentityResolver.layer),
   Layer.provideMerge(ServerEnvironmentLayerLive),
-  Layer.provideMerge(AuthLayerLive),
   Layer.provideMerge(ServerSecretStore.layer),
 );
 
@@ -477,11 +468,9 @@ const commandReadinessLayer = HttpRouter.middleware(
 export const makeRoutesLayer = Layer.mergeAll(
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
-      Layer.provide(authHttpApiLayer),
       Layer.provide(orchestrationHttpApiLayer),
       Layer.provide(pullRequestHttpApiLayer),
       Layer.provide(serverEnvironmentHttpApiLayer),
-      Layer.provide(environmentAuthenticatedAuthLayer),
     ),
     clientTraceRouteLayer,
     assetRouteLayer,

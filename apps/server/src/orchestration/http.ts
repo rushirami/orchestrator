@@ -8,7 +8,7 @@ import {
   failEnvironmentInternal,
   failEnvironmentInvalidRequest,
   failEnvironmentNotFound,
-} from "../auth/http.ts";
+} from "../environmentHttpErrors.ts";
 import { projectThreadDetailSnapshot } from "./ActivityPayloadProjection.ts";
 import { cleanupFailedUploadedAttachments, normalizeDispatchCommand } from "./Normalizer.ts";
 import { OrchestrationEngineService } from "./Services/OrchestrationEngine.ts";

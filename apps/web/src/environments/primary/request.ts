@@ -48,11 +48,6 @@ function readEnvironmentHttpErrorStatus(error: EnvironmentHttpCommonErrorType): 
   switch (error._tag) {
     case "EnvironmentRequestInvalidError":
       return 400;
-    case "EnvironmentAuthInvalidError":
-      return 401;
-    case "EnvironmentScopeRequiredError":
-    case "EnvironmentOperationForbiddenError":
-      return 403;
     case "EnvironmentResourceNotFoundError":
       return 404;
     case "EnvironmentInternalError":

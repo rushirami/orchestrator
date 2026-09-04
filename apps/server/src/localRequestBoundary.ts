@@ -55,7 +55,7 @@ export const localRequestBoundaryLayer = Layer.unwrap(
     const allowedOrigins = localClientOrigins(config.devUrl);
     const cors = HttpMiddleware.cors({
       allowedOrigins: [...allowedOrigins],
-      credentials: true,
+      credentials: false,
       allowedMethods: browserApiCorsAllowedMethods,
       allowedHeaders: browserApiCorsAllowedHeaders,
       maxAge: 600,

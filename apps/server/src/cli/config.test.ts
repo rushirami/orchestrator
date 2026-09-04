@@ -151,7 +151,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "127.0.0.1",
         devUrl: new URL("http://127.0.0.1:5173"),
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: true,
       });
@@ -213,7 +212,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "127.0.0.1",
         devUrl: new URL("http://127.0.0.1:4173"),
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
       });
@@ -272,7 +270,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "127.0.0.1",
         devUrl: new URL("http://127.0.0.1:4173"),
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
       });
@@ -332,7 +329,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "::1",
         devUrl: undefined,
-        desktopBootstrapToken: undefined,
         desktopTelemetryFd: 4,
         desktopTelemetryControlFd: 5,
         resourceMonitorPath: undefined,
@@ -450,7 +446,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "127.0.0.1",
         devUrl: new URL("http://127.0.0.1:4173"),
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
       });
@@ -506,7 +501,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         ...derivedPaths,
         host: "127.0.0.1",
         devUrl: undefined,
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
       });

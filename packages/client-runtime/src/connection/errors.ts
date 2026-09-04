@@ -34,23 +34,10 @@ export function mapRemoteEnvironmentError(
   error: RemoteEnvironmentRequestError,
 ): ConnectionAttemptError {
   switch (error._tag) {
-    case "EnvironmentAuthInvalidError":
-      return new ConnectionBlockedError({
-        reason: "authentication",
-        detail: "The environment credential is invalid.",
-        traceId: error.traceId,
-      });
-    case "EnvironmentScopeRequiredError":
-    case "EnvironmentOperationForbiddenError":
-      return new ConnectionBlockedError({
-        reason: "permission",
-        detail: "The environment credential does not grant the required access.",
-        traceId: error.traceId,
-      });
     case "EnvironmentRequestInvalidError":
       return new ConnectionBlockedError({
         reason: "configuration",
-        detail: "The environment rejected the authentication request.",
+        detail: "The environment rejected the request.",
         traceId: error.traceId,
       });
     case "EnvironmentResourceNotFoundError":
@@ -75,7 +62,7 @@ export function mapRemoteEnvironmentError(
     case "EnvironmentInternalError":
       return new ConnectionTransientError({
         reason: "remote-unavailable",
-        detail: "The environment could not authorize the connection.",
+        detail: "The environment could not answer the connection request.",
         traceId: error.traceId,
       });
     case "RemoteEnvironmentAuthInvalidJsonError":
