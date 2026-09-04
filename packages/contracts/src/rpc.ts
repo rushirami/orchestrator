@@ -19,7 +19,6 @@ import {
   AttachmentCreateUploadUrlInput,
   AttachmentCreateUploadUrlResult,
   AttachmentDeleteInput,
-  AttachmentUploadSigningKeyError,
 } from "./assets.ts";
 import { EnvironmentAuthorizationError } from "./auth.ts";
 import {
@@ -769,7 +768,7 @@ export const WsAssetsCreateUrlRpc = Rpc.make(WS_METHODS.assetsCreateUrl, {
 export const WsAttachmentsCreateUploadUrlRpc = Rpc.make(WS_METHODS.attachmentsCreateUploadUrl, {
   payload: AttachmentCreateUploadUrlInput,
   success: AttachmentCreateUploadUrlResult,
-  error: Schema.Union([AttachmentUploadSigningKeyError, EnvironmentAuthorizationError]),
+  error: EnvironmentAuthorizationError,
 });
 
 export const WsAttachmentsDeleteRpc = Rpc.make(WS_METHODS.attachmentsDelete, {

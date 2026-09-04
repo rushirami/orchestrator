@@ -5,7 +5,6 @@ import {
   AssetProjectFaviconInspectionError,
   AssetProjectFaviconNotFoundError,
   AssetProjectFaviconResolutionError,
-  AssetSigningKeyLoadError,
   AssetWorkspaceAssetInspectionError,
   AssetWorkspaceAssetNotFoundError,
   AssetWorkspaceContextNotFoundError,
@@ -30,31 +29,24 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import {
-  base64UrlDecodeUtf8,
-  base64UrlEncode,
-  signPayload,
-  timingSafeEqualBase64Url,
-} from "../auth/utils.ts";
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { parseAttachmentFileExtension, resolveAttachmentPathById } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
-import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { openMediaFile, type OpenMediaFile } from "./MediaFile.ts";
+import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 
 export const ASSET_ROUTE_PREFIX = "/api/assets";
 
-const SIGNING_SECRET_NAME = "asset-access-signing-key";
-const ASSET_TOKEN_TTL_MS = 60 * 60 * 1000;
-const PROJECT_FAVICON_TOKEN_BUCKET_MS = 30 * 60 * 1000;
+const ASSET_METADATA_TTL_MS = 60 * 60 * 1000;
+const PROJECT_FAVICON_CACHE_BUCKET_MS = 30 * 60 * 1000;
 const PROJECT_FAVICON_VERSION_PREFIX = "v";
 const INLINE_VIDEO_MIME_TYPE_PATTERN = /^video\/[\w!#$&^.+-]+$/i;
 // Extensions a document viewer may request inline. The extension comes from
-// the attachment id the server assigned, never from the client's mime type.
+// the attachment id the server aslocal, never from the client's mime type.
 const INLINE_DOCUMENT_EXTENSIONS = new Set(["pdf", "html", "htm"]);
 const INLINE_DOCUMENT_MIME_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -73,7 +65,7 @@ const PREVIEW_ASSET_EXTENSIONS = new Set([
   ".woff2",
 ]);
 
-const AssetClaimsSchema = Schema.Union([
+const AssetAddressSchema = Schema.Union([
   Schema.Struct({
     version: Schema.Literal(1),
     kind: Schema.Literal("workspace-file"),
@@ -100,10 +92,10 @@ const AssetClaimsSchema = Schema.Union([
     version: Schema.Literal(1),
     kind: Schema.Literal("attachment"),
     attachmentId: Schema.String,
-    /** Decided at mint time. Absent tokens (from before this field) serve
+    /** Decided at URL creation time. Absent addresses (from before this field) serve
         inline, which is only ever the image case. */
     download: Schema.optionalKey(Schema.Boolean),
-    /** Display name and mime the caller supplied at mint time; drive the
+    /** Display name and mime the caller supplied at URL creation time; drive the
         download filename and Content-Type. */
     fileName: Schema.optionalKey(Schema.String),
     mimeType: Schema.optionalKey(Schema.String),
@@ -129,11 +121,11 @@ const AssetClaimsSchema = Schema.Union([
     expiresAt: Schema.Number,
   }),
 ]);
-type AssetClaims = typeof AssetClaimsSchema.Type;
+type AssetAddress = typeof AssetAddressSchema.Type;
 
-const AssetClaimsJson = Schema.fromJsonString(AssetClaimsSchema);
-const decodeAssetClaims = Schema.decodeUnknownOption(AssetClaimsJson);
-const encodeAssetClaims = Schema.encodeSync(AssetClaimsJson);
+const AssetAddressJson = Schema.fromJsonString(AssetAddressSchema);
+const decodeAssetAddress = Schema.decodeUnknownOption(AssetAddressJson);
+const encodeAssetAddress = Schema.encodeSync(AssetAddressJson);
 
 export type ResolvedAsset = {
   readonly kind: "file";
@@ -144,9 +136,11 @@ export type ResolvedAsset = {
   readonly file?: OpenMediaFile;
 };
 
-function decodeClaims(encodedPayload: string): AssetClaims | null {
+function decodeAddress(encodedPayload: string): AssetAddress | null {
   try {
-    return Option.getOrNull(decodeAssetClaims(base64UrlDecodeUtf8(encodedPayload)));
+    return Option.getOrNull(
+      decodeAssetAddress(Result.getOrThrow(Encoding.decodeBase64UrlString(encodedPayload))),
+    );
   } catch {
     return null;
   }
@@ -232,8 +226,8 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const workspacePaths = yield* WorkspacePaths.WorkspacePaths;
-  let expiresAt = (yield* Clock.currentTimeMillis) + ASSET_TOKEN_TTL_MS;
-  let claims: AssetClaims;
+  let expiresAt = (yield* Clock.currentTimeMillis) + ASSET_METADATA_TTL_MS;
+  let claims: AssetAddress;
   let fileName: string;
   let sourcePath: string | undefined;
 
@@ -524,48 +518,26 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
     }
   }
 
-  const secretStore = yield* ServerSecretStore.ServerSecretStore;
-  const signingSecret = yield* secretStore.getOrCreateRandom(SIGNING_SECRET_NAME, 32).pipe(
-    Effect.mapError(
-      (cause) =>
-        new AssetSigningKeyLoadError({
-          resource: input.resource,
-          cause,
-        }),
-    ),
-  );
   if (claims.kind === "project-favicon" || claims.kind === "project-favicon-external") {
     const issuedAt = yield* Clock.currentTimeMillis;
     expiresAt =
-      (Math.floor(issuedAt / PROJECT_FAVICON_TOKEN_BUCKET_MS) + 2) *
-      PROJECT_FAVICON_TOKEN_BUCKET_MS;
+      (Math.floor(issuedAt / PROJECT_FAVICON_CACHE_BUCKET_MS) + 2) *
+      PROJECT_FAVICON_CACHE_BUCKET_MS;
     claims = { ...claims, expiresAt };
   }
-  const encodedPayload = base64UrlEncode(encodeAssetClaims(claims));
-  const token = `${encodedPayload}.${signPayload(encodedPayload, signingSecret)}`;
+  const address = Encoding.encodeBase64Url(new TextEncoder().encode(encodeAssetAddress(claims)));
   return {
-    relativeUrl: `${ASSET_ROUTE_PREFIX}/${token}/${encodeURIComponent(fileName)}`,
+    relativeUrl: `${ASSET_ROUTE_PREFIX}/${address}/${encodeURIComponent(fileName)}`,
     expiresAt,
     ...(sourcePath !== undefined ? { sourcePath } : {}),
   };
 });
 
 export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
-  token: string,
+  address: string,
   relativePath: string,
 ) {
-  const [encodedPayload, signature] = token.split(".");
-  if (!encodedPayload || !signature) return null;
-
-  const secretStore = yield* ServerSecretStore.ServerSecretStore;
-  const signingSecret = yield* secretStore.getOrCreateRandom(SIGNING_SECRET_NAME, 32).pipe(
-    Effect.tapError((cause) => Effect.logError("Failed to load the asset signing key.", { cause })),
-    Effect.orElseSucceed(() => null),
-  );
-  if (!signingSecret) return null;
-  if (!timingSafeEqualBase64Url(signature, signPayload(encodedPayload, signingSecret))) return null;
-
-  const claims = decodeClaims(encodedPayload);
+  const claims = decodeAddress(address);
   if (!claims || claims.expiresAt <= (yield* Clock.currentTimeMillis)) return null;
 
   if (claims.kind === "attachment") {

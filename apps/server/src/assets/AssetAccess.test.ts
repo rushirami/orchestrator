@@ -578,7 +578,7 @@ describe("AssetAccess", () => {
       });
     }).pipe(Effect.provide(testLayer)),
   );
-  it.effect("issues signed native application icon capabilities", () =>
+  it.effect("issues local native application icon addresses", () =>
     Effect.gen(function* () {
       const result = yield* issueAssetUrl({
         resource: {
@@ -654,7 +654,7 @@ describe("AssetAccess", () => {
       ).toMatchObject({ kind: "file", path: attachmentPath, download: true });
     }).pipe(Effect.provide(testLayer)),
   );
-  it.effect("issues project favicon capabilities with a signed fallback", () =>
+  it.effect("issues project favicon capabilities with a local fallback", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;

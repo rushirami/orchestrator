@@ -1914,7 +1914,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("uploads image bytes through a signed URL issued by websocket rpc", () =>
+  it.effect("uploads image bytes through a local URL issued by websocket rpc", () =>
     Effect.gen(function* () {
       const config = yield* buildAppUnderTest();
       const fileSystem = yield* FileSystem.FileSystem;

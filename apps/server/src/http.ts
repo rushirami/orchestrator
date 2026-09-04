@@ -19,8 +19,8 @@ import { OtlpTracer } from "effect/unstable/observability";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import {
   ATTACHMENT_UPLOAD_ROUTE_PREFIX,
+  resolveAttachmentUploadAddress,
   storeAttachmentUpload,
-  validateAttachmentUploadToken,
 } from "./assets/AttachmentUpload.ts";
 import { type OpenMediaFile, statMediaFile, streamMediaFile } from "./assets/MediaFile.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
@@ -31,7 +31,7 @@ const CLIENT_TRACES_PATH = "/api/observability/v1/traces";
 const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 // HTML previews are agent output, not the app. The sandbox gives the document an
 // opaque origin: scripts run, but same-origin cookies, storage, and API calls are
-// out of reach. Relative sibling assets still load through their signed URLs.
+// out of reach. Relative sibling assets still load through their local resource URLs.
 const HTML_CONTENT_SECURITY_POLICY = "sandbox allow-scripts allow-forms allow-popups allow-modals";
 
 // Types a browser may render as a document if a proxy strips the disposition
@@ -293,11 +293,11 @@ export const attachmentUploadRouteLayer = HttpRouter.add(
       return HttpServerResponse.text("Bad Request", { status: 400 });
     }
 
-    const token = url.value.pathname.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
-    if (!token) {
+    const address = url.value.pathname.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
+    if (!address) {
       return HttpServerResponse.text("Not Found", { status: 404 });
     }
-    const claims = yield* validateAttachmentUploadToken(token);
+    const claims = yield* resolveAttachmentUploadAddress(address);
     if (!claims) {
       return HttpServerResponse.text("Not Found", { status: 404 });
     }

@@ -6,28 +6,28 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
+import * as Schema from "effect/Schema";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
-import { base64UrlEncode, signPayload } from "../auth/utils.ts";
-import * as ServerConfig from "../config.ts";
 import { parseThreadSegmentFromAttachmentId } from "../attachmentStore.ts";
+import * as ServerConfig from "../config.ts";
 import {
   ATTACHMENT_UPLOAD_ROUTE_PREFIX,
   deletePendingAttachment,
   issueAttachmentUploadUrl,
+  resolveAttachmentUploadAddress,
   storeAttachmentUpload,
-  validateAttachmentUploadToken,
 } from "./AttachmentUpload.ts";
 
-const testLayer = ServerSecretStore.layer.pipe(
-  Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "t3-attachment-upload-" })),
+const testLayer = ServerConfig.layerTest(process.cwd(), { prefix: "t3-attachment-upload-" }).pipe(
   Layer.provideMerge(NodeServices.layer),
 );
+
+const encodeAddressJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 const uploadInput = {
   name: "screenshot.png",
@@ -35,27 +35,14 @@ const uploadInput = {
   sizeBytes: 6,
 } as const;
 
-const LegacyAttachmentUploadClaims = Schema.Struct({
-  version: Schema.Literal(1),
-  kind: Schema.Literal("attachment-upload"),
-  attachmentId: Schema.String,
-  name: Schema.String,
-  mimeType: Schema.String,
-  sizeBytes: Schema.Number,
-  expiresAt: Schema.Number,
-});
-const encodeLegacyAttachmentUploadClaims = Schema.encodeEffect(
-  Schema.fromJsonString(LegacyAttachmentUploadClaims),
-);
-
 describe("AttachmentUpload", () => {
-  it.effect("signs the attachment metadata and validates the upload token", () =>
+  it.effect("encodes and validates local attachment metadata without a signing key", () =>
     Effect.gen(function* () {
       const issued = yield* issueAttachmentUploadUrl(uploadInput);
       expect(parseThreadSegmentFromAttachmentId(issued.attachmentId)).toBe("pending");
 
       const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
-      expect(yield* validateAttachmentUploadToken(token)).toMatchObject({
+      expect(yield* resolveAttachmentUploadAddress(token)).toMatchObject({
         kind: "attachment-upload",
         attachmentId: issued.attachmentId,
         name: "screenshot.png",
@@ -65,50 +52,46 @@ describe("AttachmentUpload", () => {
     }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("rejects tampered and malformed upload tokens", () =>
+  it.effect("rejects malformed upload addresses", () =>
     Effect.gen(function* () {
       const issued = yield* issueAttachmentUploadUrl(uploadInput);
       const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
-      const [payload, signature] = token.split(".");
 
-      expect(yield* validateAttachmentUploadToken(`${payload}x.${signature}`)).toBeNull();
-      expect(yield* validateAttachmentUploadToken(`${token}.extra`)).toBeNull();
-      expect(yield* validateAttachmentUploadToken("garbage")).toBeNull();
+      expect(yield* resolveAttachmentUploadAddress(`${token}invalid`)).toBeNull();
+      expect(yield* resolveAttachmentUploadAddress(`${token}.extra`)).toBeNull();
+      expect(yield* resolveAttachmentUploadAddress("garbage")).toBeNull();
     }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("accepts unexpired image upload tokens issued before file support", () =>
+  it.effect("rejects invalid metadata and uploads outside pending attachments", () =>
     Effect.gen(function* () {
       const issued = yield* issueAttachmentUploadUrl(uploadInput);
-      const secretStore = yield* ServerSecretStore.ServerSecretStore;
-      const secret = yield* secretStore.getOrCreateRandom("asset-access-signing-key", 32);
-      const encodedPayload = base64UrlEncode(
-        yield* encodeLegacyAttachmentUploadClaims({
-          version: 1,
-          kind: "attachment-upload",
-          attachmentId: issued.attachmentId,
-          name: uploadInput.name,
-          mimeType: uploadInput.mimeType,
-          sizeBytes: uploadInput.sizeBytes,
-          expiresAt: issued.expiresAt,
-        }),
-      );
-      const legacyToken = `${encodedPayload}.${signPayload(encodedPayload, secret)}`;
-
-      expect(yield* validateAttachmentUploadToken(legacyToken)).toMatchObject({
-        type: "image",
-        attachmentId: issued.attachmentId,
-      });
+      const address = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
+      const valid = yield* resolveAttachmentUploadAddress(address);
+      expect(valid).not.toBeNull();
+      for (const patch of [
+        { mimeType: "text/html" },
+        { sizeBytes: -1 },
+        { sizeBytes: 0 },
+        { sizeBytes: Number.MAX_SAFE_INTEGER },
+        { attachmentId: "../outside" },
+        { attachmentId: "thread-00000000-0000-4000-8000-0000000000cc" },
+      ]) {
+        const invalid = Encoding.encodeBase64Url(
+          new TextEncoder().encode(encodeAddressJson({ ...valid, ...patch })),
+        );
+        expect(yield* resolveAttachmentUploadAddress(invalid)).toBeNull();
+      }
     }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("rejects expired upload tokens", () =>
+  it.effect("rejects expired upload addresses", () =>
     Effect.gen(function* () {
       const issued = yield* issueAttachmentUploadUrl(uploadInput);
       const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
 
       yield* TestClock.adjust("11 minutes");
-      expect(yield* validateAttachmentUploadToken(token)).toBeNull();
+      expect(yield* resolveAttachmentUploadAddress(token)).toBeNull();
     }).pipe(Effect.provide(testLayer)),
   );
 
@@ -132,7 +115,7 @@ describe("AttachmentUpload", () => {
       const config = yield* ServerConfig.ServerConfig;
       const issued = yield* issueAttachmentUploadUrl(uploadInput);
       const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
-      const claims = yield* validateAttachmentUploadToken(token);
+      const claims = yield* resolveAttachmentUploadAddress(token);
       if (!claims) {
         throw new Error("Expected valid upload claims.");
       }
@@ -161,7 +144,7 @@ describe("AttachmentUpload", () => {
         sizeBytes: 6,
       });
       const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
-      const claims = yield* validateAttachmentUploadToken(token);
+      const claims = yield* resolveAttachmentUploadAddress(token);
       if (!claims) {
         throw new Error("Expected valid upload claims.");
       }
@@ -182,12 +165,12 @@ describe("AttachmentUpload", () => {
     }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("removes partial streamed uploads that exceed their signed size", () =>
+  it.effect("removes partial streamed uploads that exceed their declared size", () =>
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
       const issued = yield* issueAttachmentUploadUrl(uploadInput);
       const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
-      const claims = yield* validateAttachmentUploadToken(token);
+      const claims = yield* resolveAttachmentUploadAddress(token);
       if (!claims) {
         throw new Error("Expected valid upload claims.");
       }
@@ -205,7 +188,7 @@ describe("AttachmentUpload", () => {
       const config = yield* ServerConfig.ServerConfig;
       const issued = yield* issueAttachmentUploadUrl(uploadInput);
       const token = issued.relativeUrl.slice(`${ATTACHMENT_UPLOAD_ROUTE_PREFIX}/`.length);
-      const claims = yield* validateAttachmentUploadToken(token);
+      const claims = yield* resolveAttachmentUploadAddress(token);
       if (!claims) {
         throw new Error("Expected valid upload claims.");
       }
