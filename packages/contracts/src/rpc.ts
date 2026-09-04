@@ -12,22 +12,6 @@ import {
   ProviderSetupInput,
 } from "./providerSetup.ts";
 
-import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
-import {
-  AuthAccessStreamError,
-  AuthAccessStreamEvent,
-  EnvironmentAuthorizationError,
-} from "./auth.ts";
-import {
-  BackgroundPolicySnapshot,
-  ClientActivityReportInput,
-  HostPowerSnapshot,
-} from "./background.ts";
-import {
-  FilesystemBrowseInput,
-  FilesystemBrowseResult,
-  FilesystemBrowseError,
-} from "./filesystem.ts";
 import {
   AssetAccessError,
   AssetCreateUrlInput,
@@ -38,10 +22,30 @@ import {
   AttachmentUploadSigningKeyError,
 } from "./assets.ts";
 import {
+  AuthAccessStreamError,
+  AuthAccessStreamEvent,
+  EnvironmentAuthorizationError,
+} from "./auth.ts";
+import {
+  BackgroundPolicySnapshot,
+  ClientActivityReportInput,
+  HostPowerSnapshot,
+} from "./background.ts";
+import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
+import {
+  FilesystemBrowseError,
+  FilesystemBrowseInput,
+  FilesystemBrowseResult,
+} from "./filesystem.ts";
+import {
   GitActionProgressEvent,
-  VcsSwitchRefInput,
-  VcsSwitchRefResult,
   GitCommandError,
+  GitManagerServiceError,
+  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestThreadResult,
+  GitPullRequestRefInput,
+  GitResolvePullRequestResult,
+  GitRunStackedActionInput,
   VcsCreateRefInput,
   VcsCreateRefResult,
   VcsCreateWorktreeInput,
@@ -49,26 +53,15 @@ import {
   VcsInitInput,
   VcsListRefsInput,
   VcsListRefsResult,
-  GitManagerServiceError,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
   VcsPullInput,
-  GitPullRequestRefInput,
   VcsPullResult,
   VcsRemoveWorktreeInput,
-  GitResolvePullRequestResult,
-  GitRunStackedActionInput,
   VcsStatusInput,
   VcsStatusResult,
   VcsStatusStreamEvent,
+  VcsSwitchRefInput,
+  VcsSwitchRefResult,
 } from "./git.ts";
-import {
-  ReviewDiffFileContentsInput,
-  ReviewDiffFileContentsResult,
-  ReviewDiffPreviewError,
-  ReviewDiffPreviewInput,
-  ReviewDiffPreviewResult,
-} from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   ClientOrchestrationCommand,
@@ -77,82 +70,16 @@ import {
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetSnapshotError,
-  OrchestrationSearchThreadsError,
-  OrchestrationSearchThreadsInput,
   OrchestrationGetTurnDiffError,
   OrchestrationGetTurnDiffInput,
-  OrchestrationRpcSchemas,
   OrchestrationGetWorkflowScriptError,
+  OrchestrationRpcSchemas,
+  OrchestrationSearchThreadsError,
+  OrchestrationSearchThreadsInput,
 } from "./orchestration.ts";
 import {
-  ProviderUploadFeedbackError,
-  ProviderUploadFeedbackInput,
-  ProviderUploadFeedbackResult,
-} from "./provider.ts";
-import { ProviderInstanceId } from "./providerInstance.ts";
-import {
-  PullRequestActionInput,
-  PullRequestActivity,
-  PullRequestCommentInput,
-  PullRequestCommentUpdateInput,
-  PullRequestDetail,
-  PullRequestDiffFileContentsInput,
-  PullRequestDiffFileContentsResult,
-  PullRequestInvalidateInput,
-  PullRequestListInput,
-  PullRequestListResult,
-  PullRequestListStatsInput,
-  PullRequestListStatsResult,
-  PullRequestOperationError,
-  PullRequestReactionInput,
-  PullRequestRef,
-  PullRequestSummary,
-  PullRequestReviewerCandidateList,
-  PullRequestReviewerRequestInput,
-  PullRequestLabelCandidateList,
-  PullRequestLabelChangeInput,
-  PullRequestSubmitReviewInput,
-  PullRequestThreadCommentsInput,
-  PullRequestThreadCommentsResult,
-  PullRequestThreadReplyInput,
-  PullRequestThreadResolutionInput,
-  PullRequestUnavailableError,
-  PullRequestUpdateInput,
-} from "./pullRequest.ts";
-import {
-  ProjectListEntriesError,
-  ProjectListEntriesInput,
-  ProjectListEntriesResult,
-  ProjectReadFileError,
-  ProjectReadFileInput,
-  ProjectReadFileResult,
-  ProjectSearchContentsError,
-  ProjectSearchContentsInput,
-  ProjectSearchContentsResult,
-  ProjectSearchEntriesError,
-  ProjectSearchEntriesInput,
-  ProjectSearchEntriesResult,
-  ProjectWriteFileError,
-  ProjectWriteFileInput,
-  ProjectWriteFileResult,
-} from "./project.ts";
-import {
-  TerminalAttachInput,
-  TerminalAttachStreamEvent,
-  TerminalClearInput,
-  TerminalCloseInput,
-  TerminalError,
-  TerminalEvent,
-  TerminalMetadataStreamEvent,
-  TerminalOpenInput,
-  TerminalResizeInput,
-  TerminalRestartInput,
-  TerminalSessionSnapshot,
-  TerminalWriteInput,
-} from "./terminal.ts";
-import {
-  DiscoveredLocalServerList,
   ConfiguredLocalServerUrls,
+  DiscoveredLocalServerList,
   PreviewCloseInput,
   PreviewError,
   PreviewEvent,
@@ -173,28 +100,61 @@ import {
   PreviewAutomationStreamEvent,
 } from "./previewAutomation.ts";
 import {
-  ServerConfigStreamEvent,
-  DesktopUpdateCommitInput,
-  ServerConfig,
-  ServerProviderUpdateError,
-  ServerProviderUpdateInput,
-  ServerLifecycleStreamEvent,
-  ServerRemoveKeybindingInput,
-  ServerRemoveKeybindingResult,
-  ServerProviderUpdatedPayload,
-  ServerSelfUpdateError,
-  ServerSelfUpdateInput,
-  ServerSelfUpdateProgressEvent,
-  ServerSelfUpdateResult,
-  ServerTraceDiagnosticsResult,
-  ServerProcessDiagnosticsResult,
-  ServerProcessResourceHistoryInput,
-  ServerProcessResourceHistoryResult,
-  ServerSignalProcessInput,
-  ServerSignalProcessResult,
-  ServerUpsertKeybindingInput,
-  ServerUpsertKeybindingResult,
-} from "./server.ts";
+  ProjectListEntriesError,
+  ProjectListEntriesInput,
+  ProjectListEntriesResult,
+  ProjectReadFileError,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
+  ProjectSearchContentsError,
+  ProjectSearchContentsInput,
+  ProjectSearchContentsResult,
+  ProjectSearchEntriesError,
+  ProjectSearchEntriesInput,
+  ProjectSearchEntriesResult,
+  ProjectWriteFileError,
+  ProjectWriteFileInput,
+  ProjectWriteFileResult,
+} from "./project.ts";
+import {
+  ProviderUploadFeedbackError,
+  ProviderUploadFeedbackInput,
+  ProviderUploadFeedbackResult,
+} from "./provider.ts";
+import { ProviderInstanceId } from "./providerInstance.ts";
+import {
+  ProviderConsumeResetCreditInput,
+  ProviderConsumeResetCreditResult,
+} from "./providerUsageLimits.ts";
+import {
+  PullRequestActionInput,
+  PullRequestActivity,
+  PullRequestCommentInput,
+  PullRequestCommentUpdateInput,
+  PullRequestDetail,
+  PullRequestDiffFileContentsInput,
+  PullRequestDiffFileContentsResult,
+  PullRequestInvalidateInput,
+  PullRequestLabelCandidateList,
+  PullRequestLabelChangeInput,
+  PullRequestListInput,
+  PullRequestListResult,
+  PullRequestListStatsInput,
+  PullRequestListStatsResult,
+  PullRequestOperationError,
+  PullRequestReactionInput,
+  PullRequestRef,
+  PullRequestReviewerCandidateList,
+  PullRequestReviewerRequestInput,
+  PullRequestSubmitReviewInput,
+  PullRequestSummary,
+  PullRequestThreadCommentsInput,
+  PullRequestThreadCommentsResult,
+  PullRequestThreadReplyInput,
+  PullRequestThreadResolutionInput,
+  PullRequestUnavailableError,
+  PullRequestUpdateInput,
+} from "./pullRequest.ts";
 import {
   ResourceTelemetryHistory,
   ResourceTelemetryHistoryInput,
@@ -202,10 +162,30 @@ import {
   ResourceTelemetrySnapshot,
 } from "./resourceTelemetry.ts";
 import {
-  ProviderConsumeResetCreditInput,
-  ProviderConsumeResetCreditResult,
-} from "./providerUsageLimits.ts";
-import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
+  ReviewDiffFileContentsInput,
+  ReviewDiffFileContentsResult,
+  ReviewDiffPreviewError,
+  ReviewDiffPreviewInput,
+  ReviewDiffPreviewResult,
+} from "./review.ts";
+import {
+  ServerConfig,
+  ServerConfigStreamEvent,
+  ServerLifecycleStreamEvent,
+  ServerProcessDiagnosticsResult,
+  ServerProcessResourceHistoryInput,
+  ServerProcessResourceHistoryResult,
+  ServerProviderUpdatedPayload,
+  ServerProviderUpdateError,
+  ServerProviderUpdateInput,
+  ServerRemoveKeybindingInput,
+  ServerRemoveKeybindingResult,
+  ServerSignalProcessInput,
+  ServerSignalProcessResult,
+  ServerTraceDiagnosticsResult,
+  ServerUpsertKeybindingInput,
+  ServerUpsertKeybindingResult,
+} from "./server.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
   SourceControlCloneRepositoryInput,
@@ -217,6 +197,21 @@ import {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
+import {
+  TerminalAttachInput,
+  TerminalAttachStreamEvent,
+  TerminalClearInput,
+  TerminalCloseInput,
+  TerminalError,
+  TerminalEvent,
+  TerminalMetadataStreamEvent,
+  TerminalOpenInput,
+  TerminalResizeInput,
+  TerminalRestartInput,
+  TerminalSessionSnapshot,
+  TerminalWriteInput,
+} from "./terminal.ts";
+import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import { VcsError } from "./vcs.ts";
 
 export const WS_METHODS = {
@@ -297,9 +292,6 @@ export const WS_METHODS = {
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
-  serverUpdateServer: "server.updateServer",
-  serverUpdateServerWithProgress: "server.updateServerWithProgress",
-  serverCommitDesktopUpdate: "server.commitDesktopUpdate",
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverRemoveKeybinding: "server.removeKeybinding",
   serverGetSettings: "server.getSettings",
@@ -469,28 +461,6 @@ export const WsProviderInstallRemoveRpc = Rpc.make(WS_METHODS.providerInstallRem
   payload: ProviderSetupInput,
   success: ProviderInstallState,
   error: ProviderSetupRpcError,
-});
-
-export const WsServerUpdateServerRpc = Rpc.make(WS_METHODS.serverUpdateServer, {
-  payload: ServerSelfUpdateInput,
-  success: ServerSelfUpdateResult,
-  error: Schema.Union([ServerSelfUpdateError, EnvironmentAuthorizationError]),
-});
-
-export const WsServerUpdateServerWithProgressRpc = Rpc.make(
-  WS_METHODS.serverUpdateServerWithProgress,
-  {
-    payload: ServerSelfUpdateInput,
-    success: ServerSelfUpdateProgressEvent,
-    error: Schema.Union([ServerSelfUpdateError, EnvironmentAuthorizationError]),
-    stream: true,
-  },
-);
-
-export const WsServerCommitDesktopUpdateRpc = Rpc.make(WS_METHODS.serverCommitDesktopUpdate, {
-  payload: DesktopUpdateCommitInput,
-  success: ServerSelfUpdateResult,
-  error: Schema.Union([ServerSelfUpdateError, EnvironmentAuthorizationError]),
 });
 
 export const WsServerGetSettingsRpc = Rpc.make(WS_METHODS.serverGetSettings, {
@@ -1169,9 +1139,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsProviderInstallCancelRpc,
   WsProviderInstallSubscribeRpc,
   WsProviderInstallRemoveRpc,
-  WsServerUpdateServerRpc,
-  WsServerUpdateServerWithProgressRpc,
-  WsServerCommitDesktopUpdateRpc,
   WsServerUpsertKeybindingRpc,
   WsServerRemoveKeybindingRpc,
   WsServerGetSettingsRpc,

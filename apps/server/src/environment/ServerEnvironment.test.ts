@@ -159,7 +159,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
     }),
   );
 
-  it.effect("advertises desktopAppUpdate only with desktop mode and the control fd", () =>
+  it.effect("does not advertise self-updates in local environments", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
@@ -182,19 +182,19 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
         );
 
       const withFd = yield* describeWith({ mode: "desktop", desktopTelemetryControlFd: 5 });
-      expect(withFd.capabilities.serverSelfUpdate).toBe("desktop-managed");
-      expect(withFd.capabilities.desktopAppUpdate).toBe(true);
-      expect(withFd.capabilities.serverSelfUpdateProgress).toBe(true);
-      expect(withFd.capabilities.serverUpdateThreadContinuation).toBe(true);
+      expect(withFd.capabilities).not.toHaveProperty("serverSelfUpdate");
+      expect(withFd.capabilities).not.toHaveProperty("desktopAppUpdate");
+      expect(withFd.capabilities).not.toHaveProperty("serverSelfUpdateProgress");
+      expect(withFd.capabilities).not.toHaveProperty("serverUpdateThreadContinuation");
 
       const withoutFd = yield* describeWith({ mode: "desktop" });
-      expect(withoutFd.capabilities.serverSelfUpdate).toBe("desktop-managed");
-      expect(withoutFd.capabilities.desktopAppUpdate).toBeUndefined();
-      expect(withoutFd.capabilities.serverSelfUpdateProgress).toBeUndefined();
-      expect(withoutFd.capabilities.serverUpdateThreadContinuation).toBeUndefined();
+      expect(withoutFd.capabilities).not.toHaveProperty("serverSelfUpdate");
+      expect(withoutFd.capabilities).not.toHaveProperty("desktopAppUpdate");
+      expect(withoutFd.capabilities).not.toHaveProperty("serverSelfUpdateProgress");
+      expect(withoutFd.capabilities).not.toHaveProperty("serverUpdateThreadContinuation");
 
       const web = yield* describeWith({ mode: "web", desktopTelemetryControlFd: 5 });
-      expect(web.capabilities.desktopAppUpdate).toBeUndefined();
+      expect(web.capabilities).not.toHaveProperty("desktopAppUpdate");
     }),
   );
 

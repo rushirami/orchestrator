@@ -25,28 +25,28 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
-import * as ServerConfig from "./config.ts";
-import * as Keybindings from "./keybindings.ts";
-import * as ExternalLauncher from "./process/externalLauncher.ts";
-import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
-import * as OrchestrationReactor from "./orchestration/Services/OrchestrationReactor.ts";
-import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
-import * as ServerSettings from "./serverSettings.ts";
-import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
+import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
+import * as ServerConfig from "./config.ts";
+import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
+import * as Keybindings from "./keybindings.ts";
+import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
+import * as OrchestrationReactor from "./orchestration/Services/OrchestrationReactor.ts";
+import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ProviderService from "./provider/Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDirectory.ts";
 import * as ProviderSessionReaper from "./provider/Services/ProviderSessionReaper.ts";
 import { forkParked } from "./serverActivation.ts";
-import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
-import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
+import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
+import * as ServerSettings from "./serverSettings.ts";
 import {
   formatHeadlessServeOutput,
   formatHostForUrl,
   isWildcardHost,
   issueHeadlessServeAccessInfo,
 } from "./startupAccess.ts";
+import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 
 export class ServerRuntimeStartupError extends Schema.TaggedErrorClass<ServerRuntimeStartupError>()(
   "ServerRuntimeStartupError",
@@ -67,13 +67,6 @@ export class ServerRuntimeStartup extends Context.Service<
   {
     readonly awaitCommandReady: Effect.Effect<void, ServerRuntimeStartupError>;
     readonly markHttpListening: Effect.Effect<void>;
-    readonly markRunningProviderSessionsForContinuation: Effect.Effect<
-      ReadonlyArray<ThreadId>,
-      ServerUpdateThreadContinuationError
-    >;
-    readonly clearProviderSessionContinuationMarkers: (
-      threadIds: ReadonlyArray<ThreadId>,
-    ) => Effect.Effect<void, ServerUpdateThreadContinuationError>;
     readonly enqueueCommand: <A, E>(
       effect: Effect.Effect<A, E>,
     ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
@@ -286,17 +279,6 @@ class ProviderSessionContinuationError extends Schema.TaggedErrorClass<ProviderS
   }
 }
 
-export class ServerUpdateThreadContinuationError extends Schema.TaggedErrorClass<ServerUpdateThreadContinuationError>()(
-  "ServerUpdateThreadContinuationError",
-  {
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return "Could not prepare running threads to continue after the update.";
-  }
-}
-
 function hasServerUpdateContinuationMarker(
   runtimePayload: unknown,
 ): runtimePayload is Record<string, unknown> {
@@ -316,8 +298,6 @@ function readRuntimePayload(runtimePayload: unknown): Record<string, unknown> {
     : {};
 }
 
-const isServerUpdateThreadContinuationError = Schema.is(ServerUpdateThreadContinuationError);
-
 function readServerUpdateContinuationTurnId(runtimePayload: unknown): TurnId | null {
   if (!hasServerUpdateContinuationMarker(runtimePayload)) {
     return null;
@@ -325,54 +305,6 @@ function readServerUpdateContinuationTurnId(runtimePayload: unknown): TurnId | n
   const value = runtimePayload[SERVER_UPDATE_CONTINUATION_KEY];
   return typeof value === "string" && value.length > 0 ? TurnId.make(value) : null;
 }
-
-const toServerUpdateThreadContinuationError = (cause: unknown) =>
-  isServerUpdateThreadContinuationError(cause)
-    ? cause
-    : new ServerUpdateThreadContinuationError({ cause });
-
-export const markRunningProviderSessionsForContinuation = Effect.gen(function* () {
-  const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-  const query = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-  const { threads } = yield* query.getCommandReadModel();
-  const running = threads.filter(
-    (thread) =>
-      thread.archivedAt === null &&
-      thread.deletedAt === null &&
-      thread.session?.status === "running" &&
-      thread.session.activeTurnId !== null,
-  );
-
-  const marked: ThreadId[] = [];
-  return yield* Effect.gen(function* () {
-    for (const thread of running) {
-      const activeTurnId = thread.session?.activeTurnId;
-      if (activeTurnId === null || activeTurnId === undefined) {
-        continue;
-      }
-      const binding = yield* directory.getBinding(thread.id);
-      if (Option.isNone(binding)) {
-        continue;
-      }
-      if (binding.value.resumeCursor === null || binding.value.resumeCursor === undefined) {
-        continue;
-      }
-      yield* directory.upsert({
-        ...binding.value,
-        runtimePayload: {
-          ...readRuntimePayload(binding.value.runtimePayload),
-          [SERVER_UPDATE_CONTINUATION_KEY]: activeTurnId,
-        },
-      });
-      marked.push(thread.id);
-    }
-    return marked;
-  }).pipe(
-    Effect.catchCause((cause) =>
-      clearProviderSessionContinuationMarkers(marked).pipe(Effect.andThen(Effect.failCause(cause))),
-    ),
-  );
-}).pipe(Effect.mapError(toServerUpdateThreadContinuationError));
 
 const clearContinuationMarkers = (
   directory: ProviderSessionDirectory.ProviderSessionDirectory["Service"],
@@ -398,12 +330,6 @@ const clearContinuationMarkers = (
       ),
     { concurrency: "unbounded", discard: true },
   );
-
-export const clearProviderSessionContinuationMarkers = (threadIds: ReadonlyArray<ThreadId>) =>
-  Effect.gen(function* () {
-    const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-    yield* clearContinuationMarkers(directory, threadIds);
-  }).pipe(Effect.mapError(toServerUpdateThreadContinuationError));
 
 export const reconcileProviderSessions = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
@@ -673,7 +599,6 @@ export const make = (options?: StartupOptions) =>
     const serverSettings = yield* ServerSettings.ServerSettingsService;
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
     const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-    const providerSessionDirectory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
     const crypto = yield* Crypto.Crypto;
     const launcher = yield* ServiceLauncherClient.ServiceLauncherClient;
 
@@ -865,23 +790,6 @@ export const make = (options?: StartupOptions) =>
     return {
       awaitCommandReady: commandGate.awaitCommandReady,
       markHttpListening: Deferred.succeed(httpListening, undefined),
-      markRunningProviderSessionsForContinuation: markRunningProviderSessionsForContinuation.pipe(
-        Effect.provideService(
-          ProjectionSnapshotQuery.ProjectionSnapshotQuery,
-          projectionSnapshotQuery,
-        ),
-        Effect.provideService(
-          ProviderSessionDirectory.ProviderSessionDirectory,
-          providerSessionDirectory,
-        ),
-      ),
-      clearProviderSessionContinuationMarkers: (threadIds) =>
-        clearProviderSessionContinuationMarkers(threadIds).pipe(
-          Effect.provideService(
-            ProviderSessionDirectory.ProviderSessionDirectory,
-            providerSessionDirectory,
-          ),
-        ),
       enqueueCommand: commandGate.enqueueCommand,
     } satisfies ServerRuntimeStartup["Service"];
   });

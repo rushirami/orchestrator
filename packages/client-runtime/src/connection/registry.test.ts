@@ -21,7 +21,6 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TokenStore from "../authorization/tokenStore.ts";
 import * as Persistence from "../platform/persistence.ts";
 import * as RpcSession from "../rpc/session.ts";
-import { runDesktopCommitWithReconnectObserver } from "../state/server.ts";
 import {
   BearerConnectionCredential,
   BearerConnectionProfile,
@@ -418,7 +417,7 @@ function awaitConnectionState(
 }
 
 describe("EnvironmentRegistry", () => {
-  it.effect("replays connected state when arming a desktop commit observer", () =>
+  it.effect("replays connected state to a late subscriber", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness([TARGET]);
 
@@ -431,16 +430,8 @@ describe("EnvironmentRegistry", () => {
           (state) => state.phase === "connected",
         );
 
-        const commits = yield* Ref.make(0);
-        const result = yield* runDesktopCommitWithReconnectObserver(
-          registry.stateChanges(TARGET.environmentId),
-          Ref.update(commits, (count) => count + 1).pipe(
-            Effect.andThen(Effect.fail("commit refused")),
-          ),
-        ).pipe(Effect.flip, Effect.timeout("1 second"));
-
-        expect(result).toBe("commit refused");
-        expect(yield* Ref.get(commits)).toBe(1);
+        const result = yield* Stream.runHead(registry.stateChanges(TARGET.environmentId));
+        expect(Option.getOrThrow(result).phase).toBe("connected");
       }).pipe(Effect.provide(harness.layer), Effect.scoped);
     }),
   );

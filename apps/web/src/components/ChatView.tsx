@@ -1,46 +1,65 @@
-import {
-  type AssistantCitation,
-  type ApprovalRequestId,
-  type ChatFileAttachment,
-  DEFAULT_MODEL,
-  type EnvironmentId,
-  type MessageId,
-  type ModelSelection,
-  type ProjectScript,
-  type ProjectId,
-  type ProviderApprovalDecision,
-  type PreviewAnnotationPayload,
-  ProviderInstanceId,
-  type ServerProvider,
-  type ResolvedKeybindingsConfig,
-  type ScopedThreadRef,
-  type ThreadId,
-  type TurnId,
-  type KeybindingCommand,
-  OrchestrationThreadActivity,
-  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
-  ProviderInteractionMode,
-  ProviderDriverKind,
-  resolveEnvironmentMachineKind,
-  RuntimeMode,
-  TerminalOpenInput,
-} from "@t3tools/contracts";
-import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
-import { wasBootstrapThreadDeleted } from "@t3tools/client-runtime/errors";
+import { useAtomValue } from "@effect/atom-react";
+import { type LegendListRef } from "@legendapp/list/react";
 import { type CodexArtifactTemplate } from "@t3tools/client-runtime/codex-artifact-templates";
-import { effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
-import {
-  codexFeedbackMessage,
-  parseCodexFeedbackCommand,
-  submitCodexFeedback,
-  type CodexFeedbackSubmission,
-} from "@t3tools/client-runtime/state/threads";
+import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import {
   parseScopedThreadKey,
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
+import { wasBootstrapThreadDeleted } from "@t3tools/client-runtime/errors";
+import { resolveProviderSkillsForCwd } from "@t3tools/client-runtime/providerSkills";
+import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
+import {
+  type AtomCommandResult,
+  isAtomCommandInterrupted,
+  mapAtomCommandResult,
+  settlePromise,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import {
+  deriveAgentPanelModel,
+  foldSubagentActivities,
+} from "@t3tools/client-runtime/state/subagentRuntime";
+import { effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
+import {
+  codexFeedbackMessage,
+  type CodexFeedbackSubmission,
+  parseCodexFeedbackCommand,
+  requestOlderThreadTurns,
+  submitCodexFeedback,
+  threadHasOlderTurns,
+} from "@t3tools/client-runtime/state/threads";
+import {
+  type ApprovalRequestId,
+  type AssistantCitation,
+  type ChatFileAttachment,
+  DEFAULT_MODEL,
+  type EnvironmentId,
+  type KeybindingCommand,
+  type MessageId,
+  type ModelSelection,
+  OrchestrationThreadActivity,
+  type PreviewAnnotationPayload,
+  type ProjectId,
+  type ProjectScript,
+  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
+  type ProviderApprovalDecision,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  ProviderInteractionMode,
+  type ResolvedKeybindingsConfig,
+  resolveEnvironmentMachineKind,
+  RuntimeMode,
+  type ScopedThreadRef,
+  type ServerProvider,
+  TerminalOpenInput,
+  type ThreadId,
+  type TurnId,
+} from "@t3tools/contracts";
+import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
+import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import {
   applyClaudePromptEffortPrefix,
   createModelSelection,
@@ -48,14 +67,26 @@ import {
 } from "@t3tools/shared/model";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { truncate } from "@t3tools/shared/String";
-import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import {
   getTerminalLabel,
   nextTerminalId,
   resolveTerminalSessionLabel,
 } from "@t3tools/shared/terminalLabels";
+import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
 import { Debouncer } from "@tanstack/react-pacer";
-import { useAtomValue } from "@effect/atom-react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import * as Cause from "effect/Cause";
+import * as Schema from "effect/Schema";
+import { AsyncResult } from "effect/unstable/reactivity";
+import {
+  AlarmClockIcon,
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  GitBranchIcon,
+  Minimize2Icon,
+  PaperclipIcon,
+  WifiOffIcon,
+} from "lucide-react";
 import {
   lazy,
   memo,
@@ -69,203 +100,160 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
-import { assistantCitationFromLocation } from "../lib/assistantCitationNavigation";
-import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { useShallow } from "zustand/react/shallow";
-import {
-  isAtomCommandInterrupted,
-  mapAtomCommandResult,
-  settlePromise,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
-import { AsyncResult } from "effect/unstable/reactivity";
-import { isElectron } from "../env";
-import { readLocalApi } from "../localApi";
-import { useDiffPanelStore } from "../diffPanelStore";
-import {
-  collapseExpandedComposerCursor,
-  type ComposerSubmissionIntent,
-  parseStandaloneComposerSlashCommand,
-} from "../composer-logic";
-import {
-  createMessageAttachmentPreviewProjector,
-  derivePendingApprovals,
-  derivePendingUserInputs,
-  derivePhase,
-  deriveTimelineEntriesWithState,
-  deriveActiveWorkStartedAt,
-  deriveActivePlanState,
-  findLatestProposedPlan,
-  deriveWorkLogEntries,
-  hasActionableProposedPlan,
-  isLatestTurnSettled,
-  selectHandoffImageResources,
-  type TimelineEntriesProjection,
-} from "../session-logic";
-import { type LegendListRef } from "@legendapp/list/react";
-import {
-  CHAT_TIMELINE_ANCHOR_OFFSET,
-  getAnchoredTurnMetrics,
-  type TimelineScrollMode,
-} from "./chat/timelineScrollAnchoring";
-import {
-  buildPendingUserInputAnswers,
-  derivePendingUserInputProgress,
-  setPendingUserInputCustomAnswer,
-  togglePendingUserInputOptionSelection,
-  type PendingUserInputDraftAnswer,
-} from "../pendingUserInput";
-import { useUiStateStore } from "../uiStateStore";
-import {
-  latestWorkspaceMutationId,
-  useWorkspaceMutationRefresh,
-} from "../hooks/useWorkspaceMutationRefresh";
-import {
-  buildPlanImplementationThreadTitle,
-  buildPlanImplementationPrompt,
-  resolvePlanFollowUpSubmission,
-} from "../proposedPlan";
-import {
-  DEFAULT_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
-  DEFAULT_THREAD_TERMINAL_ID,
-  MAX_TERMINALS_PER_GROUP,
-  type ChatMessage,
-  isBrowserPreviewAttachment,
-  isImageAttachment,
-  type SessionPhase,
-  type Thread,
-  type TurnDiffSummary,
-} from "../types";
-import { useTheme } from "../hooks/useTheme";
-import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
-import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
-import { isCommandPaletteOpen } from "../commandPaletteBus";
-import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
-import { useMediaQuery } from "../hooks/useMediaQuery";
-import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
-import {
-  selectActiveRightPanel,
-  selectActiveRightPanelSurface,
-  selectThreadRightPanelState,
-  type RightPanelSurface,
-  useRightPanelStore,
-} from "../rightPanelStore";
-import {
-  isPreviewSupportedInRuntime,
-  setActivePreviewTab,
-  useThreadPreviewState,
-} from "../previewStateStore";
-import { previewRuntimeTabId } from "../browser/previewRuntimeTabId";
-import { addBrowserSurface } from "./preview/addBrowserSurface";
-import { closePreviewSession } from "./preview/closePreviewSession";
-import { ThreadPreviewMiniPlayer } from "./preview/ThreadPreviewMiniPlayer";
-import { subscribePreviewAction } from "./preview/previewActionBus";
-import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
-import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
-import {
-  selectThreadPreviewMiniPlayer,
-  usePreviewMiniPlayerStore,
-} from "../previewMiniPlayerStore";
-import { isThreadOwnPullRequest } from "./pullRequest/pullRequestDetail.logic";
-import { PullRequestDetailPanel } from "./pullRequest/PullRequestDetailPanel";
-import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
-import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
-import { RightPanelTabs, type PullRequestTabStatus } from "./RightPanelTabs";
-import { AgentsPanel } from "./AgentsPanel";
-import {
-  deriveAgentPanelModel,
-  foldSubagentActivities,
-} from "@t3tools/client-runtime/state/subagentRuntime";
-import { BranchToolbar } from "./BranchToolbar";
-import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
-import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
-import {
-  AlarmClockIcon,
-  CheckCircle2Icon,
-  ChevronDownIcon,
-  GitBranchIcon,
-  Minimize2Icon,
-  PaperclipIcon,
-  WifiOffIcon,
-} from "lucide-react";
-import { cn, randomHex } from "~/lib/utils";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { registerFaviconProjectForThread } from "~/browserFaviconStore";
+import { useBrowserHistoryStore } from "~/browserHistoryStore";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
+import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
-import { type NewProjectScriptInput } from "./ProjectScriptsControl";
+import { cn, newDraftId, newMessageId, newThreadId, randomHex } from "~/lib/utils";
 import {
   buildProjectScript,
   commandForProjectScript,
   nextProjectScriptId,
   projectScriptIdFromCommand,
 } from "~/projectScripts";
-import { newDraftId, newMessageId, newThreadId } from "~/lib/utils";
-import { useBrowserHistoryStore } from "~/browserHistoryStore";
-import { registerFaviconProjectForThread } from "~/browserFaviconStore";
-import { getProviderModelCapabilities } from "../providerModels";
+import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
+import { useAssetUrls } from "../assets/assetUrls";
+import { previewRuntimeTabId } from "../browser/previewRuntimeTabId";
+import { isCommandPaletteOpen } from "../commandPaletteBus";
 import {
-  applyProviderInstanceSettings,
-  deriveProviderInstanceEntries,
-  NO_PROVIDER_MODEL_SELECTION,
-  sortProviderInstanceEntries,
-} from "../providerInstances";
-import {
-  useClientSettings,
-  useClientSettingsHydrated,
-  useEnvironmentSettings,
-} from "../hooks/useSettings";
-import { useNowMinute } from "../hooks/useNowMinute";
-import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
-import { useNewThreadHandler } from "../hooks/useHandleNewThread";
-import { useThreadActions } from "../hooks/useThreadActions";
-import { resolveAppModelSelectionForInstance } from "../modelSelection";
-import { confirmTerminalClose, isTerminalCloseConfirmPending } from "../lib/terminalCloseConfirm";
-import { getTerminalFocusOwner } from "../lib/terminalFocus";
-import {
-  preventRepeatedTerminalCloseShortcut,
-  preventTerminalCloseShortcut,
-} from "../lib/terminalCloseShortcut";
-import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
-import {
-  derivePhysicalProjectKey,
-  deriveLogicalProjectKeyFromSettings,
-  selectProjectGroupingSettings,
-} from "../logicalProject";
-import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
-import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../threadRoutes";
+  collapseExpandedComposerCursor,
+  type ComposerSubmissionIntent,
+  parseStandaloneComposerSlashCommand,
+} from "../composer-logic";
 import {
   beginBackgroundDraftSubmissionByRef,
   clearBackgroundDraftSubmissionByRef,
   composerDraftHasUserContent,
   type ComposerFileAttachment,
   type ComposerImageAttachment,
+  type DraftId,
   type DraftThreadEnvMode,
   finalizePromotedDraftThreadByRef,
   markPromotedDraftThreadByRef,
   useComposerDraftStore,
-  type DraftId,
 } from "../composerDraftStore";
+import { useComposerHandleContext } from "../composerHandleContext";
+import { environmentCatalog } from "../connection/catalog";
+import { useDiffPanelStore } from "../diffPanelStore";
+import { isElectron } from "../env";
+import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useNowMinute } from "../hooks/useNowMinute";
 import {
-  appendTerminalContextsToPrompt,
-  formatTerminalContextLabel,
-  type TerminalContextDraft,
-  type TerminalContextSelection,
-} from "../lib/terminalContext";
+  useClientSettings,
+  useClientSettingsHydrated,
+  useEnvironmentSettings,
+} from "../hooks/useSettings";
+import { useTheme } from "../hooks/useTheme";
+import { useThreadActions } from "../hooks/useThreadActions";
+import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
+import {
+  latestWorkspaceMutationId,
+  useWorkspaceMutationRefresh,
+} from "../hooks/useWorkspaceMutationRefresh";
+import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import { assistantCitationFromLocation } from "../lib/assistantCitationNavigation";
+import {
+  awaitAttachmentUploads,
+  getUploadedAttachments,
+  releaseDraftAttachments,
+  startAttachmentUpload,
+} from "../lib/attachmentUploadQueue";
+import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
+import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "../lib/contextWindow";
 import {
   appendElementContextsToPrompt,
   type ElementContextDraft,
   formatElementContextLabel,
 } from "../lib/elementContext";
 import { appendPreviewAnnotationPrompt } from "../lib/previewAnnotation";
+import { confirmTerminalClose, isTerminalCloseConfirmPending } from "../lib/terminalCloseConfirm";
+import {
+  preventRepeatedTerminalCloseShortcut,
+  preventTerminalCloseShortcut,
+} from "../lib/terminalCloseShortcut";
+import {
+  appendTerminalContextsToPrompt,
+  formatTerminalContextLabel,
+  type TerminalContextDraft,
+  type TerminalContextSelection,
+} from "../lib/terminalContext";
+import { getTerminalFocusOwner } from "../lib/terminalFocus";
+import { readLocalApi } from "../localApi";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  derivePhysicalProjectKey,
+  selectProjectGroupingSettings,
+} from "../logicalProject";
+import { resolveAppModelSelectionForInstance } from "../modelSelection";
+import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
+import {
+  buildPendingUserInputAnswers,
+  derivePendingUserInputProgress,
+  type PendingUserInputDraftAnswer,
+  setPendingUserInputCustomAnswer,
+  togglePendingUserInputOptionSelection,
+} from "../pendingUserInput";
+import {
+  selectThreadPreviewMiniPlayer,
+  usePreviewMiniPlayerStore,
+} from "../previewMiniPlayerStore";
+import {
+  isPreviewSupportedInRuntime,
+  setActivePreviewTab,
+  useThreadPreviewState,
+} from "../previewStateStore";
+import {
+  buildPlanImplementationPrompt,
+  buildPlanImplementationThreadTitle,
+  resolvePlanFollowUpSubmission,
+} from "../proposedPlan";
+import {
+  applyProviderInstanceSettings,
+  deriveProviderInstanceEntries,
+  NO_PROVIDER_MODEL_SELECTION,
+  sortProviderInstanceEntries,
+} from "../providerInstances";
+import { getProviderModelCapabilities } from "../providerModels";
 import { appendReviewCommentsToPrompt, type ReviewCommentContext } from "../reviewCommentContext";
-import { environmentCatalog } from "../connection/catalog";
-import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
+import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
+import {
+  type RightPanelSurface,
+  selectActiveRightPanel,
+  selectActiveRightPanelSurface,
+  selectThreadRightPanelState,
+  useRightPanelStore,
+} from "../rightPanelStore";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import {
+  createMessageAttachmentPreviewProjector,
+  deriveActivePlanState,
+  deriveActiveWorkStartedAt,
+  derivePendingApprovals,
+  derivePendingUserInputs,
+  derivePhase,
+  deriveTimelineEntriesWithState,
+  deriveWorkLogEntries,
+  findLatestProposedPlan,
+  hasActionableProposedPlan,
+  isLatestTurnSettled,
+  selectHandoffImageResources,
+  type TimelineEntriesProjection,
+} from "../session-logic";
+import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
+import { assetEnvironment } from "../state/assets";
+import {
+  useProject,
+  useProjects,
+  useThread,
+  useThreadRefs,
+  useThreadShell,
+} from "../state/entities";
+import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
+import { previewEnvironment } from "../state/preview";
 import { projectEnvironment } from "../state/projects";
 import { useEnvironmentQuery } from "../state/query";
 import {
@@ -275,37 +263,32 @@ import {
   primaryServerSettingsAtom,
   serverEnvironment,
 } from "../state/server";
-import { terminalEnvironment } from "../state/terminal";
-import { threadEnvironment, useEnvironmentThread } from "../state/threads";
-import {
-  requestOlderThreadTurns,
-  threadHasOlderTurns,
-} from "@t3tools/client-runtime/state/threads";
-import { resolveProviderSkillsForCwd } from "@t3tools/client-runtime/providerSkills";
-import { vcsEnvironment } from "../state/vcs";
-import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
-import {
-  useProject,
-  useProjects,
-  useThread,
-  useThreadRefs,
-  useThreadShell,
-} from "../state/entities";
+import { readPreparedConnection } from "../state/session";
 import { environmentShell } from "../state/shell";
-import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
-import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
-import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
-import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
-import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
-import { MessagesTimeline } from "./chat/MessagesTimeline";
-import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
-import { resolveTimelineIsAtEnd } from "./chat/MessagesTimeline.logic";
-import { resolveComposerTimelineInset } from "./composerFooterLayout";
-import { ChatHeader } from "./chat/ChatHeader";
-import { PanelLayoutControls, RightPanelMaximizeControl } from "./chat/PanelLayoutControls";
-import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
-import { NoActiveThreadState } from "./NoActiveThreadState";
-import { WorkspacePageHeader } from "./WorkspacePageHeader";
+import { terminalEnvironment } from "../state/terminal";
+import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
+import { threadEnvironment, useEnvironmentThread } from "../state/threads";
+import { useAtomCommand } from "../state/use-atom-command";
+import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import { vcsEnvironment } from "../state/vcs";
+import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../threadRoutes";
+import type { ThreadSyncPhase } from "../threadSync";
+import {
+  type ChatMessage,
+  DEFAULT_INTERACTION_MODE,
+  DEFAULT_RUNTIME_MODE,
+  DEFAULT_THREAD_TERMINAL_ID,
+  isBrowserPreviewAttachment,
+  isImageAttachment,
+  MAX_TERMINALS_PER_GROUP,
+  type SessionPhase,
+  type Thread,
+  type TurnDiffSummary,
+} from "../types";
+import { useUiStateStore } from "../uiStateStore";
+import { AgentsPanel } from "./AgentsPanel";
+import { BranchToolbar } from "./BranchToolbar";
 import {
   type EnvironmentOption,
   resolveEffectiveEnvMode,
@@ -313,6 +296,32 @@ import {
   shouldShowComposerContextStrip,
   shouldShowEnvironmentIndicator,
 } from "./BranchToolbar.logic";
+import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
+import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import { ChatHeader } from "./chat/ChatHeader";
+import { fileAttachmentCapabilityBlockReason } from "./chat/composerAttachmentFiles";
+import type { ComposerBannerStackItem } from "./chat/ComposerBannerStack";
+import { ComposerSurface } from "./chat/ComposerSurface";
+import {
+  hasAvailableCompactionProvider,
+  hasDismissedResumeCompaction,
+  shouldOfferResumeCompaction,
+} from "./chat/ContextWindowMeter.logic";
+import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
+import {
+  DRAFT_HERO_TRANSITION_ANIMATION_ID,
+  DRAFT_HERO_TRANSITION_DURATION_MS,
+  DRAFT_HERO_TRANSITION_EASING,
+  MOBILE_COMPOSER_VIEW_TRANSITION_NAME,
+  MOBILE_DRAFT_HEADLINE_VIEW_TRANSITION_NAME,
+  runMobileComposerTransition,
+} from "./chat/draftHeroTransition";
+import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
+import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
+import { MessagesTimeline } from "./chat/MessagesTimeline";
+import { resolveTimelineIsAtEnd } from "./chat/MessagesTimeline.logic";
+import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
+import { PanelLayoutControls, RightPanelMaximizeControl } from "./chat/PanelLayoutControls";
 import {
   getProviderStatusBannerKey,
   ProviderStatusBanner,
@@ -326,96 +335,82 @@ import {
   ThreadErrorBanner,
 } from "./chat/ThreadErrorBanner";
 import {
-  resolveDisplayedThreadPr,
-  threadChangeRequestSnapshotsAtom,
-  useLinkedThreadPullRequest,
-} from "./ThreadStatusIndicators";
-import type { ComposerBannerStackItem } from "./chat/ComposerBannerStack";
-import { ComposerSurface } from "./chat/ComposerSurface";
+  CHAT_TIMELINE_ANCHOR_OFFSET,
+  getAnchoredTurnMetrics,
+  type TimelineScrollMode,
+} from "./chat/timelineScrollAnchoring";
+import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import {
-  hasAvailableCompactionProvider,
-  hasDismissedResumeCompaction,
-  shouldOfferResumeCompaction,
-} from "./chat/ContextWindowMeter.logic";
-import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "../lib/contextWindow";
-import {
-  DRAFT_HERO_TRANSITION_ANIMATION_ID,
-  DRAFT_HERO_TRANSITION_DURATION_MS,
-  DRAFT_HERO_TRANSITION_EASING,
-  MOBILE_COMPOSER_VIEW_TRANSITION_NAME,
-  MOBILE_DRAFT_HEADLINE_VIEW_TRANSITION_NAME,
-  runMobileComposerTransition,
-} from "./chat/draftHeroTransition";
-import {
-  MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   agentControlledBrowserCloseConfirmation,
   branchMismatchKey,
   buildExpiredTerminalContextToastCopy,
-  buildLocalDraftThread,
   buildLoadingThreadFromShell,
+  buildLocalDraftThread,
   buildRevertTurnCountByUserMessageId,
   buildThreadTurnInterruptInput,
+  cloneComposerImageForRetry,
+  codexArtifactTemplatePromptToAppend,
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
+  deriveLockedProvider,
   dismissBranchMismatchForSession,
+  getStartedThreadModelChangeBlockReason,
   hasEnvironmentReconnectWarningGraceElapsed,
-  latestTurnStartFailureId,
-  scheduleEnvironmentReconnectWarning,
   hasServerAcknowledgedLocalDispatch,
   isBranchMismatchDismissedForSession,
-  shouldDockDraftHeroForSubmission,
-  shouldReleaseTimelineAnchorForToolActivity,
-  shouldShowBranchMismatchBanner,
-  shouldShowPlanFollowUpPrompt,
-  shouldOpenProactivePullRequest,
-  shouldOpenProactiveTurnDiff,
-  shouldRenderPreviewMiniPlayer,
-  getStartedThreadModelChangeBlockReason,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
+  latestTurnStartFailureId,
   type LocalDispatchSnapshot,
+  MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   PullRequestDialogState,
-  cloneComposerImageForRetry,
-  deriveLockedProvider,
   readFileAsDataUrl,
-  resolveFileAttachmentUrl,
   reconcileMountedTerminalThreadIds,
   resolveBackgroundDraftWorkspaceOptions,
   resolveComposerInteractionMode,
   resolveComposerProviderSelection,
   resolveDraftHeroState,
+  resolveFileAttachmentUrl,
   resolveProactiveTurnDiffAction,
-  resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
+  resolveThreadMetadataUpdateForNextTurn,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
+  scheduleEnvironmentReconnectWarning,
+  shouldDockDraftHeroForSubmission,
+  shouldOpenProactivePullRequest,
+  shouldOpenProactiveTurnDiff,
+  shouldReleaseTimelineAnchorForToolActivity,
+  shouldRenderPreviewMiniPlayer,
+  shouldShowBranchMismatchBanner,
+  shouldShowPlanFollowUpPrompt,
   shouldWriteThreadErrorToCurrentServerThread,
   startNewThreadForProject,
-  codexArtifactTemplatePromptToAppend,
   toolGroupConsumesUpwardNavigation,
   waitForStartedServerThread,
 } from "./ChatView.logic";
-import type { ThreadSyncPhase } from "../threadSync";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { useComposerHandleContext } from "../composerHandleContext";
-import {
-  awaitAttachmentUploads,
-  getUploadedAttachments,
-  releaseDraftAttachments,
-  startAttachmentUpload,
-} from "../lib/attachmentUploadQueue";
-import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
+import { resolveComposerTimelineInset } from "./composerFooterLayout";
+import { NoActiveThreadState } from "./NoActiveThreadState";
+import { addBrowserSurface } from "./preview/addBrowserSurface";
+import { closePreviewSession } from "./preview/closePreviewSession";
+import { subscribePreviewAction } from "./preview/previewActionBus";
+import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
+import { ThreadPreviewMiniPlayer } from "./preview/ThreadPreviewMiniPlayer";
+import { type NewProjectScriptInput } from "./ProjectScriptsControl";
+import { isThreadOwnPullRequest } from "./pullRequest/pullRequestDetail.logic";
+import { PullRequestDetailPanel } from "./pullRequest/PullRequestDetailPanel";
+import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
+import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
+import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { RightPanelSheet } from "./RightPanelSheet";
-import { previewEnvironment } from "../state/preview";
-import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
-import { appAtomRegistry } from "../rpc/atomRegistry";
-import { fileAttachmentCapabilityBlockReason } from "./chat/composerAttachmentFiles";
-import { assetEnvironment } from "../state/assets";
-import { readPreparedConnection } from "../state/session";
-import { useAtomCommand } from "../state/use-atom-command";
-import { useAtomQueryRunner } from "../state/use-atom-query-runner";
-import { Button } from "./ui/button";
+import { type PullRequestTabStatus, RightPanelTabs } from "./RightPanelTabs";
+import {
+  resolveDisplayedThreadPr,
+  threadChangeRequestSnapshotsAtom,
+  useLinkedThreadPullRequest,
+} from "./ThreadStatusIndicators";
+import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -425,25 +420,10 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
+import { Button } from "./ui/button";
+import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { ServerUpdateAction } from "./ServerUpdateAction";
-import {
-  ComposerServerUpdateIcon,
-  ComposerServerUpdateStatus,
-} from "./chat/ComposerServerUpdateStatus";
-import {
-  buildVersionMismatchDismissalKey,
-  dismissServerUpdateFailure,
-  dismissVersionMismatch,
-  isServerUpdateFailureDismissed,
-  isVersionMismatchDismissed,
-  resolveServerConfigVersionMismatch,
-  resolveServerSelfUpdateCapability,
-  serverUpdateGuidance,
-  supportsDesktopAppUpdate,
-  supportsServerUpdateThreadContinuation,
-} from "../versionSkew";
-import { useAssetUrls } from "../assets/assetUrls";
+import { WorkspacePageHeader } from "./WorkspacePageHeader";
 
 const ATTACHMENT_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more files without additional text. Respond using the conversation context and the attached files.]";
@@ -2280,185 +2260,44 @@ export default function ChatView(props: ChatViewProps) {
     advertisedFileAttachmentBytes === null
       ? null
       : clampFileAttachmentUploadBytes(advertisedFileAttachmentBytes);
-  const versionMismatch = resolveServerConfigVersionMismatch(serverConfig);
-  const versionMismatchDismissKey =
-    versionMismatch && activeThread
-      ? buildVersionMismatchDismissalKey(activeThread.environmentId, versionMismatch)
-      : null;
-  const [dismissedVersionMismatchKey, setDismissedVersionMismatchKey] = useState<string | null>(
-    null,
-  );
-  const versionMismatchDismissed =
-    versionMismatchDismissKey === dismissedVersionMismatchKey ||
-    isVersionMismatchDismissed(versionMismatchDismissKey);
-  const showVersionMismatchBanner =
-    versionMismatch !== null && versionMismatchDismissKey !== null && !versionMismatchDismissed;
-  const hasMultipleRegisteredEnvironments = environments.length > 1;
-  const versionMismatchServerLabel =
-    hasMultipleRegisteredEnvironments && activeThread
-      ? `${environmentById.get(activeThread.environmentId)?.label ?? serverConfig?.environment.label ?? activeThread.environmentId} server`
-      : "server";
-  const serverUpdateEnvironmentId = activeThread?.environmentId ?? null;
-  const versionMismatchSelfUpdate = resolveServerSelfUpdateCapability(serverConfig);
-  const versionMismatchDesktopAppUpdate = supportsDesktopAppUpdate(serverConfig);
-  const versionMismatchThreadContinuation = supportsServerUpdateThreadContinuation(serverConfig);
-  const serverUpdateState = useAtomValue(
-    serverEnvironment.updateStateAtom(serverUpdateEnvironmentId),
-  );
-  const [dismissedServerUpdateState, setDismissedServerUpdateState] = useState<
-    typeof serverUpdateState | null
-  >(null);
-  const serverUpdateFailureDismissed =
-    serverUpdateState === dismissedServerUpdateState ||
-    isServerUpdateFailureDismissed(serverUpdateState);
   const systemComposerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const items: ComposerBannerStackItem[] = [];
-    const updateRunning = serverUpdateState.status === "running";
     const unavailableConnection = activeEnvironmentUnavailableState?.connection ?? null;
     const environmentReconnecting =
       unavailableConnection !== null &&
       (unavailableConnection.phase === "connecting" ||
         unavailableConnection.phase === "reconnecting");
-    // Reconnecting to a version-skewed server with no update in flight
-    // usually means the server is restarting mid-update and a refresh wiped
-    // the in-memory update state. Fold the reconnect and version banners
-    // into one calm line instead of stacking "Failed to connect" on
-    // "versions differ". A failed update never folds: its error and retry
-    // action must stay visible.
-    const reconnectingThroughVersionSkew =
-      serverUpdateState.status === "idle" && environmentReconnecting && versionMismatch !== null;
-    // While an update runs, transient connect blips are expected (the server
-    // restarts) and the update banner already shows progress. Hard failure
-    // phases still surface so the Reconnect action stays reachable.
-    const suppressUnavailableBanner =
-      environmentReconnecting &&
-      (updateRunning || (!reconnectingThroughVersionSkew && !reconnectWarningGraceElapsed));
+    const suppressUnavailableBanner = environmentReconnecting && !reconnectWarningGraceElapsed;
     if (activeEnvironmentUnavailableState && unavailableConnection && !suppressUnavailableBanner) {
-      if (reconnectingThroughVersionSkew) {
-        items.push({
-          id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
-          variant: "default",
-          // Prioritize live connection progress among the notices.
-          priority: "urgent",
-          icon: (
-            <span
-              className="size-1.5 animate-status-pulse rounded-full bg-foreground"
-              aria-hidden="true"
-            />
-          ),
-          title: `${unavailableConnection.phase === "connecting" ? "Connecting" : "Reconnecting"} to ${activeEnvironmentUnavailableState.label}`,
-          description: "Finishing an update",
-        });
-      } else {
-        items.push({
-          id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
-          variant: unavailableConnection.phase === "error" ? "error" : "warning",
-          icon: <WifiOffIcon />,
-          title: `${activeEnvironmentUnavailableState.label} is ${environmentReconnecting ? "reconnecting" : "offline"}`,
-          description: environmentReconnecting ? "Trying again" : "Reconnect to continue",
-          actions: (
-            <>
-              <Button
-                size="xs"
-                variant="ghost"
-                disabled={environmentReconnecting}
-                onClick={() =>
-                  void handleReconnectActiveEnvironment(
-                    activeEnvironmentUnavailableState.environmentId,
-                  )
-                }
-              >
-                {environmentReconnecting ? "Reconnecting..." : "Reconnect"}
-              </Button>
-              <Button
-                size="xs"
-                variant="ghost"
-                onClick={() => void navigate({ to: "/settings/connections" })}
-              >
-                Connections
-              </Button>
-            </>
-          ),
-        });
-      }
-    }
-    if (
-      serverUpdateEnvironmentId &&
-      !reconnectingThroughVersionSkew &&
-      (serverUpdateState.status === "idle"
-        ? showVersionMismatchBanner
-        : !serverUpdateFailureDismissed)
-    ) {
-      const updateInProgress = serverUpdateState.status === "running";
-      const updateFailed = serverUpdateState.status === "failed";
       items.push({
-        id: `server-version:${serverUpdateEnvironmentId}`,
-        variant: updateFailed ? "error" : "default",
-        // Prioritize update progress over passive notices, but keep activity attached.
-        priority: updateInProgress ? "urgent" : "notice",
-        icon: <ComposerServerUpdateIcon status={serverUpdateState.status} />,
-        title:
-          updateInProgress || updateFailed ? (
-            <ComposerServerUpdateStatus
-              state={serverUpdateState}
-              serverLabel={versionMismatchServerLabel}
-            />
-          ) : versionMismatch ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    className="block max-w-full cursor-help truncate rounded-sm text-left"
-                  >
-                    Server update available
-                  </button>
-                }
-              />
-              <TooltipPopup side="top">
-                {versionMismatchServerLabel} {versionMismatch.serverVersion}{" "}
-                <span aria-hidden="true">→</span> {versionMismatch.clientVersion}
-              </TooltipPopup>
-            </Tooltip>
-          ) : (
-            "Server update available"
-          ),
-        description:
-          !updateInProgress &&
-          !updateFailed &&
-          versionMismatchSelfUpdate !== null &&
-          (versionMismatchSelfUpdate !== "desktop-managed" || !versionMismatchDesktopAppUpdate)
-            ? serverUpdateGuidance(versionMismatchSelfUpdate)
-            : undefined,
-        actions:
-          updateInProgress ||
-          !versionMismatch ||
-          (versionMismatchSelfUpdate === "desktop-managed" &&
-            !versionMismatchDesktopAppUpdate) ? undefined : (
-            <ServerUpdateAction
-              environmentId={serverUpdateEnvironmentId}
-              serverLabel={versionMismatchServerLabel}
-              selfUpdate={versionMismatchSelfUpdate}
-              desktopAppUpdate={versionMismatchDesktopAppUpdate}
-              threadContinuation={versionMismatchThreadContinuation}
-              targetVersion={versionMismatch.clientVersion}
-              label={updateFailed ? "Retry" : "Update"}
+        id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
+        variant: unavailableConnection.phase === "error" ? "error" : "warning",
+        icon: <WifiOffIcon />,
+        title: `${activeEnvironmentUnavailableState.label} is ${environmentReconnecting ? "reconnecting" : "offline"}`,
+        description: environmentReconnecting ? "Trying again" : "Reconnect to continue",
+        actions: (
+          <>
+            <Button
+              size="xs"
               variant="ghost"
-            />
-          ),
-        ...(updateInProgress || (!updateFailed && !versionMismatchDismissKey)
-          ? {}
-          : {
-              dismissLabel: "Dismiss update notice",
-              onDismiss: () => {
-                if (updateFailed) {
-                  dismissServerUpdateFailure(serverUpdateState);
-                  setDismissedServerUpdateState(serverUpdateState);
-                }
-                dismissVersionMismatch(versionMismatchDismissKey);
-                setDismissedVersionMismatchKey(versionMismatchDismissKey);
-              },
-            }),
+              disabled={environmentReconnecting}
+              onClick={() =>
+                void handleReconnectActiveEnvironment(
+                  activeEnvironmentUnavailableState.environmentId,
+                )
+              }
+            >
+              {environmentReconnecting ? "Reconnecting..." : "Reconnect"}
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => void navigate({ to: "/settings/connections" })}
+            >
+              Local environment
+            </Button>
+          </>
+        ),
       });
     }
     return items;
@@ -2467,17 +2306,6 @@ export default function ChatView(props: ChatViewProps) {
     reconnectWarningGraceElapsed,
     handleReconnectActiveEnvironment,
     navigate,
-    setDismissedVersionMismatchKey,
-    showVersionMismatchBanner,
-    serverUpdateFailureDismissed,
-    serverUpdateState,
-    versionMismatch,
-    versionMismatchDismissKey,
-    serverUpdateEnvironmentId,
-    versionMismatchSelfUpdate,
-    versionMismatchDesktopAppUpdate,
-    versionMismatchThreadContinuation,
-    versionMismatchServerLabel,
   ]);
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
   const providerInstanceEntries = useMemo(
