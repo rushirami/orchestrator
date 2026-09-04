@@ -1,3 +1,4 @@
+import { browserCryptoLayer } from "./crypto";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,21 +8,7 @@ import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 import * as PrimaryEnvironmentHttpClient from "../environments/primary/httpClient";
 import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 
-import { browserCryptoLayer } from "../cloud/dpop";
-import { managedRelayClientLayer } from "../cloud/managedRelayLayer";
-import { resolveCloudPublicConfig } from "../cloud/publicConfig";
-
-function configuredRelayUrl(): string {
-  return resolveCloudPublicConfig().relayUrl ?? "http://relay.invalid";
-}
-
 const httpClientLayer = remoteHttpClientLayer((input, init) => globalThis.fetch(input, init));
-type RuntimeLayerSource =
-  | typeof httpClientLayer
-  | typeof browserCryptoLayer
-  | typeof Socket.layerWebSocketConstructorGlobal
-  | ReturnType<typeof managedRelayClientLayer>;
-
 export const remoteHttpRuntime = ManagedRuntime.make(httpClientLayer);
 
 const primaryHttpRuntime = ManagedRuntime.make(
@@ -49,17 +36,11 @@ const runtimeLayer = Layer.mergeAll(
   httpClientLayer,
   browserCryptoLayer,
   Socket.layerWebSocketConstructorGlobal,
-  managedRelayClientLayer(configuredRelayUrl()).pipe(
-    Layer.provide(Layer.mergeAll(httpClientLayer, browserCryptoLayer)),
-  ),
 );
 
-export const runtime: ManagedRuntime.ManagedRuntime<
-  Layer.Success<RuntimeLayerSource>,
-  Layer.Error<RuntimeLayerSource>
-> = ManagedRuntime.make(runtimeLayer);
+export const runtime = ManagedRuntime.make(runtimeLayer);
 
 export const runtimeContextLayer: Layer.Layer<
-  Layer.Success<RuntimeLayerSource>,
-  Layer.Error<RuntimeLayerSource>
+  Layer.Success<typeof runtimeLayer>,
+  Layer.Error<typeof runtimeLayer>
 > = Layer.effectContext(runtime.contextEffect);
