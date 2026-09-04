@@ -8,12 +8,6 @@ import {
   setConnectionCatalog,
 } from "./methods/connectionCatalog.ts";
 import {
-  getAdvertisedEndpoints,
-  getServerExposureState,
-  setServerExposureMode,
-  setTailscaleServeEnabled,
-} from "./methods/serverExposure.ts";
-import {
   bootstrapSshBearerSession,
   disconnectSshEnvironment,
   discoverSshHosts,
@@ -77,10 +71,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(issueSshWebSocketTicket);
   yield* ipc.handle(resolveSshPasswordPrompt);
 
-  yield* ipc.handle(getServerExposureState);
-  yield* ipc.handle(setServerExposureMode);
-  yield* ipc.handle(setTailscaleServeEnabled);
-  yield* ipc.handle(getAdvertisedEndpoints);
 
   yield* ipc.handle(getWslState);
   yield* ipc.handle(setWslBackendEnabled);

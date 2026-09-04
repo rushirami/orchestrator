@@ -12,7 +12,7 @@ import serverPackageJson from "../../../server/package.json" with { type: "json"
 
 import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import * as DesktopServerExposure from "./DesktopServerExposure.ts";
+import * as DesktopBackendEndpoint from "./DesktopBackendEndpoint.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
@@ -21,7 +21,7 @@ export class DesktopBackendConfiguration extends Context.Service<
   DesktopBackendConfiguration,
   {
     // Build the Windows-native primary backend's start config. Reads the
-    // primary's port/host/exposure from DesktopServerExposure. Can fail
+    // primary's port/host/exposure from DesktopBackendEndpoint. Can fail
     // with PlatformError because bootstrap token generation now uses
     // crypto.randomBytes under the hood (post Effect 4 migration).
     readonly resolvePrimary: Effect.Effect<
@@ -378,11 +378,11 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
   ): Effect.fn.Return<
     DesktopBackendManager.DesktopBackendStartConfig,
     never,
-    DesktopEnvironment.DesktopEnvironment | DesktopServerExposure.DesktopServerExposure
+    DesktopEnvironment.DesktopEnvironment | DesktopBackendEndpoint.DesktopBackendEndpoint
   > {
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
-    const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
-    const backendExposure = yield* serverExposure.backendConfig;
+    const backendEndpoint = yield* DesktopBackendEndpoint.DesktopBackendEndpoint;
+    const backendExposure = yield* backendEndpoint.backendConfig;
 
     const bootstrap = {
       mode: "desktop" as const,
@@ -609,7 +609,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
-  const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+  const backendEndpoint = yield* DesktopBackendEndpoint.DesktopBackendEndpoint;
   const wslEnvironment = yield* DesktopWslEnvironment.DesktopWslEnvironment;
   const wslServerTree = yield* DesktopWslServerTree.DesktopWslServerTree;
   const settings = yield* DesktopAppSettings.DesktopAppSettings;
@@ -647,10 +647,10 @@ export const make = Effect.gen(function* () {
     // wsl-only mode pipes the WSL backend through the same port the
     // Windows primary would normally take. That way the renderer
     // still loads from the local-only endpoint advertised by
-    // DesktopServerExposure, and primary-aware code paths (cookie
+    // DesktopBackendEndpoint, and primary-aware code paths (cookie
     // auth, the env switcher's "primary" id) keep working without
     // a parallel "secondary" registration.
-    const backendExposure = yield* serverExposure.backendConfig;
+    const backendExposure = yield* backendEndpoint.backendConfig;
     const persistedSettings = yield* settings.get;
     const shared = yield* sharedInputs;
     yield* wslEnvironment.preWarm(persistedSettings.wslDistro);
@@ -674,7 +674,7 @@ export const make = Effect.gen(function* () {
     );
     return yield* resolvePrimaryStartConfig({ ...shared, resourceMonitorPath }).pipe(
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
-      Effect.provideService(DesktopServerExposure.DesktopServerExposure, serverExposure),
+      Effect.provideService(DesktopBackendEndpoint.DesktopBackendEndpoint, backendEndpoint),
     );
   });
 

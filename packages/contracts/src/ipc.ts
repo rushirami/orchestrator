@@ -1,116 +1,114 @@
-import type {
-  VcsCreateRefInput,
-  VcsCreateRefResult,
-  VcsCreateWorktreeInput,
-  VcsCreateWorktreeResult,
-  VcsInitInput,
-  VcsListRefsInput,
-  VcsListRefsResult,
-  VcsPullInput,
-  VcsPullResult,
-  VcsRemoveWorktreeInput,
-  VcsSwitchRefInput,
-  VcsSwitchRefResult,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
-  GitPullRequestRefInput,
-  GitResolvePullRequestResult,
-  VcsStatusInput,
-  VcsStatusResult,
-} from "./git.ts";
-import type {
-  ReviewDiffFileContentsInput,
-  ReviewDiffFileContentsResult,
-  ReviewDiffPreviewInput,
-  ReviewDiffPreviewResult,
-} from "./review.ts";
-import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
-import type { AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
-import type {
-  ProjectListEntriesInput,
-  ProjectListEntriesResult,
-  ProjectReadFileInput,
-  ProjectReadFileResult,
-  ProjectSearchEntriesInput,
-  ProjectSearchEntriesResult,
-  ProjectWriteFileInput,
-  ProjectWriteFileResult,
-} from "./project.ts";
-import type {
-  TerminalAttachInput,
-  TerminalAttachStreamEvent,
-  TerminalClearInput,
-  TerminalCloseInput,
-  TerminalMetadataStreamEvent,
-  TerminalOpenInput,
-  TerminalResizeInput,
-  TerminalRestartInput,
-  TerminalSessionSnapshot,
-  TerminalWriteInput,
-} from "./terminal.ts";
 import * as Schema from "effect/Schema";
-import type {
-  DiscoveredLocalServerList,
-  PreviewCloseInput,
-  PreviewEvent,
-  PreviewListInput,
-  PreviewListResult,
-  PreviewNavigateInput,
-  PreviewOpenInput,
-  PreviewRefreshInput,
-  PreviewReportStatusInput,
-  PreviewResizeInput,
-  PreviewSessionSnapshot,
-} from "./preview.ts";
-import {
-  PreviewAutomationClickInput,
-  PreviewAutomationEvaluateInput,
-  PreviewAutomationHost,
-  PreviewAutomationHostFocus,
-  PreviewAutomationPressInput,
-  PreviewAutomationResponse,
-  PreviewAutomationScrollInput,
-  PreviewAutomationSnapshot,
-  PreviewAutomationStatus,
-  PreviewAutomationStreamEvent,
-  PreviewAutomationTypeInput,
-  PreviewAutomationWaitForInput,
-} from "./previewAutomation.ts";
-import type {
-  ClientOrchestrationCommand,
-  OrchestrationGetFullThreadDiffInput,
-  OrchestrationGetFullThreadDiffResult,
-  OrchestrationGetTurnDiffInput,
-  OrchestrationGetTurnDiffResult,
-  OrchestrationShellSnapshot,
-  OrchestrationShellStreamItem,
-  OrchestrationSubscribeThreadInput,
-  OrchestrationThreadStreamItem,
-} from "./orchestration.ts";
+import type { AssetCreateUrlInput,AssetCreateUrlResult } from "./assets.ts";
+import { AuthAccessTokenResult,AuthSessionState,AuthWebSocketTicketResult } from "./auth.ts";
 import { EnvironmentId } from "./baseSchemas.ts";
+import type {
+BrowserImportResult,
+BrowserImportSource,
+BrowserImportSourceId,
+} from "./browserImport.ts";
 import { BrowserProfileId } from "./browserProfile.ts";
 import type {
-  BrowserImportResult,
-  BrowserImportSource,
-  BrowserImportSourceId,
-} from "./browserImport.ts";
-import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
-import { AdvertisedEndpoint } from "./remoteAccess.ts";
+DesktopAppActivationRequest,
+DesktopAppActivationResponse,
+} from "./desktopAppActivation.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
-import type { ClientSettings, QuitConfirmationMode } from "./settings.ts";
-import type { EditorId } from "./editor.ts";
+import type { FilesystemBrowseInput,FilesystemBrowseResult } from "./filesystem.ts";
 import type {
-  SourceControlCloneRepositoryInput,
-  SourceControlCloneRepositoryResult,
-  SourceControlPublishRepositoryInput,
-  SourceControlPublishRepositoryResult,
-  SourceControlRepositoryInfo,
-  SourceControlRepositoryLookupInput,
+GitPreparePullRequestThreadInput,
+GitPreparePullRequestThreadResult,
+GitPullRequestRefInput,
+GitResolvePullRequestResult,
+VcsCreateRefInput,
+VcsCreateRefResult,
+VcsCreateWorktreeInput,
+VcsCreateWorktreeResult,
+VcsInitInput,
+VcsListRefsInput,
+VcsListRefsResult,
+VcsPullInput,
+VcsPullResult,
+VcsRemoveWorktreeInput,
+VcsStatusInput,
+VcsStatusResult,
+VcsSwitchRefInput,
+VcsSwitchRefResult,
+} from "./git.ts";
+import type {
+ClientOrchestrationCommand,
+OrchestrationGetFullThreadDiffInput,
+OrchestrationGetFullThreadDiffResult,
+OrchestrationGetTurnDiffInput,
+OrchestrationGetTurnDiffResult,
+OrchestrationShellSnapshot,
+OrchestrationShellStreamItem,
+OrchestrationSubscribeThreadInput,
+OrchestrationThreadStreamItem,
+} from "./orchestration.ts";
+import type {
+DiscoveredLocalServerList,
+PreviewCloseInput,
+PreviewEvent,
+PreviewListInput,
+PreviewListResult,
+PreviewNavigateInput,
+PreviewOpenInput,
+PreviewRefreshInput,
+PreviewReportStatusInput,
+PreviewResizeInput,
+PreviewSessionSnapshot,
+} from "./preview.ts";
+import {
+PreviewAutomationClickInput,
+PreviewAutomationEvaluateInput,
+PreviewAutomationHost,
+PreviewAutomationHostFocus,
+PreviewAutomationPressInput,
+PreviewAutomationResponse,
+PreviewAutomationScrollInput,
+PreviewAutomationSnapshot,
+PreviewAutomationStatus,
+PreviewAutomationStreamEvent,
+PreviewAutomationTypeInput,
+PreviewAutomationWaitForInput,
+} from "./previewAutomation.ts";
+import type {
+ProjectListEntriesInput,
+ProjectListEntriesResult,
+ProjectReadFileInput,
+ProjectReadFileResult,
+ProjectSearchEntriesInput,
+ProjectSearchEntriesResult,
+ProjectWriteFileInput,
+ProjectWriteFileResult,
+} from "./project.ts";
+import type {
+ReviewDiffFileContentsInput,
+ReviewDiffFileContentsResult,
+ReviewDiffPreviewInput,
+ReviewDiffPreviewResult,
+} from "./review.ts";
+import type { ClientSettings,QuitConfirmationMode } from "./settings.ts";
+import type {
+SourceControlCloneRepositoryInput,
+SourceControlCloneRepositoryResult,
+SourceControlPublishRepositoryInput,
+SourceControlPublishRepositoryResult,
+SourceControlRepositoryInfo,
+SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import type {
-  DesktopAppActivationRequest,
-  DesktopAppActivationResponse,
-} from "./desktopAppActivation.ts";
+TerminalAttachInput,
+TerminalAttachStreamEvent,
+TerminalClearInput,
+TerminalCloseInput,
+TerminalMetadataStreamEvent,
+TerminalOpenInput,
+TerminalResizeInput,
+TerminalRestartInput,
+TerminalSessionSnapshot,
+TerminalWriteInput,
+} from "./terminal.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -410,29 +408,6 @@ export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
   ),
 });
 export type PersistedSavedEnvironmentRecord = typeof PersistedSavedEnvironmentRecordSchema.Type;
-
-export type DesktopServerExposureMode = "local-only" | "network-accessible";
-
-export const DesktopServerExposureModeSchema = Schema.Literals([
-  "local-only",
-  "network-accessible",
-]);
-
-export interface DesktopServerExposureState {
-  mode: DesktopServerExposureMode;
-  endpointUrl: string | null;
-  advertisedHost: string | null;
-  tailscaleServeEnabled: boolean;
-  tailscaleServePort: number;
-}
-
-export const DesktopServerExposureStateSchema = Schema.Struct({
-  mode: DesktopServerExposureModeSchema,
-  endpointUrl: Schema.NullOr(Schema.String),
-  advertisedHost: Schema.NullOr(Schema.String),
-  tailscaleServeEnabled: Schema.Boolean,
-  tailscaleServePort: Schema.Number,
-});
 
 export interface PickFolderOptions {
   initialPath?: string | null;
@@ -1093,13 +1068,6 @@ export interface DesktopBridge {
   ) => Promise<AuthWebSocketTicketResult>;
   onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => () => void;
   resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
-  getServerExposureState: () => Promise<DesktopServerExposureState>;
-  setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
-  setTailscaleServeEnabled: (input: {
-    readonly enabled: boolean;
-    readonly port?: number;
-  }) => Promise<DesktopServerExposureState>;
-  getAdvertisedEndpoints: () => Promise<readonly AdvertisedEndpoint[]>;
   getWslState: () => Promise<DesktopWslState>;
   setWslBackendEnabled: (enabled: boolean) => Promise<DesktopWslState>;
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;

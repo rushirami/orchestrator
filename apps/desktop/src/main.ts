@@ -40,13 +40,12 @@ import * as DesktopAssets from "./app/DesktopAssets.ts";
 import * as DesktopBackendConfiguration from "./backend/DesktopBackendConfiguration.ts";
 import * as DesktopBackendPool from "./backend/DesktopBackendPool.ts";
 import * as DesktopLocalEnvironmentAuth from "./backend/DesktopLocalEnvironmentAuth.ts";
-import * as DesktopNetworkInterfaces from "./backend/DesktopNetworkInterfaces.ts";
 import * as DesktopEnvironment from "./app/DesktopEnvironment.ts";
 import * as DesktopLifecycle from "./app/DesktopLifecycle.ts";
 import * as DesktopLinuxUrlHandler from "./app/DesktopLinuxUrlHandler.ts";
 import * as DesktopShutdown from "./app/DesktopShutdown.ts";
 import * as DesktopObservability from "./app/DesktopObservability.ts";
-import * as DesktopServerExposure from "./backend/DesktopServerExposure.ts";
+import * as DesktopBackendEndpoint from "./backend/DesktopBackendEndpoint.ts";
 import * as DesktopClientSettings from "./settings/DesktopClientSettings.ts";
 import * as DesktopSavedEnvironments from "./settings/DesktopSavedEnvironments.ts";
 import * as DesktopAppSettings from "./settings/DesktopAppSettings.ts";
@@ -144,8 +143,7 @@ const desktopSshLayer = desktopSshEnvironmentLayer.pipe(
   Layer.provideMerge(DesktopSshPasswordPrompts.layer()),
 );
 
-const desktopServerExposureLayer = DesktopServerExposure.layer.pipe(
-  Layer.provideMerge(DesktopNetworkInterfaces.layer),
+const desktopBackendEndpointLayer = DesktopBackendEndpoint.layer.pipe(
   Layer.provideMerge(desktopFoundationLayer),
 );
 
@@ -158,7 +156,7 @@ const desktopPreviewLayer = PreviewManager.layer.pipe(
 );
 
 const desktopWindowLayer = DesktopWindow.layer.pipe(
-  Layer.provideMerge(desktopServerExposureLayer),
+  Layer.provideMerge(desktopBackendEndpointLayer),
   Layer.provideMerge(desktopPreviewLayer),
 );
 
@@ -181,7 +179,7 @@ const desktopBackendLayer = DesktopBackendPool.layer.pipe(
 );
 
 // WSL orchestrator hangs off the backend layer because it needs the
-// pool + configuration + serverExposure; it pulls NetService and the
+// pool + configuration + backendEndpoint; it pulls NetService and the
 // foundation services through the same provideMerge chain.
 const desktopWslBackendLayer = DesktopWslBackend.layer.pipe(
   Layer.provideMerge(desktopBackendLayer),

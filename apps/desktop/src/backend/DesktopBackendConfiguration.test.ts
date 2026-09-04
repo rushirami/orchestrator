@@ -12,7 +12,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
-import * as DesktopServerExposure from "./DesktopServerExposure.ts";
+import * as DesktopBackendEndpoint from "./DesktopBackendEndpoint.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
@@ -25,20 +25,13 @@ const encodePersistedServerObservabilitySettingsDocument = Schema.encodeEffect(
   Schema.fromJsonString(PersistedServerObservabilitySettingsDocument),
 );
 
-const serverExposureLayer = Layer.succeed(DesktopServerExposure.DesktopServerExposure, {
-  getState: Effect.die("unexpected getState"),
+const backendEndpointLayer = Layer.succeed(DesktopBackendEndpoint.DesktopBackendEndpoint, {
   backendConfig: Effect.succeed({
     port: 4888,
-    bindHost: "0.0.0.0",
     httpBaseUrl: new URL("http://127.0.0.1:4888"),
-    tailscaleServeEnabled: true,
-    tailscaleServePort: 8443,
   }),
-  configureFromSettings: () => Effect.die("unexpected configureFromSettings"),
-  setMode: () => Effect.die("unexpected setMode"),
-  setTailscaleServeEnabled: () => Effect.die("unexpected setTailscaleServeEnabled"),
-  getAdvertisedEndpoints: Effect.succeed([]),
-} satisfies DesktopServerExposure.DesktopServerExposure["Service"]);
+  configure: () => Effect.die("unexpected configure"),
+} satisfies DesktopBackendEndpoint.DesktopBackendEndpoint["Service"]);
 
 function makeEnvironmentLayer(
   baseDir: string,
@@ -106,7 +99,7 @@ const withHarness = <A, E, R>(
     return yield* effect.pipe(
       Effect.provide(
         DesktopBackendConfiguration.layer.pipe(
-          Layer.provideMerge(serverExposureLayer),
+          Layer.provideMerge(backendEndpointLayer),
           Layer.provideMerge(DesktopAppSettings.layerTest()),
           Layer.provideMerge(DesktopWslEnvironment.layerTest()),
           Layer.provideMerge(DesktopWslServerTree.layerTest()),
@@ -184,7 +177,7 @@ const withPackagedWslHarness = <A, E, R>(
     return yield* effect(context).pipe(
       Effect.provide(
         DesktopBackendConfiguration.layer.pipe(
-          Layer.provideMerge(serverExposureLayer),
+          Layer.provideMerge(backendEndpointLayer),
           Layer.provideMerge(DesktopAppSettings.layerTest()),
           Layer.provideMerge(serverTreeLayer),
           Layer.provideMerge(
@@ -261,7 +254,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslEnvironment.layerTest()),
             Layer.provideMerge(
@@ -323,7 +316,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(
@@ -658,7 +651,7 @@ describe("DesktopBackendConfiguration", () => {
         }).pipe(
           Effect.provide(
             DesktopBackendConfiguration.layer.pipe(
-              Layer.provideMerge(serverExposureLayer),
+              Layer.provideMerge(backendEndpointLayer),
               Layer.provideMerge(DesktopAppSettings.layerTest()),
               Layer.provideMerge(DesktopWslServerTree.layerTest()),
               Layer.provideMerge(
@@ -776,7 +769,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(DesktopWslEnvironment.layerTest()),
@@ -832,7 +825,7 @@ describe("DesktopBackendConfiguration", () => {
         }).pipe(
           Effect.provide(
             DesktopBackendConfiguration.layer.pipe(
-              Layer.provideMerge(serverExposureLayer),
+              Layer.provideMerge(backendEndpointLayer),
               Layer.provideMerge(DesktopAppSettings.layerTest()),
               Layer.provideMerge(DesktopWslServerTree.layerTest()),
               Layer.provideMerge(
@@ -877,7 +870,7 @@ describe("DesktopBackendConfiguration", () => {
         }).pipe(
           Effect.provide(
             DesktopBackendConfiguration.layer.pipe(
-              Layer.provideMerge(serverExposureLayer),
+              Layer.provideMerge(backendEndpointLayer),
               Layer.provideMerge(
                 DesktopAppSettings.layerTest({
                   ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
@@ -914,7 +907,7 @@ describe("DesktopBackendConfiguration", () => {
         }).pipe(
           Effect.provide(
             DesktopBackendConfiguration.layer.pipe(
-              Layer.provideMerge(serverExposureLayer),
+              Layer.provideMerge(backendEndpointLayer),
               Layer.provideMerge(
                 DesktopAppSettings.layerTest({
                   ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
@@ -955,7 +948,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(
@@ -990,7 +983,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(
@@ -1024,7 +1017,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(
               DesktopWslServerTree.layerTest({
@@ -1065,7 +1058,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(
@@ -1095,7 +1088,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(
               DesktopAppSettings.layerTest({
                 ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
@@ -1144,7 +1137,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(DesktopWslEnvironment.layerTest()),
@@ -1190,7 +1183,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
             Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(DesktopWslEnvironment.layerTest()),
@@ -1234,7 +1227,7 @@ describe("DesktopBackendConfiguration", () => {
       }).pipe(
         Effect.provide(
           DesktopBackendConfiguration.layer.pipe(
-            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(backendEndpointLayer),
             Layer.provideMerge(
               DesktopAppSettings.layerTest({
                 ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
@@ -1263,7 +1256,7 @@ describe("DesktopBackendConfiguration", () => {
     // oxlint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- This test intentionally replicates the sync IPC handler's runSync path to catch a regression to async-only resolution; it.effect would mask it.
     const runtime = ManagedRuntime.make(
       DesktopBackendConfiguration.layer.pipe(
-        Layer.provideMerge(serverExposureLayer),
+        Layer.provideMerge(backendEndpointLayer),
         Layer.provideMerge(DesktopAppSettings.layerTest()),
         Layer.provideMerge(DesktopWslServerTree.layerTest()),
         Layer.provideMerge(DesktopWslEnvironment.layer),

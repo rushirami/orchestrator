@@ -3,7 +3,6 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -25,9 +24,6 @@ const DesktopSettingsPatch = Schema.Struct({
     ),
   ),
   mainWindowMaximized: Schema.optionalKey(Schema.Boolean),
-  serverExposureMode: Schema.optionalKey(Schema.Literals(["local-only", "network-accessible"])),
-  tailscaleServeEnabled: Schema.optionalKey(Schema.Boolean),
-  tailscaleServePort: Schema.optionalKey(Schema.Number),
   updateChannel: Schema.optionalKey(Schema.Literals(["latest", "nightly"])),
   updateChannelConfiguredByUser: Schema.optionalKey(Schema.Boolean),
   wslBackendEnabled: Schema.optionalKey(Schema.Boolean),
@@ -108,9 +104,6 @@ describe("DesktopSettings", () => {
         linuxPasswordStore: "auto",
         mainWindowBounds: null,
         mainWindowMaximized: false,
-        serverExposureMode: "local-only",
-        tailscaleServeEnabled: false,
-        tailscaleServePort: 443,
         updateChannel: "nightly",
         updateChannelConfiguredByUser: false,
         wslBackendEnabled: false,
@@ -120,15 +113,36 @@ describe("DesktopSettings", () => {
     );
   });
 
+  it.effect("ignores legacy network exposure settings and drops them on the next save", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* fs.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fs.writeFileString(
+          environment.desktopSettingsPath,
+          '{"serverExposureMode":"network-accessible","tailscaleServeEnabled":true,"tailscaleServePort":443,"wslDistro":"Ubuntu"}',
+        );
+        const loaded = yield* settings.load;
+        assert.equal(loaded.wslDistro, "Ubuntu");
+        assert.notProperty(loaded, "serverExposureMode");
+        assert.notProperty(loaded, "tailscaleServeEnabled");
+        yield* settings.setWslBackendEnabled(true);
+        const saved = yield* fs.readFileString(environment.desktopSettingsPath);
+        assert.notInclude(saved, "serverExposureMode");
+        assert.notInclude(saved, "tailscaleServe");
+        assert.include(saved, "Ubuntu");
+      }),
+    ),
+  );
+
   it.effect("loads persisted settings and applies semantic updates", () =>
     withSettings(
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* writeSettingsPatch({
           linuxPasswordStore: "gnome-libsecret",
-          serverExposureMode: "network-accessible",
-          tailscaleServeEnabled: true,
-          tailscaleServePort: 8443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
         });
@@ -137,26 +151,12 @@ describe("DesktopSettings", () => {
           linuxPasswordStore: "gnome-libsecret",
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          serverExposureMode: "network-accessible",
-          tailscaleServeEnabled: true,
-          tailscaleServePort: 8443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
           wslBackendEnabled: false,
           wslOnly: false,
           wslDistro: null,
         } satisfies DesktopAppSettings.DesktopSettings);
-
-        const exposure = yield* settings.setServerExposureMode("local-only");
-        assert.isTrue(exposure.changed);
-        assert.equal(exposure.settings.serverExposureMode, "local-only");
-
-        const tailscale = yield* settings.setTailscaleServe({
-          enabled: true,
-          port: Option.some(9443),
-        });
-        assert.isTrue(tailscale.changed);
-        assert.equal(tailscale.settings.tailscaleServePort, 9443);
 
         const updateChannel = yield* settings.setUpdateChannel("nightly");
         assert.isTrue(updateChannel.changed);
@@ -174,7 +174,7 @@ describe("DesktopSettings", () => {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* fileSystem.makeDirectory(environment.desktopSettingsPath, { recursive: true });
 
-        const error = yield* settings.setServerExposureMode("network-accessible").pipe(Effect.flip);
+        const error = yield* settings.setWslBackendEnabled(true).pipe(Effect.flip);
         assert.instanceOf(error, DesktopAppSettings.DesktopSettingsWriteError);
         assert.equal(error.operation, "replace-settings-file");
         assert.equal(error.path, environment.desktopSettingsPath);
@@ -191,15 +191,6 @@ describe("DesktopSettings", () => {
     withSettings(
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
-
-        const exposure = yield* settings.setServerExposureMode("local-only");
-        assert.isFalse(exposure.changed);
-
-        const tailscale = yield* settings.setTailscaleServe({
-          enabled: false,
-          port: Option.none(),
-        });
-        assert.isFalse(tailscale.changed);
 
         const updateChannel = yield* settings.setUpdateChannel("latest");
         assert.isFalse(updateChannel.changed);
@@ -244,9 +235,6 @@ describe("DesktopSettings", () => {
           linuxPasswordStore: "auto",
           mainWindowBounds: { x: 120, y: 80, width: 1280, height: 900 },
           mainWindowMaximized: false,
-          serverExposureMode: "network-accessible",
-          tailscaleServeEnabled: true,
-          tailscaleServePort: 8443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
@@ -264,13 +252,11 @@ describe("DesktopSettings", () => {
         yield* writeSettingsPatch({
           mainWindowBounds: { x: 10.5, y: 20, width: 839, height: 620 },
           mainWindowMaximized: true,
-          serverExposureMode: "network-accessible",
         });
 
         const loaded = yield* settings.load;
         assert.isNull(loaded.mainWindowBounds);
         assert.isFalse(loaded.mainWindowMaximized);
-        assert.equal(loaded.serverExposureMode, "network-accessible");
       }),
     ),
   );
@@ -300,9 +286,6 @@ describe("DesktopSettings", () => {
             linuxPasswordStore: "auto",
             mainWindowBounds: null,
             mainWindowMaximized: false,
-            serverExposureMode: "network-accessible",
-            tailscaleServeEnabled: true,
-            tailscaleServePort: 8443,
             updateChannel: "nightly",
             updateChannelConfiguredByUser: true,
             wslBackendEnabled: false,
@@ -321,7 +304,7 @@ describe("DesktopSettings", () => {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
 
         yield* settings.setMainWindowBounds({ x: -1200, y: 40, width: 1440, height: 960 }, true);
-        yield* settings.setServerExposureMode("network-accessible");
+        yield* settings.setWslBackendEnabled(true);
 
         const persisted = yield* decodeDesktopSettingsPatch(
           yield* fileSystem.readFileString(environment.desktopSettingsPath),
@@ -329,7 +312,7 @@ describe("DesktopSettings", () => {
         assert.deepEqual(persisted, {
           mainWindowBounds: { x: -1200, y: 40, width: 1440, height: 960 },
           mainWindowMaximized: true,
-          serverExposureMode: "network-accessible",
+          wslBackendEnabled: true,
         } satisfies typeof DesktopSettingsPatch.Type);
       }),
     ),
@@ -340,7 +323,6 @@ describe("DesktopSettings", () => {
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* writeSettingsPatch({
-          serverExposureMode: "local-only",
           updateChannel: "latest",
         });
 
@@ -348,9 +330,6 @@ describe("DesktopSettings", () => {
           linuxPasswordStore: "auto",
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
           updateChannel: "nightly",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
@@ -367,7 +346,6 @@ describe("DesktopSettings", () => {
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* writeSettingsPatch({
-          serverExposureMode: "local-only",
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
         });
@@ -376,9 +354,6 @@ describe("DesktopSettings", () => {
           linuxPasswordStore: "auto",
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
           wslBackendEnabled: false,
@@ -394,18 +369,12 @@ describe("DesktopSettings", () => {
     withSettings(
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
-        yield* writeSettingsPatch({
-          tailscaleServeEnabled: true,
-          tailscaleServePort: 0,
-        });
+        yield* writeSettingsPatch({});
 
         assert.deepEqual(yield* settings.load, {
           linuxPasswordStore: "auto",
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          serverExposureMode: "local-only",
-          tailscaleServeEnabled: true,
-          tailscaleServePort: 443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
