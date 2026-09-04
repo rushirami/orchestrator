@@ -542,8 +542,6 @@ const buildAppUnderTest = (options?: {
       baseDir,
       ...derivedPaths,
       devUrl,
-      noBrowser: true,
-      startupPresentation: "browser",
       desktopBootstrapToken: defaultDesktopBootstrapToken,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,

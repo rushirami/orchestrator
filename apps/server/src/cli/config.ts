@@ -1,15 +1,12 @@
 import { DesktopBackendBootstrap, PortSchema } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as Config from "effect/Config";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as LogLevel from "effect/LogLevel";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as SchemaIssue from "effect/SchemaIssue";
-import * as SchemaTransformation from "effect/SchemaTransformation";
 import { Argument, Flag } from "effect/unstable/cli";
 import { resolveListenHost } from "../listenHost.ts";
 
@@ -39,10 +36,6 @@ export const baseDirFlag = Flag.string("base-dir").pipe(
 const devUrlFlag = Flag.string("dev-url").pipe(
   Flag.withSchema(Schema.URLFromString),
   Flag.withDescription("Dev web URL to proxy/redirect to (equivalent to VITE_DEV_SERVER_URL)."),
-  Flag.optional,
-);
-const noBrowserFlag = Flag.boolean("no-browser").pipe(
-  Flag.withDescription("Disable automatic browser opening."),
   Flag.optional,
 );
 const bootstrapFdFlag = Flag.integer("bootstrap-fd").pipe(
@@ -82,10 +75,6 @@ const EnvServerConfig = Config.all({
   host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
   t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  noBrowser: Config.boolean("T3CODE_NO_BROWSER").pipe(
-    Config.option,
-    Config.map(Option.getOrUndefined),
-  ),
   bootstrapFd: Config.int("T3CODE_BOOTSTRAP_FD").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
@@ -107,21 +96,15 @@ export interface CliServerFlags {
   readonly baseDir: Option.Option<string>;
   readonly cwd: Option.Option<string>;
   readonly devUrl: Option.Option<URL>;
-  readonly noBrowser: Option.Option<boolean>;
   readonly bootstrapFd: Option.Option<number>;
   readonly autoBootstrapProjectFromCwd: Option.Option<boolean>;
   readonly logWebSocketEvents: Option.Option<boolean>;
 }
 
-export interface CliAuthLocationFlags {
+export interface CliProjectLocationFlags {
   readonly baseDir: Option.Option<string>;
   readonly devUrl?: Option.Option<URL>;
 }
-
-export const authLocationFlags = {
-  baseDir: baseDirFlag,
-  devUrl: devUrlFlag,
-} as const;
 
 export const projectLocationFlags = {
   baseDir: baseDirFlag,
@@ -139,7 +122,6 @@ export const sharedServerCommandFlags = {
     Argument.optional,
   ),
   devUrl: devUrlFlag,
-  noBrowser: noBrowserFlag,
   bootstrapFd: bootstrapFdFlag,
   autoBootstrapProjectFromCwd: autoBootstrapProjectFromCwdFlag,
   logWebSocketEvents: logWebSocketEventsFlag,
@@ -153,7 +135,6 @@ export const resolveServerConfig = (
   flags: CliServerFlags,
   cliLogLevel: Option.Option<LogLevel.LogLevel>,
   options?: {
-    readonly startupPresentation?: ServerConfig.StartupPresentation;
     readonly forceAutoBootstrapProjectFromCwd?: boolean;
   },
 ) =>
@@ -169,7 +150,6 @@ export const resolveServerConfig = (
       baseDir: flags.baseDir ?? Option.none(),
       cwd: flags.cwd ?? Option.none(),
       devUrl: flags.devUrl ?? Option.none(),
-      noBrowser: flags.noBrowser ?? Option.none(),
       bootstrapFd: flags.bootstrapFd ?? Option.none(),
       autoBootstrapProjectFromCwd: flags.autoBootstrapProjectFromCwd ?? Option.none(),
       logWebSocketEvents: flags.logWebSocketEvents ?? Option.none(),
@@ -228,17 +208,6 @@ export const resolveServerConfig = (
     yield* ServerConfig.ensureServerDirectories(derivedPaths);
     const serverTracePath = env.traceFile ?? derivedPaths.serverTracePath;
     yield* fs.makeDirectory(path.dirname(serverTracePath), { recursive: true });
-    const startupPresentation = options?.startupPresentation ?? "browser";
-    const isHeadlessStartup = startupPresentation === "headless";
-    const noBrowser = Option.getOrElse(
-      resolveOptionPrecedence(
-        isHeadlessStartup ? Option.some(true) : Option.none(),
-        normalizedFlags.noBrowser,
-        Option.fromUndefinedOr(env.noBrowser),
-        Option.fromUndefinedOr(bootstrap?.noBrowser),
-      ),
-      () => mode === "desktop",
-    );
     const desktopBootstrapToken = bootstrap?.desktopBootstrapToken;
     const desktopTelemetryFd = bootstrap?.desktopTelemetryFd;
     const desktopTelemetryControlFd = bootstrap?.desktopTelemetryControlFd;
@@ -246,7 +215,6 @@ export const resolveServerConfig = (
     const autoBootstrapProjectFromCwd = Option.getOrElse(
       resolveOptionPrecedence(
         Option.fromUndefinedOr(options?.forceAutoBootstrapProjectFromCwd),
-        isHeadlessStartup ? Option.some(false) : Option.none(),
         normalizedFlags.autoBootstrapProjectFromCwd,
         Option.fromUndefinedOr(env.autoBootstrapProjectFromCwd),
       ),
@@ -286,8 +254,6 @@ export const resolveServerConfig = (
       serverTracePath,
       host,
       devUrl,
-      noBrowser,
-      startupPresentation,
       desktopBootstrapToken,
       desktopTelemetryFd,
       desktopTelemetryControlFd,
@@ -299,8 +265,8 @@ export const resolveServerConfig = (
     return config;
   });
 
-export const resolveCliAuthConfig = (
-  flags: CliAuthLocationFlags,
+export const resolveCliProjectConfig = (
+  flags: CliProjectLocationFlags,
   cliLogLevel: Option.Option<LogLevel.LogLevel>,
 ) =>
   resolveServerConfig(
@@ -311,73 +277,9 @@ export const resolveCliAuthConfig = (
       baseDir: flags.baseDir,
       cwd: Option.none(),
       devUrl: flags.devUrl ?? Option.none(),
-      noBrowser: Option.none(),
       bootstrapFd: Option.none(),
       autoBootstrapProjectFromCwd: Option.none(),
       logWebSocketEvents: Option.none(),
     },
     cliLogLevel,
   );
-
-const DurationShorthandPattern = /^(?<value>\d+)(?<unit>ms|s|m|h|d|w)$/i;
-
-const parseDurationInput = (value: string): Duration.Duration | null => {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return null;
-
-  const shorthand = DurationShorthandPattern.exec(trimmed);
-  const normalizedInput = shorthand?.groups
-    ? (() => {
-        const amountText = shorthand.groups.value;
-        const unitText = shorthand.groups.unit;
-        if (typeof amountText !== "string" || typeof unitText !== "string") {
-          return null;
-        }
-
-        const amount = Number.parseInt(amountText, 10);
-        if (!Number.isFinite(amount)) return null;
-
-        switch (unitText.toLowerCase()) {
-          case "ms":
-            return `${amount} millis`;
-          case "s":
-            return `${amount} seconds`;
-          case "m":
-            return `${amount} minutes`;
-          case "h":
-            return `${amount} hours`;
-          case "d":
-            return `${amount} days`;
-          case "w":
-            return `${amount} weeks`;
-          default:
-            return null;
-        }
-      })()
-    : (trimmed as Duration.Input);
-
-  if (normalizedInput === null) return null;
-
-  const decoded = Duration.fromInput(normalizedInput as Duration.Input);
-  return Option.isSome(decoded) ? decoded.value : null;
-};
-
-export const DurationFromString = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.Duration,
-    SchemaTransformation.transformOrFail({
-      decode: (value) => {
-        const duration = parseDurationInput(value);
-        if (duration !== null) {
-          return Effect.succeed(duration);
-        }
-        return Effect.fail(
-          new SchemaIssue.InvalidValue({
-            message: "Invalid duration. Use values like 5m, 1h, 30d, or 15 minutes.",
-          }),
-        );
-      },
-      encode: (duration) => Effect.succeed(Duration.format(duration)),
-    }),
-  ),
-);

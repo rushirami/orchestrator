@@ -1,11 +1,11 @@
 import {
-  CommandId,
   AuthAdministrativeScopes,
+  type ClientOrchestrationCommand,
+  CommandId,
   EnvironmentHttpApi,
   EnvironmentHttpCommonError,
   type OrchestrationReadModel,
   ProjectId,
-  type ClientOrchestrationCommand,
 } from "@t3tools/contracts";
 import * as Console from "effect/Console";
 import * as Crypto from "effect/Crypto";
@@ -35,7 +35,11 @@ import {
   readPersistedServerRuntimeState,
 } from "../serverRuntimeState.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
-import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import {
+  type CliProjectLocationFlags,
+  projectLocationFlags,
+  resolveCliProjectConfig,
+} from "./config.ts";
 
 type ProjectMutationTarget = {
   readonly id: ProjectId;
@@ -374,7 +378,7 @@ const tryResolveLiveProjectExecutionMode = Effect.fn("tryResolveLiveProjectExecu
 );
 
 const runProjectMutation = Effect.fn("runProjectMutation")(function* (
-  flags: CliAuthLocationFlags,
+  flags: CliProjectLocationFlags,
   run: (input: {
     readonly snapshot: OrchestrationReadModel;
     readonly dispatch: (
@@ -392,7 +396,7 @@ const runProjectMutation = Effect.fn("runProjectMutation")(function* (
   >,
 ) {
   const logLevel = yield* GlobalFlag.LogLevel;
-  const config = yield* resolveCliAuthConfig(flags, logLevel);
+  const config = yield* resolveCliProjectConfig(flags, logLevel);
   const minimumLogLevel = config.logLevel;
 
   return yield* Effect.gen(function* () {

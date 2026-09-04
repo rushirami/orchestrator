@@ -10,12 +10,12 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import serverPackageJson from "../../../server/package.json" with { type: "json" };
 
-import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import * as DesktopBackendEndpoint from "./DesktopBackendEndpoint.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
+import * as DesktopBackendEndpoint from "./DesktopBackendEndpoint.ts";
+import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 
 export class DesktopBackendConfiguration extends Context.Service<
   DesktopBackendConfiguration,
@@ -386,7 +386,6 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
 
     const bootstrap = {
       mode: "desktop" as const,
-      noBrowser: true,
       port: backendExposure.port,
       t3Home: environment.baseDir,
       host: "127.0.0.1",
@@ -438,7 +437,6 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
   // WSL uses Windows localhost forwarding; the backend never binds to its VM network.
   const bootstrap = {
     mode: "desktop" as const,
-    noBrowser: true,
     port: input.port,
     // Omit t3Home so the Linux backend uses its own home dir instead of
     // the Windows-side baseDir (which would be a /mnt/c path and share

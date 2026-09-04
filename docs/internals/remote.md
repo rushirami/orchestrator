@@ -31,3 +31,7 @@ removing T3 remote environments does not alter the user's SSH configuration or a
 The standalone boot service, its installer, launcher IPC, runtime downloader, and trial-update
 protocol are removed. The backend runs under the desktop pool rather than an independently installed
 service. Startup still restores persisted provider sessions and local conversation state.
+
+The backend no longer opens a browser, prints pairing URLs or QR codes, or exposes `auth`
+and `serve` CLI commands. Desktop startup uses its local IPC readiness signal. The remaining
+local bootstrap/session handshake is internal and is being removed separately.

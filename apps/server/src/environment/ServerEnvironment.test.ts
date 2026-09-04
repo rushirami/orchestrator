@@ -54,8 +54,6 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     host: undefined,
     desktopBootstrapToken: undefined,
     devUrl: undefined,
-    noBrowser: false,
-    startupPresentation: "browser",
   } satisfies ServerConfig.ServerConfig["Service"];
 });
 

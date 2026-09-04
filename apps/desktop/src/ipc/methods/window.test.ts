@@ -25,7 +25,6 @@ const readyWslConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   extendEnv: false,
   bootstrap: {
     mode: "desktop",
-    noBrowser: true,
     port: 3774,
     host: "0.0.0.0",
     desktopBootstrapToken: "bootstrap-token",

@@ -43,7 +43,6 @@ const baseConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   env: { ELECTRON_RUN_AS_NODE: "1" },
   bootstrap: {
     mode: "desktop",
-    noBrowser: true,
     port: 3773,
     t3Home: "/tmp/t3",
     host: "127.0.0.1",

@@ -22,9 +22,6 @@ export const DEFAULT_PORT = 3773;
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
 
-export const StartupPresentation = Schema.Literals(["browser", "headless"]);
-export type StartupPresentation = typeof StartupPresentation.Type;
-
 /**
  * ServerDerivedPaths - Derived paths from the base directory.
  */
@@ -72,8 +69,6 @@ export class ServerConfig extends Context.Service<
     readonly cwd: string;
     readonly baseDir: string;
     readonly devUrl: URL | undefined;
-    readonly noBrowser: boolean;
-    readonly startupPresentation: StartupPresentation;
     readonly desktopBootstrapToken: string | undefined;
     readonly desktopTelemetryFd?: number | undefined;
     readonly desktopTelemetryControlFd?: number | undefined;
@@ -193,8 +188,6 @@ const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
     desktopTelemetryControlFd: undefined,
     resourceMonitorPath: undefined,
     devUrl,
-    noBrowser: false,
-    startupPresentation: "browser",
   });
 });
 

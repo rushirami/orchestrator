@@ -9,13 +9,13 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
-import * as DesktopBackendEndpoint from "./DesktopBackendEndpoint.ts";
+import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
+import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
+import * as DesktopBackendEndpoint from "./DesktopBackendEndpoint.ts";
 
 const PersistedServerObservabilitySettingsDocument = Schema.Struct({
   observability: Schema.Struct({ otlpTracesUrl: Schema.String, otlpMetricsUrl: Schema.String }),
@@ -229,7 +229,6 @@ describe("DesktopBackendConfiguration", () => {
         assert.isUndefined(first.env.T3CODE_DESKTOP_LAN_HOST);
 
         assert.equal(first.bootstrap.mode, "desktop");
-        assert.equal(first.bootstrap.noBrowser, true);
         assert.equal(first.bootstrap.port, 4888);
         assert.equal(first.bootstrap.host, "127.0.0.1");
         assert.equal(first.bootstrap.t3Home, environment.baseDir);

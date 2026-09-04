@@ -7,10 +7,9 @@ import { Command } from "effect/unstable/cli";
 import * as NetService from "@t3tools/shared/Net";
 import packageJson from "../package.json" with { type: "json" };
 import { appCommand } from "./cli/app.ts";
-import { authCommand } from "./cli/auth.ts";
 import { sharedServerCommandFlags } from "./cli/config.ts";
 import { projectCommand } from "./cli/project.ts";
-import { runServerCommand, serveCommand, startCommand } from "./cli/server.ts";
+import { runServerCommand, startCommand } from "./cli/server.ts";
 import { themeCommand } from "./cli/theme.ts";
 import { triageCommand } from "./cli/triage.ts";
 import { isEntrypoint } from "./entrypoint.ts";
@@ -23,9 +22,7 @@ export const makeCli = () =>
     Command.withHandler((flags) => runServerCommand(flags)),
     Command.withSubcommands([
       startCommand,
-      serveCommand,
       appCommand,
-      authCommand,
       projectCommand,
       themeCommand,
       triageCommand,
