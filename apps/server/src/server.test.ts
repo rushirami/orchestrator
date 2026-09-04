@@ -545,7 +545,6 @@ const buildAppUnderTest = (options?: {
       baseDir,
       ...derivedPaths,
       devUrl,
-      devAllowedOrigins: [],
       noBrowser: true,
       startupPresentation: "browser",
       desktopBootstrapToken: defaultDesktopBootstrapToken,
@@ -1429,10 +1428,10 @@ const assertBrowserApiCorsResponseHeaders = (
     readonly credentials?: boolean;
   },
 ) => {
-  assert.equal(headers["access-control-allow-origin"], options?.origin ?? "*");
+  assert.equal(headers["access-control-allow-origin"], options?.origin ?? crossOriginClientOrigin);
   assert.equal(
     headers["access-control-allow-credentials"],
-    options?.credentials ? "true" : undefined,
+    options?.credentials === false ? undefined : "true",
   );
 };
 
@@ -1457,7 +1456,7 @@ const assertBrowserApiCorsPreflightHeaders = (
     "traceparent",
   ]);
 };
-const crossOriginClientOrigin = "http://remote-client.test:3773";
+const crossOriginClientOrigin = "t3code://app";
 
 const getWsServerUrl = (
   pathname = "",
@@ -1524,6 +1523,61 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* Deferred.succeed(ready, undefined);
       assert.equal((yield* Fiber.join(request)).status, 404);
       assert.isTrue(yield* Deferred.isDone(completed));
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects untrusted browser origins and rebinding hosts before serving local APIs", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest({ config: { devUrl: new URL("http://127.0.0.1:5173") } });
+      const url = yield* getHttpServerUrl("/.well-known/t3/environment");
+      for (const origin of ["https://example.com", "http://127.0.0.1:3000", "null"]) {
+        for (const method of ["GET", "OPTIONS"]) {
+          const response = yield* fetchEffect(url, {
+            method,
+            headers: { origin, "access-control-request-method": "GET" },
+          });
+          assert.equal(response.status, 403);
+          assert.isUndefined(response.headers["access-control-allow-origin"]);
+        }
+      }
+      const NodeHttp = yield* Effect.promise(() => import("node:http"));
+      const rebindStatus = yield* Effect.callback<number, Error>((resume) => {
+        const request = NodeHttp.get(
+          url,
+          { headers: { host: "example.com", "x-forwarded-host": "127.0.0.1" } },
+          (response) => {
+            response.resume();
+            response.once("end", () => resume(Effect.succeed(response.statusCode ?? 0)));
+            response.once("error", (error) => resume(Effect.fail(error)));
+          },
+        );
+        request.once("error", (error) => resume(Effect.fail(error)));
+        return Effect.sync(() => request.destroy());
+      });
+      assert.equal(rebindStatus, 403);
+      const preview = yield* fetchEffect(url, { headers: { referer: "http://127.0.0.1:3000/" } });
+      assert.equal(preview.status, 403);
+      const desktop = yield* fetchEffect(url, { headers: { origin: "t3code://app" } });
+      assert.equal(desktop.status, 200);
+      assert.equal(desktop.headers["access-control-allow-origin"], "t3code://app");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects WebSocket upgrades from unrelated websites", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const url = yield* getWsServerUrl("/ws", { authenticated: false });
+      const status = yield* Effect.callback<number, Error>((resume) => {
+        const socket = new NodeSocket.NodeWS.WebSocket(url, { origin: "https://example.com" });
+        socket.once("unexpected-response", (_request, response) => {
+          response.resume();
+          response.once("end", () => resume(Effect.succeed(response.statusCode ?? 0)));
+        });
+        socket.once("open", () => resume(Effect.succeed(101)));
+        socket.on("error", (error) => resume(Effect.fail(error)));
+        return Effect.sync(() => socket.terminate());
+      });
+      assert.equal(status, 403);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -2232,7 +2286,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("includes CORS headers on remote auth success responses", () =>
+  it.effect("includes CORS headers on desktop auth success responses", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
 
@@ -2285,7 +2339,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   );
 
   it.effect(
-    "responds to remote auth websocket-ticket preflight requests with authorization CORS headers",
+    "responds to desktop auth websocket-ticket preflight requests with authorization CORS headers",
     () =>
       Effect.gen(function* () {
         yield* buildAppUnderTest();
@@ -2305,39 +2359,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("allows configured development origins through ServerConfig", () =>
-    Effect.gen(function* () {
-      const tailnetOrigin = "https://host.example.ts.net";
-      yield* buildAppUnderTest({
-        config: {
-          devUrl: new URL(crossOriginClientOrigin),
-          devAllowedOrigins: [tailnetOrigin],
-        },
-      });
-
-      const sessionUrl = yield* getHttpServerUrl("/api/auth/session");
-      const response = yield* fetchEffect(sessionUrl, {
-        method: "OPTIONS",
-        headers: {
-          origin: tailnetOrigin,
-          "access-control-request-method": "GET",
-          "access-control-request-headers": "content-type",
-        },
-      });
-
-      assert.equal(response.status, 204);
-      assertBrowserApiCorsPreflightHeaders(response.headers, {
-        origin: tailnetOrigin,
-        credentials: true,
-      });
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
   for (const desktopOrigin of ["t3code://app", "t3code-dev://app"]) {
     it.effect(`allows credentialed preflights from ${desktopOrigin} in development`, () =>
       Effect.gen(function* () {
         yield* buildAppUnderTest({
-          config: { devUrl: new URL(crossOriginClientOrigin) },
+          config: { devUrl: new URL("http://127.0.0.1:5173") },
         });
 
         const sessionUrl = yield* getHttpServerUrl("/api/auth/session");
@@ -2359,7 +2385,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     );
   }
 
-  it.effect("includes CORS headers on remote websocket-ticket auth failures", () =>
+  it.effect("includes CORS headers on desktop websocket-ticket auth failures", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
 
@@ -3182,14 +3208,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         headers: {
           cookie: yield* getAuthenticatedSessionCookieHeader(),
           "content-type": "application/json",
-          origin: "http://localhost:5733",
+          origin: "t3code://app",
         },
         // @effect-diagnostics-next-line preferSchemaOverJson:off
         body: HttpBody.text(JSON.stringify(payload), "application/json"),
       });
 
       assert.equal(response.status, 204);
-      assert.equal(response.headers["access-control-allow-origin"], "*");
+      assert.equal(response.headers["access-control-allow-origin"], "t3code://app");
       assert.deepEqual(localTraceRecords, [
         {
           type: "otlp-span",
@@ -3238,14 +3264,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const response = yield* HttpClient.options("/api/observability/v1/traces", {
         headers: {
-          origin: "http://localhost:5733",
+          origin: "t3code://app",
           "access-control-request-method": "POST",
           "access-control-request-headers": "content-type",
         },
       });
 
       assert.equal(response.status, 204);
-      assert.equal(response.headers["access-control-allow-origin"], "*");
+      assert.equal(response.headers["access-control-allow-origin"], "t3code://app");
       assert.deepEqual(splitHeaderTokens(response.headers["access-control-allow-methods"]), [
         "GET",
         "OPTIONS",

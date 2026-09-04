@@ -1,3 +1,4 @@
+import { localRequestBoundaryLayer } from "./localRequestBoundary.ts";
 import { resolveListenHost } from "./listenHost.ts";
 import { EnvironmentHttpApi, ProviderDriverKind } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
@@ -15,7 +16,6 @@ import {
   assetRouteLayer,
   attachmentUploadRouteLayer,
   serverEnvironmentHttpApiLayer,
-  browserApiCorsLayer,
   httpCompressionLayer,
 } from "./http.ts";
 import { guardHttpResponseWriteErrors } from "./httpResponseErrorGuard.ts";
@@ -507,7 +507,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(DesktopAppUpdateLayerLive))),
   Layer.provide(commandReadinessLayer),
-  Layer.provide(browserApiCorsLayer),
+  Layer.provide(localRequestBoundaryLayer),
   Layer.provide(httpCompressionLayer),
 );
 

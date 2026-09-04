@@ -9,7 +9,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { cast } from "effect/Function";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import {
@@ -36,13 +35,10 @@ import {
   failEnvironmentInternal,
   failEnvironmentScopeRequired,
 } from "./auth/http.ts";
-import * as ServerConfig from "./config.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
-import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
 import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
 
 const CLIENT_TRACES_PATH = "/api/observability/v1/traces";
-const DESKTOP_RENDERER_ORIGINS = ["t3code://app", "t3code-dev://app"];
 const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 // HTML previews are agent output, not the app. The sandbox gives the document an
 // opaque origin: scripts run, but same-origin cookies, storage, and API calls are
@@ -218,31 +214,6 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
 export const httpCompressionLayer = HttpRouter.middleware(HttpMiddleware.compression(), {
   global: true,
 });
-
-export const browserApiCorsLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const config = yield* ServerConfig.ServerConfig;
-    const devOrigin = config.devUrl?.origin;
-    // Dev uses credentialed requests from Vite or the Electron custom origin, so both must be
-    // explicit. Packaged desktop omits credentials and uses Effect's default wildcard origin.
-    //
-    // T3CODE_DEV_ALLOWED_ORIGINS covers dev servers reached from a second
-    // origin — a tailnet name, a LAN IP, a phone. Browser dev normally proxies
-    // through Vite and is same-origin (no preflight at all), so this is a
-    // safety net for the desktop renderer and any direct-to-backend caller.
-    return HttpRouter.cors({
-      ...(devOrigin
-        ? {
-            allowedOrigins: [devOrigin, ...DESKTOP_RENDERER_ORIGINS, ...config.devAllowedOrigins],
-            credentials: true,
-          }
-        : {}),
-      allowedMethods: browserApiCorsAllowedMethods,
-      allowedHeaders: browserApiCorsAllowedHeaders,
-      maxAge: 600,
-    });
-  }),
-);
 
 const authenticateRawRouteWithScope = (
   scope: typeof AuthOrchestrationReadScope | typeof AuthOrchestrationOperateScope,

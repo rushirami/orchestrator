@@ -134,6 +134,7 @@ async function proxyRequest(
   request: Request,
   targetOrigin: URL,
   contentSecurityPolicy: string,
+  preserveBrowserContext = false,
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
   if (requestUrl.host !== DESKTOP_HOST) {
@@ -146,13 +147,12 @@ async function proxyRequest(
   for (const name of headers.keys()) {
     if (
       name === "host" ||
-      name === "origin" ||
-      name === "referer" ||
+      (!preserveBrowserContext &&
+        (name === "origin" || name === "referer" || name.startsWith("sec-fetch-"))) ||
       name === "connection" ||
       name === "content-length" ||
       name === "accept-encoding" ||
-      name === "upgrade-insecure-requests" ||
-      name.startsWith("sec-fetch-")
+      name === "upgrade-insecure-requests"
     ) {
       headersToRemove.push(name);
     }
@@ -228,7 +228,7 @@ async function handleDesktopRequest(
       (prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`),
     )
   ) {
-    return proxyRequest(request, input.backendOrigin, contentSecurityPolicy);
+    return proxyRequest(request, input.backendOrigin, contentSecurityPolicy, true);
   }
   if ("devOrigin" in input.renderer) {
     return proxyRequest(request, input.renderer.devOrigin, contentSecurityPolicy);

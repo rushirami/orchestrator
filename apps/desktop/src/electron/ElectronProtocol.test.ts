@@ -53,7 +53,10 @@ describe("ElectronProtocol", () => {
         const response = yield* Effect.promise(() => handler!(new Request(`t3code://app${url}`)));
         assert.equal(response.status, 200);
         assert.include(response.headers.get("content-security-policy") ?? "", "default-src 'self'");
-        assert.equal(netFetchMock.mock.lastCall?.[0], NodeURL.pathToFileURL(path.join(root, file!)).href);
+        assert.equal(
+          netFetchMock.mock.lastCall?.[0],
+          NodeURL.pathToFileURL(path.join(root, file!)).href,
+        );
       }
       const missing = yield* Effect.promise(() => handler!(new Request("t3code://app/missing.js")));
       assert.equal(missing.status, 404);
@@ -157,9 +160,9 @@ describe("ElectronProtocol", () => {
       assert.equal(netFetchMock.mock.calls[0]?.[0], "http://127.0.0.1:3774/api/health?verbose=1");
       const forwardedHeaders = new Headers(netFetchMock.mock.calls[0]?.[1]?.headers);
       assert.equal(forwardedHeaders.get("accept"), "application/json");
-      assert.isNull(forwardedHeaders.get("origin"));
-      assert.isNull(forwardedHeaders.get("referer"));
-      assert.isNull(forwardedHeaders.get("sec-fetch-site"));
+      assert.equal(forwardedHeaders.get("origin"), "t3code-dev://app");
+      assert.equal(forwardedHeaders.get("referer"), "t3code-dev://app/");
+      assert.equal(forwardedHeaders.get("sec-fetch-site"), "same-origin");
       assert.deepEqual(unhandleMock.mock.calls, [["t3code-dev"]]);
     }).pipe(Effect.provide([ElectronProtocol.layer, NodeServices.layer])),
   );

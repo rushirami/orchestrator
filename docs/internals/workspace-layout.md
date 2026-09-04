@@ -9,7 +9,6 @@ the task commands.
 
 - `apps/server` (`t3`): the execution runtime and the published CLI. Owns orchestration, provider
   drivers, checkpointing, VCS, terminals, filesystem access, auth, and the HTTP + WebSocket surface.
-  Also serves the built web app.
 - `apps/web` (`@t3tools/web`): React + Vite UI. Consumes the shared client runtime and adds routing,
   components, and web-specific platform layers.
 - `apps/desktop` (`@t3tools/desktop`): Electron shell. Supervises a desktop-scoped `t3` backend,
@@ -68,3 +67,10 @@ through `t3code://app` and uses the internal Vite origin during development.
 API requests go to the local backend. The backend does not serve the application
 HTML, expose static renderer files, or redirect to Vite. Its build has no renderer
 bundle dependency; the desktop build depends on both packages.
+
+Backend ingress checks the actual listener port and accepts only loopback Host
+headers. Browser requests must come from `t3code://app`, `t3code-dev://app`, or the
+configured loopback Vite origin. Other local preview origins and remote origins
+are rejected before API handling or WebSocket upgrade, including CORS preflights.
+Native local clients may omit browser headers. Forwarded host headers never grant
+access, and there is no additional remote-origin allowlist.
