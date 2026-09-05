@@ -423,7 +423,6 @@ function SelectedEnvironmentProviderSettings({
     <EnvironmentProviderSettings
       environmentId={environment.environmentId}
       environmentLabel={environment.label}
-      readOnly={false}
       deviceTabs={deviceTabs}
       targetInstanceId={targetInstanceId}
     />
@@ -433,7 +432,6 @@ function SelectedEnvironmentProviderSettings({
 export function EnvironmentProviderSettings({
   environmentId,
   environmentLabel,
-  readOnly = false,
   deviceTabs,
   targetInstanceId,
 }: {
@@ -441,13 +439,6 @@ export function EnvironmentProviderSettings({
   readonly environmentLabel: string;
   readonly deviceTabs?: ReactNode;
   readonly targetInstanceId?: ProviderInstanceId | undefined;
-  /**
-   * Grey out and freeze every write control when this session's credential
-   * lacks `orchestration:operate` on the environment. Selecting providers
-   * still works so the real configuration stays readable; switches, forms,
-   * and the health interval are inert so no write is offered and then rejected.
-   */
-  readonly readOnly?: boolean;
 }) {
   const settings = useEnvironmentSettings(environmentId);
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
@@ -798,7 +789,7 @@ export function EnvironmentProviderSettings({
         mode={mode}
         selected={mode === "list" && selectedRow?.instanceId === row.instanceId}
         onSelect={mode === "list" ? () => setSelectedInstanceId(row.instanceId) : undefined}
-        readOnly={readOnly}
+
         setup={
           mode === "editor" && row.driver === "antigravity" ? (
             <ProviderSetupSection
@@ -809,7 +800,7 @@ export function EnvironmentProviderSettings({
               binaryPath={configuredBinaryPath(row.instance.config)}
               authMethod={readAntigravityAuthMethod(row.instance.config)}
               enabled={resolveProviderInstanceEnabled(row.instance)}
-              readOnly={readOnly}
+
               onEnable={() => updateProviderInstance(row, { ...row.instance, enabled: true })}
             />
           ) : null
@@ -877,11 +868,7 @@ export function EnvironmentProviderSettings({
         variant="plain"
         headerAction={
           <div className="flex min-w-0 items-center gap-2">
-            {readOnly ? (
-              <span className="min-w-0 truncate text-xs text-muted-foreground">
-                <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
-              </span>
-            ) : (
+            {
               <>
                 <Tooltip>
                   <TooltipTrigger
@@ -923,19 +910,12 @@ export function EnvironmentProviderSettings({
                   <TooltipPopup side="top">Add provider</TooltipPopup>
                 </Tooltip>
               </>
-            )}
+            }
           </div>
         }
       >
         {deviceTabs}
-        {readOnly ? (
-          <div className={cn(providerCardClassName, "overflow-hidden")}>
-            <SettingsRow
-              title="Limited permissions"
-              description={`This session can view ${environmentLabel}'s providers but can't change their settings.`}
-            />
-          </div>
-        ) : null}
+
         <div
           className={cn(
             providerCardClassName,
@@ -972,7 +952,6 @@ export function EnvironmentProviderSettings({
         environmentId={environmentId}
         environmentLabel={environmentLabel}
         sources={settings.usageLimitSources}
-        readOnly={readOnly}
       />
 
       <SettingsSection title="Advanced">
@@ -991,7 +970,7 @@ export function EnvironmentProviderSettings({
           description="Refresh provider status, versions, and models in the background. Set to 0 to disable."
           resetAction={
             providerHealthRefreshIntervalSeconds !== defaultProviderHealthRefreshIntervalSeconds ? (
-              <span inert={readOnly} className={readOnly ? "opacity-50" : undefined}>
+              <span className={undefined}>
                 <SettingResetButton
                   label="provider health check interval"
                   onClick={() =>
@@ -1008,14 +987,7 @@ export function EnvironmentProviderSettings({
             ) : null
           }
           control={
-            <div
-              inert={readOnly}
-              aria-disabled={readOnly || undefined}
-              className={cn(
-                "flex shrink-0 items-center gap-2",
-                readOnly && "opacity-50 select-none",
-              )}
-            >
+            <div className={cn("flex shrink-0 items-center gap-2", false)}>
               <NumberField
                 value={providerHealthRefreshIntervalSeconds}
                 min={0}

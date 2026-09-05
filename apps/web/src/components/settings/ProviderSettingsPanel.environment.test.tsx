@@ -1,4 +1,3 @@
-import type { ReactElement } from "react";
 import {
   DEFAULT_UNIFIED_SETTINGS,
   EnvironmentId,
@@ -7,6 +6,7 @@ import {
   type ServerProvider,
   type UnifiedSettings,
 } from "@t3tools/contracts";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { visitElements } from "../../test/reactElementTree";
@@ -131,14 +131,12 @@ function provider(): ServerProvider {
 }
 
 function renderPanel(options?: {
-  readonly readOnly?: boolean;
   readonly targetInstanceId?: ProviderInstanceId;
 }): ReactElement<Record<string, unknown>> {
   hooks.beginRender();
   return EnvironmentProviderSettings({
     environmentId,
     environmentLabel: "Remote device",
-    ...(options?.readOnly === undefined ? {} : { readOnly: options.readOnly }),
     ...(options?.targetInstanceId === undefined
       ? {}
       : { targetInstanceId: options.targetInstanceId }),
@@ -237,45 +235,7 @@ describe("EnvironmentProviderSettings routing", () => {
     expect(settingsState.updateSettings).not.toHaveBeenCalled();
   });
 
-  it("keeps provider selection available while write controls are read only", () => {
-    settingsState.value = {
-      ...DEFAULT_UNIFIED_SETTINGS,
-      providerInstances: {
-        [customId]: {
-          driver: ProviderDriverKind.make("codex"),
-          enabled: true,
-        },
-      },
-    };
-    atoms.providers = [provider()];
-    let panel = renderPanel({ readOnly: true });
-
-    const inertWrapper = visitElements(panel, (element) => element.props.inert === true);
-    expect(inertWrapper).not.toBeNull();
-
-    const customRow = visitElements(
-      panel,
-      (element) => element.props.instanceId === customId && element.props.mode === "list",
-    );
-    expect(customRow?.props.readOnly).toBe(true);
-    expect(customRow?.props.onSelect).toBeTypeOf("function");
-    (customRow?.props.onSelect as (() => void) | undefined)?.();
-
-    panel = renderPanel({ readOnly: true });
-    const customEditor = visitElements(
-      panel,
-      (element) => element.props.instanceId === customId && element.props.mode === "editor",
-    );
-    expect(customEditor).not.toBeNull();
-
-    const notice = visitElements(panel, (element) => element.props.title === "Limited permissions");
-    expect(notice).not.toBeNull();
-
-    expect(visitElements(panel, isRefreshButton)).toBeNull();
-    expect(visitElements(panel, isAddProviderButton)).toBeNull();
-  });
-
-  it("keeps the editable layout interactive when not read only", () => {
+  it("keeps provider settings interactive", () => {
     atoms.providers = [provider()];
     const panel = renderPanel();
     expect(visitElements(panel, (element) => element.props.inert === true)).toBeNull();

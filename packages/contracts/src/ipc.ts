@@ -200,14 +200,6 @@ export const DesktopEnvironmentBootstrapSchema = Schema.Struct({
   wsBaseUrl: Schema.NullOr(Schema.String),
 });
 
-export const DesktopSshEnvironmentTargetSchema = Schema.Struct({
-  alias: Schema.String,
-  hostname: Schema.String,
-  username: Schema.NullOr(Schema.String),
-  port: Schema.NullOr(Schema.Number),
-});
-export type DesktopSshEnvironmentTarget = typeof DesktopSshEnvironmentTargetSchema.Type;
-
 export interface PickFolderOptions {
   initialPath?: string | null;
   // When set, the desktop dialog opens against the named backend's
