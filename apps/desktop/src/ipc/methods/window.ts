@@ -1,45 +1,40 @@
 import {
   ContextMenuItemSchema,
   DesktopAppBrandingSchema,
+  type DesktopEnvironmentBootstrap,
   DesktopEnvironmentBootstrapSchema,
   DesktopThemeSchema,
-  EDITORS,
-  EditorId,
+  type PickedThemeFile,
   PickedThemeFileSchema,
   PickFolderOptionsSchema,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
-  REMOTE_CAPABLE_EDITOR_IDS,
-  type DesktopEnvironmentBootstrap,
-  type PickedThemeFile,
 } from "@t3tools/contracts";
 import { WORKSPACE_IMAGE_PREVIEW_EXTENSIONS } from "@t3tools/shared/filePreview";
-import { isCommandAvailable } from "@t3tools/shared/shell";
-import * as NodeOS from "node:os";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as NodeOS from "node:os";
 
-import * as DesktopBackendPool from "../../backend/DesktopBackendPool.ts";
-import * as DesktopLocalEnvironmentAuth from "../../backend/DesktopLocalEnvironmentAuth.ts";
 import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
-import * as DesktopAppSettings from "../../settings/DesktopAppSettings.ts";
-import * as DesktopWslBackend from "../../wsl/DesktopWslBackend.ts";
-import * as DesktopWslEnvironment from "../../wsl/DesktopWslEnvironment.ts";
+import * as DesktopBackendPool from "../../backend/DesktopBackendPool.ts";
 import * as ElectronApp from "../../electron/ElectronApp.ts";
 import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../../electron/ElectronMenu.ts";
 import * as ElectronShell from "../../electron/ElectronShell.ts";
 import * as ElectronTheme from "../../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
-import * as IpcChannels from "../channels.ts";
-import * as DesktopIpc from "../DesktopIpc.ts";
+import * as DesktopAppSettings from "../../settings/DesktopAppSettings.ts";
+import * as DesktopWslBackend from "../../wsl/DesktopWslBackend.ts";
+import * as DesktopWslEnvironment from "../../wsl/DesktopWslEnvironment.ts";
 import {
   extractDistroFromUncPath,
   resolveWslPickFolderDefaultPath,
   wslUncPathToLinuxPath,
 } from "../../wsl/wslPathParsing.ts";
+import * as IpcChannels from "../channels.ts";
+import * as DesktopIpc from "../DesktopIpc.ts";
 
 const ContextMenuPosition = Schema.Struct({
   x: Schema.Number,
@@ -100,11 +95,10 @@ export const getLocalEnvironmentBootstraps = DesktopIpc.makeSyncIpcMethod({
       // a config yet (mid-registration, before its first start cycle) or that
       // is retrying a *transient* preflight failure (WSL VM still booting, a
       // not-yet-built linux server entry) is not listening on a port. We
-      // surface it as a *pending* bootstrap (null endpoints, no token) so the
+      // surface it as a *pending* bootstrap (null endpoints) so the
       // renderer can show a "Connecting…" indicator while it retries — null
       // endpoints keep the renderer from dialing the dead port, avoiding the
-      // needless /api/auth/bootstrap/bearer error cycles a real endpoint would
-      // trigger.
+      // failed requests a non-listening endpoint would trigger.
       if (Option.isNone(config) || Option.isSome(config.value.preflightFailure)) {
         // Skip the primary (same-origin, no "connecting" affordance) and skip a
         // secondary whose preflight failed *fatally* (no node, wrong version,
@@ -129,7 +123,7 @@ export const getLocalEnvironmentBootstraps = DesktopIpc.makeSyncIpcMethod({
         });
         continue;
       }
-      const { bootstrap, httpBaseUrl } = config.value;
+      const { httpBaseUrl } = config.value;
       const runningDistro = config.value.runningDistro ?? null;
       bootstraps.push({
         id: instance.id,
@@ -137,9 +131,6 @@ export const getLocalEnvironmentBootstraps = DesktopIpc.makeSyncIpcMethod({
         runningDistro,
         httpBaseUrl: httpBaseUrl.href,
         wsBaseUrl: toWebSocketBaseUrl(httpBaseUrl),
-        ...(bootstrap.desktopBootstrapToken
-          ? { bootstrapToken: bootstrap.desktopBootstrapToken }
-          : {}),
       });
     }
     return bootstraps;
@@ -157,16 +148,6 @@ function extractWslDistroFromEnvironmentId(envId: string): string | null {
   const suffix = envId.slice(DesktopWslBackend.WSL_INSTANCE_ID_PREFIX.length);
   return suffix === "default" || suffix.length === 0 ? null : suffix;
 }
-
-export const getLocalEnvironmentBearerToken = DesktopIpc.makeIpcMethod({
-  channel: IpcChannels.GET_LOCAL_ENVIRONMENT_BEARER_TOKEN_CHANNEL,
-  payload: Schema.Void,
-  result: Schema.String,
-  handler: Effect.fn("desktop.ipc.window.getLocalEnvironmentBearerToken")(function* () {
-    const localAuth = yield* DesktopLocalEnvironmentAuth.DesktopLocalEnvironmentAuth;
-    return yield* localAuth.getBearerToken;
-  }),
-});
 
 export const pickFolder = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PICK_FOLDER_CHANNEL,
@@ -295,30 +276,6 @@ export const openExternal = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.window.openExternal")(function* (url) {
     const shell = yield* ElectronShell.ElectronShell;
     return yield* shell.openExternal(url);
-  }),
-});
-
-export const probeRemoteEditors = DesktopIpc.makeIpcMethod({
-  channel: IpcChannels.PROBE_REMOTE_EDITORS_CHANNEL,
-  payload: Schema.Undefined,
-  result: Schema.Array(EditorId),
-  // Probes THIS machine (where the renderer runs) for remote-capable editor
-  // CLIs, unlike the server's probe which walks the environment host's PATH.
-  // A Finder-launched app can miss PATH entries; an empty result makes the
-  // renderer fall back to VS Code only, so that fails soft.
-  handler: Effect.fn("desktop.ipc.window.probeRemoteEditors")(function* () {
-    const available: Array<EditorId> = [];
-    for (const editorId of REMOTE_CAPABLE_EDITOR_IDS) {
-      const commands = EDITORS.find((editor) => editor.id === editorId)?.commands;
-      if (!commands) continue;
-      for (const command of commands) {
-        if (yield* isCommandAvailable(command, { env: process.env })) {
-          available.push(editorId);
-          break;
-        }
-      }
-    }
-    return available;
   }),
 });
 

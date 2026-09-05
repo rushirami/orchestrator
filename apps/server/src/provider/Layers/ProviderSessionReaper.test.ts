@@ -1,10 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   ProjectId,
-  ThreadId,
-  TurnId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ThreadId,
+  TurnId,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
@@ -21,8 +21,8 @@ import { ProjectionSnapshotQuery } from "../../orchestration/Services/Projection
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import * as ProviderSessionRuntime from "../../persistence/ProviderSessionRuntime.ts";
 import { ProviderValidationError } from "../Errors.ts";
-import { ProviderSessionReaper } from "../Services/ProviderSessionReaper.ts";
 import { ProviderService, type ProviderServiceShape } from "../Services/ProviderService.ts";
+import { ProviderSessionReaper } from "../Services/ProviderSessionReaper.ts";
 import { ProviderSessionDirectoryLive } from "./ProviderSessionDirectory.ts";
 import { makeProviderSessionReaperLive } from "./ProviderSessionReaper.ts";
 
@@ -186,7 +186,6 @@ describe("ProviderSessionReaper", () => {
         });
       },
       rollbackConversation: () => unsupported(),
-      uploadFeedback: () => unsupported(),
       streamEvents: Stream.empty,
     };
 

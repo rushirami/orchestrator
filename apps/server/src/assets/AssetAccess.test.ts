@@ -1,10 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off - tests inject swaps at the native open boundary.
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeHttpPlatform from "@effect/platform-node/NodeHttpPlatform";
-import * as NodeFSP from "node:fs/promises";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
 import { AssetPreviewTypeValidationError, ThreadId } from "@t3tools/contracts";
 import { PROJECT_FAVICON_FALLBACK_MARKER } from "@t3tools/shared/projectFavicon";
-import { describe, expect, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -13,17 +12,22 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpServerResponse } from "effect/unstable/http";
+import * as NodeFSP from "node:fs/promises";
 import { vi } from "vite-plus/test";
 
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
+import { assetFileResponse } from "../http.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "../project/T3ProjectFileLoader.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
-import { assetFileResponse } from "../http.ts";
-import { ASSET_ROUTE_PREFIX, issueAssetUrl, resolveAsset } from "./AssetAccess.ts";
-import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
+import {
+  ASSET_ROUTE_PREFIX,
+  isIssuedAssetPath,
+  issueAssetUrl,
+  resolveAsset,
+} from "./AssetAccess.ts";
 import { openMediaFile } from "./MediaFile.ts";
+import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFSP>();
@@ -42,10 +46,32 @@ const testLayer = Layer.mergeAll(
     Layer.provide(T3ProjectFileLoader.layer),
   ),
   NativeAppIconResolver.layer.pipe(Layer.provide(configLayer)),
-  ServerSecretStore.layer.pipe(Layer.provide(configLayer)),
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
 describe("AssetAccess", () => {
+  it.effect("rejects expired preview URLs at both the browser boundary and file resolver", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-preview-expiry-" });
+      yield* fs.writeFileString(path.join(root, "index.html"), "<h1>Preview</h1>");
+      const issued = yield* issueAssetUrl({
+        resource: {
+          _tag: "workspace-file",
+          threadId: ThreadId.make("thread-1"),
+          path: "index.html",
+        },
+        workspaceRoot: root,
+      });
+      const address = issued.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length).split("/")[0]!;
+      expect(yield* isIssuedAssetPath(issued.relativeUrl)).toBe(true);
+      expect(yield* resolveAsset(address, "index.html")).not.toBeNull();
+      yield* TestClock.adjust("1 hour");
+      expect(yield* isIssuedAssetPath(issued.relativeUrl)).toBe(false);
+      expect(yield* resolveAsset(address, "index.html")).toBeNull();
+    }).pipe(Effect.provide(testLayer)),
+  );
+
   it.effect("issues exact URLs for media and browser documents outside the workspace", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -578,7 +604,7 @@ describe("AssetAccess", () => {
       });
     }).pipe(Effect.provide(testLayer)),
   );
-  it.effect("issues signed native application icon capabilities", () =>
+  it.effect("issues local native application icon addresses", () =>
     Effect.gen(function* () {
       const result = yield* issueAssetUrl({
         resource: {
@@ -654,7 +680,7 @@ describe("AssetAccess", () => {
       ).toMatchObject({ kind: "file", path: attachmentPath, download: true });
     }).pipe(Effect.provide(testLayer)),
   );
-  it.effect("issues project favicon capabilities with a signed fallback", () =>
+  it.effect("issues project favicon capabilities with a local fallback", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;

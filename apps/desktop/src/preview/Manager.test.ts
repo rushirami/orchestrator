@@ -663,7 +663,7 @@ describe("PreviewManager", () => {
         yield* manager.setColorScheme("tab_destroyed_navigation", "dark");
         preview.setDestroyed(true);
 
-        yield* manager.navigate("tab_destroyed_navigation", "https://example.com/");
+        yield* manager.navigate("tab_destroyed_navigation", "http://localhost:3000/");
 
         expect(preview.loadURL).not.toHaveBeenCalled();
         expect(preview.reload).not.toHaveBeenCalled();
@@ -671,7 +671,7 @@ describe("PreviewManager", () => {
         expect(preview.debuggerOff).toHaveBeenCalled();
         expect(states.at(-1)).toMatchObject({
           webContentsId: null,
-          navStatus: { kind: "Loading", url: "https://example.com/" },
+          navStatus: { kind: "Loading", url: "http://localhost:3000/" },
         });
       }),
     ),
@@ -730,7 +730,7 @@ describe("PreviewManager", () => {
         expect(attached).toBe(true);
         destroyed = true;
 
-        yield* manager.navigate("tab_pinned_debugger", "https://example.com/");
+        yield* manager.navigate("tab_pinned_debugger", "http://localhost:3000/");
 
         expect(debuggerOff).toHaveBeenCalledWith("message", expect.any(Function));
         expect(debuggerDetach).toHaveBeenCalledOnce();
@@ -768,7 +768,7 @@ describe("PreviewManager", () => {
           }),
         );
 
-        yield* manager.navigate("tab_destroyed_replacement_race", "https://example.com/");
+        yield* manager.navigate("tab_destroyed_replacement_race", "http://localhost:3000/");
         const registrationExit = yield* Fiber.await(replacementRegistration);
 
         expect(Exit.isSuccess(registrationExit)).toBe(true);
@@ -776,7 +776,7 @@ describe("PreviewManager", () => {
         expect(replacement.off).not.toHaveBeenCalled();
         expect(states.at(-1)).toMatchObject({
           webContentsId: 42,
-          navStatus: { kind: "Loading", url: "https://example.com/" },
+          navStatus: { kind: "Loading", url: "http://localhost:3000/" },
         });
       }),
     ),
@@ -1742,7 +1742,7 @@ describe("PreviewManager", () => {
         yield* Effect.yieldNow;
         expect(states.at(-1)?.audible).toBe(true);
 
-        yield* manager.navigate("tab_audio_nav", "https://example.com/next");
+        yield* manager.navigate("tab_audio_nav", "http://localhost:3000/next");
         yield* Effect.yieldNow;
 
         // navigate runs before loadURL swaps the document, so the old page can

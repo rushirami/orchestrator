@@ -6,7 +6,7 @@ Load this reference only when inspecting or seeding local T3 state directly.
 
 When `--base-dir` or `--home-dir` is explicit, runtime state lives under `<base-dir>/userdata` and the database path is `<base-dir>/userdata/state.sqlite`. The `<base-dir>/dev` state directory is only the fallback for an implicit development home, preventing an ordinary `vp run dev` from touching production state.
 
-Start the target runtime once before seeding so all migrations have run. Use an isolated base directory. Stop the server before writes to avoid racing application state or an active projection.
+Run migrations on the isolated copy before seeding; use a focused migration script or an approved test runtime. Use an isolated base directory. Stop the server before writes to avoid racing application state or an active projection.
 
 ## Use the helper
 
@@ -38,7 +38,7 @@ Use one statement per invocation for both `query` and `exec`; the helper wraps w
 
 ## Seed projection data carefully
 
-The web UI primarily reads these projection tables:
+The desktop renderer primarily reads these projection tables:
 
 - `projection_projects`
 - `projection_threads`
@@ -51,8 +51,8 @@ The web UI primarily reads these projection tables:
 
 Inspect `PRAGMA table_info(<table>)` and the current migrations under `apps/server/src/persistence/Migrations/` before constructing inserts. Keep identifiers unique, timestamps as ISO strings, JSON columns valid, and related project/thread/turn IDs consistent.
 
-For a substantial current example, inspect `seedDatabase` in `scripts/mobile-showcase-environment.ts`. Adapt its column set to the target database instead of assuming copied SQL remains current.
+For a current fixture example, inspect `apps/server/scripts/migrate-dev-db.test.ts`. Adapt its column set to the target database instead of assuming copied SQL remains current.
 
 Direct projection writes are appropriate for ephemeral visual states, edge-case counts, long titles, activity lists, and similar UI fixtures. They do not create a coherent orchestration event history. Do not modify `orchestration_events` unless the test specifically exercises projector internals, and do not use direct projection writes to claim backend business behavior works.
 
-Use the app's commands or APIs for behavior tests. Use `node apps/server/src/bin.ts auth ...` for auth state rather than editing `auth_pairing_links` or `auth_sessions`.
+Use the app's commands or APIs for behavior tests. T3 authentication and its tables are removed; migration 048 deletes the obsolete credential tables. Preserve provider credentials separately when a test needs them.

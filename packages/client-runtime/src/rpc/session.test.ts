@@ -1,15 +1,15 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
   ServerConfig,
-  type ServerConfig as ServerConfigType,
   ServerConfigStreamEvent,
   type ServerConfigStreamEvent as ServerConfigStreamEventType,
+  type ServerConfig as ServerConfigType,
   WS_METHODS,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -26,16 +26,15 @@ import * as Socket from "effect/unstable/socket/Socket";
 
 import {
   AVAILABLE_CONNECTION_STATE,
-  ConnectionBlockedError,
   ConnectionTransientError,
-  PrimaryConnectionTarget,
+  LocalConnectionTarget,
   type PreparedConnection,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
-import * as RpcSession from "./session.ts";
 import { makeEnvironmentServerConfigState } from "../state/server.ts";
 import { applyServerConfigProjection } from "../state/serverConfigProjection.ts";
+import * as RpcSession from "./session.ts";
 
 type SocketEventType = "open" | "message" | "close" | "error";
 type SocketEvent = {
@@ -99,7 +98,7 @@ class TestWebSocket {
   }
 }
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",
@@ -111,7 +110,6 @@ const PREPARED: PreparedConnection = {
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
   socketUrl: "wss://environment.example.test/ws?wsTicket=test",
-  httpAuthorization: null,
   target: TARGET,
 };
 
@@ -129,12 +127,6 @@ const SERVER_CONFIG: ServerConfigType = {
       connectionProbe: true,
     },
   },
-  auth: {
-    policy: "loopback-browser",
-    bootstrapMethods: ["one-time-token"],
-    sessionMethods: ["browser-session-cookie", "bearer-access-token"],
-    sessionCookieName: "t3_session",
-  },
   cwd: "/tmp/workspace",
   keybindingsConfigPath: "/tmp/workspace/keybindings.json",
   keybindings: [],
@@ -144,8 +136,6 @@ const SERVER_CONFIG: ServerConfigType = {
   observability: {
     logsDirectoryPath: "/tmp/logs",
     localTracingEnabled: false,
-    otlpTracesEnabled: false,
-    otlpMetricsEnabled: false,
   },
   settings: DEFAULT_SERVER_SETTINGS,
 };
@@ -268,7 +258,10 @@ describe("RpcSessionFactory", () => {
       const readyFiber = yield* Effect.forkChild(session.ready);
       const socket = yield* awaitSocket(sockets);
 
-      expect(socket.url).toBe(PREPARED.socketUrl);
+      const socketUrl = new URL(socket.url);
+      expect(socketUrl.searchParams.get("clientId")).toMatch(/^[0-9a-f-]{36}$/);
+      socketUrl.searchParams.delete("clientId");
+      expect(socketUrl.toString()).toBe(PREPARED.socketUrl);
       socket.open();
       yield* completeInitialConfig(socket);
       yield* Fiber.join(readyFiber);
@@ -767,9 +760,9 @@ describe("RpcSessionFactory", () => {
                       {
                         _tag: "Fail",
                         error: {
-                          _tag: "EnvironmentAuthorizationError",
-                          message: "config subscription rejected",
-                          requiredScope: "orchestration:read",
+                          _tag: "KeybindingsConfigParseError",
+                          configPath: "/test/keybindings.json",
+                          detail: "config subscription rejected",
                         },
                       },
                     ],
@@ -779,8 +772,10 @@ describe("RpcSessionFactory", () => {
           const firstClosedExit = yield* Fiber.join(firstClosed);
           expect(Exit.isFailure(firstClosedExit)).toBe(true);
           if (failure === "typed" && Exit.isFailure(firstClosedExit)) {
-            expect(Cause.squash(firstClosedExit.cause)).toBeInstanceOf(ConnectionBlockedError);
-            expect(Cause.squash(firstClosedExit.cause)).toMatchObject({ reason: "permission" });
+            expect(Cause.squash(firstClosedExit.cause)).toBeInstanceOf(ConnectionTransientError);
+            expect(Cause.squash(firstClosedExit.cause)).toMatchObject({
+              reason: "remote-unavailable",
+            });
           }
           yield* SubscriptionRef.set(activeSession, Option.none());
 

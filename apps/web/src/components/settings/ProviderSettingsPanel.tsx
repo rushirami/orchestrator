@@ -25,29 +25,26 @@ import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Result from "effect/Result";
 import { PlusIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
-import { isElectron } from "../../env";
-import { usePrimarySessionState } from "../../environments/primary";
 import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
-import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { cn } from "../../lib/utils";
 import { resolveAppModelSelectionState } from "../../modelSelection";
 import {
+  type EnvironmentPresentation,
   useEnvironments,
   usePrimaryEnvironmentId,
-  type EnvironmentPresentation,
 } from "../../state/environments";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "../../state/server";
-import { useEnvironmentSessionState } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { getRelativeTimeState } from "../../timestampFormat";
 import {
-  ConnectionStatusDot,
   connectionPhaseDotClassName,
   connectionPhasePingClassName,
+  ConnectionStatusDot,
 } from "../ConnectionStatusDot";
+import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import {
   canOneClickUpdateProviderCandidate,
   collectProviderUpdateCandidates,
@@ -72,16 +69,19 @@ import {
   NumberFieldInput,
 } from "../ui/number-field";
 import { ScrollArea } from "../ui/scroll-area";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { ExpandableText } from "./ExpandableText";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
-import { UsageProviderSettings } from "./UsageProviderSettings";
+import {
+  buildProviderEnvironmentOptions,
+  classifyProviderEnvironmentAccess,
+  isProviderSettingsEnvironmentAvailable,
+  type ProviderEnvironmentAccess,
+  resolveSelectedProviderEnvironmentId,
+} from "./ProviderSettingsPanel.logic";
 import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
-import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
-import { providerSettingsTabClassName } from "./providerSettingsTabs";
-import { searchableSetting } from "./settingsSearch";
 import {
   backgroundActivityOverrideSettings,
   buildProviderInstanceUpdatePatch,
@@ -89,6 +89,9 @@ import {
   normalizeIntervalSeconds,
   PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
 } from "./SettingsPanels.logic";
+import { UsageProviderSettings } from "./UsageProviderSettings";
+import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
+import { providerSettingsTabClassName } from "./providerSettingsTabs";
 import {
   PolicyTooltip,
   SettingResetButton,
@@ -98,16 +101,7 @@ import {
   useRelativeTimeTick,
   useSettingsSearchTargetId,
 } from "./settingsLayout";
-import {
-  buildProviderEnvironmentOptions,
-  classifyProviderEnvironmentAccess,
-  isProviderSettingsEnvironmentAvailable,
-  type ProviderEnvironmentAccess,
-  type ProviderOperateAccess,
-  resolvePrimaryOperateAccess,
-  resolveRemoteOperateAccess,
-  resolveSelectedProviderEnvironmentId,
-} from "./ProviderSettingsPanel.logic";
+import { searchableSetting } from "./settingsSearch";
 
 function withoutProviderInstanceKey<V>(
   record: Readonly<Record<ProviderInstanceId, V>> | undefined,
@@ -161,11 +155,9 @@ function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }
 }
 
 function providerEnvironmentDetail(environment: EnvironmentPresentation): string {
-  if (environment.entry.target._tag === "PrimaryConnectionTarget") return "Primary device";
-  if (environment.relayManaged) return "T3 Connect";
-  if (environment.entry.target._tag === "SshConnectionTarget") return "SSH";
-  if (isDesktopLocalConnectionTarget(environment.entry.target)) return "Local device";
-  return environment.displayUrl ?? "Remote device";
+  return isDesktopLocalConnectionTarget(environment.entry.target)
+    ? "Local device"
+    : "Primary device";
 }
 
 const providerCardClassName = "rounded-xl border border-border/60 bg-card/40 shadow-xs/5";
@@ -219,7 +211,7 @@ function EnvironmentUnavailablePlaceholder({
   deviceTabs,
 }: {
   readonly environment: EnvironmentPresentation;
-  readonly access: Exclude<ProviderEnvironmentAccess, { kind: "editable" | "read-only" }>;
+  readonly access: Exclude<ProviderEnvironmentAccess, { kind: "editable" }>;
   readonly deviceTabs?: ReactNode;
 }) {
   const isLoading = access.kind === "loading";
@@ -231,9 +223,7 @@ function EnvironmentUnavailablePlaceholder({
   // Keep the description to a short status; the raw failure can be a
   // multi-paragraph CLI dump, so it goes below, clamped and expandable.
   const description = isLoading
-    ? access.reason === "permissions"
-      ? "Checking what this session is allowed to change."
-      : `Waiting for ${environment.label}'s configuration.`
+    ? `Waiting for ${environment.label}'s configuration.`
     : connectionStatusTitle(environment.connection);
   const error = isLoading ? null : environment.connection.error;
   // No spinner: this state can persist indefinitely for a wedged device, and a
@@ -320,7 +310,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
     }
   }, [searchTargetId, searchableEnvironmentId, selectedEnvironmentCanRenderSettings]);
   const onlyPrimaryDevice =
-    options.length === 1 && options[0]?.entry.target._tag === "PrimaryConnectionTarget";
+    options.length === 1 && options[0]?.entry.target.backendId === undefined;
   const deviceTabs =
     !onlyPrimaryDevice && options.length > 0 ? (
       <ScrollArea hideScrollbars scrollFade className="mx-3 h-11 min-w-0 rounded-none sm:mx-4">
@@ -416,106 +406,11 @@ function SelectedEnvironmentProviderSettings({
   readonly deviceTabs?: ReactNode;
   readonly targetInstanceId?: ProviderInstanceId | undefined;
 }) {
-  const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
-  if (isPrimary) {
-    // The desktop app owns its primary server outright; a browser session
-    // checks the scopes its cookie session was granted.
-    if (isElectron) {
-      return (
-        <AccessGatedProviderSettings
-          environment={environment}
-          operateAccess="granted"
-          deviceTabs={deviceTabs}
-          targetInstanceId={targetInstanceId}
-        />
-      );
-    }
-    return (
-      <PrimarySessionGatedProviderSettings
-        environment={environment}
-        deviceTabs={deviceTabs}
-        targetInstanceId={targetInstanceId}
-      />
-    );
-  }
-  return (
-    <RemoteSessionGatedProviderSettings
-      environment={environment}
-      deviceTabs={deviceTabs}
-      targetInstanceId={targetInstanceId}
-    />
-  );
-}
-
-function PrimarySessionGatedProviderSettings({
-  environment,
-  deviceTabs,
-  targetInstanceId,
-}: {
-  readonly environment: EnvironmentPresentation;
-  readonly deviceTabs?: ReactNode;
-  readonly targetInstanceId?: ProviderInstanceId | undefined;
-}) {
-  const primarySessionState = usePrimarySessionState();
-  const operateAccess = resolvePrimaryOperateAccess({
-    isPrimary: true,
-    hasDesktopBridge: false,
-    session: primarySessionState.data,
-    isPending: primarySessionState.isPending,
-    hasError: primarySessionState.error !== null,
-  });
-  return (
-    <AccessGatedProviderSettings
-      environment={environment}
-      operateAccess={operateAccess}
-      deviceTabs={deviceTabs}
-      targetInstanceId={targetInstanceId}
-    />
-  );
-}
-
-function RemoteSessionGatedProviderSettings({
-  environment,
-  deviceTabs,
-  targetInstanceId,
-}: {
-  readonly environment: EnvironmentPresentation;
-  readonly deviceTabs?: ReactNode;
-  readonly targetInstanceId?: ProviderInstanceId | undefined;
-}) {
-  const sessionState = useEnvironmentSessionState(environment.environmentId);
-  const operateAccess = resolveRemoteOperateAccess({
-    session: sessionState.data,
-    isPending: sessionState.isPending,
-    hasError: sessionState.hasError,
-  });
-  return (
-    <AccessGatedProviderSettings
-      environment={environment}
-      operateAccess={operateAccess}
-      deviceTabs={deviceTabs}
-      targetInstanceId={targetInstanceId}
-    />
-  );
-}
-
-function AccessGatedProviderSettings({
-  environment,
-  operateAccess,
-  deviceTabs,
-  targetInstanceId,
-}: {
-  readonly environment: EnvironmentPresentation;
-  readonly operateAccess: ProviderOperateAccess;
-  readonly deviceTabs?: ReactNode;
-  readonly targetInstanceId?: ProviderInstanceId | undefined;
-}) {
   const access = classifyProviderEnvironmentAccess({
     connectionPhase: environment.connection.phase,
     hasServerConfig: environment.serverConfig !== null,
-    operateAccess,
   });
-  if (access.kind !== "editable" && access.kind !== "read-only") {
+  if (access.kind !== "editable") {
     return (
       <EnvironmentUnavailablePlaceholder
         environment={environment}
@@ -528,7 +423,6 @@ function AccessGatedProviderSettings({
     <EnvironmentProviderSettings
       environmentId={environment.environmentId}
       environmentLabel={environment.label}
-      readOnly={access.kind === "read-only"}
       deviceTabs={deviceTabs}
       targetInstanceId={targetInstanceId}
     />
@@ -538,7 +432,6 @@ function AccessGatedProviderSettings({
 export function EnvironmentProviderSettings({
   environmentId,
   environmentLabel,
-  readOnly = false,
   deviceTabs,
   targetInstanceId,
 }: {
@@ -546,13 +439,6 @@ export function EnvironmentProviderSettings({
   readonly environmentLabel: string;
   readonly deviceTabs?: ReactNode;
   readonly targetInstanceId?: ProviderInstanceId | undefined;
-  /**
-   * Grey out and freeze every write control when this session's credential
-   * lacks `orchestration:operate` on the environment. Selecting providers
-   * still works so the real configuration stays readable; switches, forms,
-   * and the health interval are inert so no write is offered and then rejected.
-   */
-  readonly readOnly?: boolean;
 }) {
   const settings = useEnvironmentSettings(environmentId);
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
@@ -903,10 +789,11 @@ export function EnvironmentProviderSettings({
         mode={mode}
         selected={mode === "list" && selectedRow?.instanceId === row.instanceId}
         onSelect={mode === "list" ? () => setSelectedInstanceId(row.instanceId) : undefined}
-        readOnly={readOnly}
+
         setup={
           mode === "editor" && row.driver === "antigravity" ? (
             <ProviderSetupSection
+              readOnly={false}
               environmentId={environmentId}
               environmentLabel={environmentLabel}
               instanceId={row.instanceId}
@@ -914,7 +801,7 @@ export function EnvironmentProviderSettings({
               binaryPath={configuredBinaryPath(row.instance.config)}
               authMethod={readAntigravityAuthMethod(row.instance.config)}
               enabled={resolveProviderInstanceEnabled(row.instance)}
-              readOnly={readOnly}
+
               onEnable={() => updateProviderInstance(row, { ...row.instance, enabled: true })}
             />
           ) : null
@@ -982,11 +869,7 @@ export function EnvironmentProviderSettings({
         variant="plain"
         headerAction={
           <div className="flex min-w-0 items-center gap-2">
-            {readOnly ? (
-              <span className="min-w-0 truncate text-xs text-muted-foreground">
-                <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
-              </span>
-            ) : (
+            {
               <>
                 <Tooltip>
                   <TooltipTrigger
@@ -1028,19 +911,12 @@ export function EnvironmentProviderSettings({
                   <TooltipPopup side="top">Add provider</TooltipPopup>
                 </Tooltip>
               </>
-            )}
+            }
           </div>
         }
       >
         {deviceTabs}
-        {readOnly ? (
-          <div className={cn(providerCardClassName, "overflow-hidden")}>
-            <SettingsRow
-              title="Limited permissions"
-              description={`This session can view ${environmentLabel}'s providers but can't change their settings.`}
-            />
-          </div>
-        ) : null}
+
         <div
           className={cn(
             providerCardClassName,
@@ -1073,11 +949,11 @@ export function EnvironmentProviderSettings({
       </SettingsSection>
 
       <UsageProviderSettings
+        readOnly={false}
         key={environmentId}
         environmentId={environmentId}
         environmentLabel={environmentLabel}
         sources={settings.usageLimitSources}
-        readOnly={readOnly}
       />
 
       <SettingsSection title="Advanced">
@@ -1096,7 +972,7 @@ export function EnvironmentProviderSettings({
           description="Refresh provider status, versions, and models in the background. Set to 0 to disable."
           resetAction={
             providerHealthRefreshIntervalSeconds !== defaultProviderHealthRefreshIntervalSeconds ? (
-              <span inert={readOnly} className={readOnly ? "opacity-50" : undefined}>
+              <span className={undefined}>
                 <SettingResetButton
                   label="provider health check interval"
                   onClick={() =>
@@ -1113,14 +989,7 @@ export function EnvironmentProviderSettings({
             ) : null
           }
           control={
-            <div
-              inert={readOnly}
-              aria-disabled={readOnly || undefined}
-              className={cn(
-                "flex shrink-0 items-center gap-2",
-                readOnly && "opacity-50 select-none",
-              )}
-            >
+            <div className={cn("flex shrink-0 items-center gap-2", false)}>
               <NumberField
                 value={providerHealthRefreshIntervalSeconds}
                 min={0}

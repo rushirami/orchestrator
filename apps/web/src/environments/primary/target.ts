@@ -1,4 +1,5 @@
-import { PRIMARY_LOCAL_ENVIRONMENT_ID, type DesktopEnvironmentBootstrap } from "@t3tools/contracts";
+import { type DesktopEnvironmentBootstrap, PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
+import { parseLocalBackendUrl } from "@t3tools/shared/localBackendUrl";
 import * as Schema from "effect/Schema";
 
 const PrimaryEnvironmentTargetSource = Schema.Literals([
@@ -107,27 +108,11 @@ function normalizeBaseUrl(
   source: PrimaryEnvironmentTargetSource,
   urlKind: PrimaryEnvironmentUrlKind,
 ): string {
-  return parseTargetUrl({
-    rawValue,
-    baseUrl: window.location.origin,
-    source,
-    urlKind,
-  }).toString();
-}
-
-function swapBaseUrlProtocol(
-  rawValue: string,
-  nextProtocol: "http:" | "https:" | "ws:" | "wss:",
-  urlKind: PrimaryEnvironmentUrlKind,
-): string {
-  const url = parseTargetUrl({
-    rawValue,
-    baseUrl: window.location.origin,
-    source: "configured",
-    urlKind,
-  });
-  url.protocol = nextProtocol;
-  return url.toString();
+  try {
+    return parseLocalBackendUrl(rawValue, urlKind === "websocket-base-url" ? "ws:" : "http:").href;
+  } catch (cause) {
+    throw new PrimaryEnvironmentUrlInvalidError({ source, urlKind, cause });
+  }
 }
 
 function normalizeHostname(hostname: string): string {
@@ -139,104 +124,6 @@ function normalizeHostname(hostname: string): string {
 
 export function isLoopbackHostname(hostname: string): boolean {
   return LOOPBACK_HOSTNAMES.has(normalizeHostname(hostname));
-}
-
-function resolveHttpRequestBaseUrl(primaryTarget: PrimaryEnvironmentTarget): string {
-  const httpBaseUrl = primaryTarget.target.httpBaseUrl;
-  const configuredDevServerUrl = import.meta.env.VITE_DEV_SERVER_URL?.trim();
-  if (!configuredDevServerUrl) {
-    return httpBaseUrl;
-  }
-
-  const currentUrl = parseTargetUrl({
-    rawValue: window.location.href,
-    source: "window-origin",
-    urlKind: "window-location-url",
-  });
-  const targetUrl = parseTargetUrl({
-    rawValue: httpBaseUrl,
-    source: primaryTarget.source,
-    urlKind: "http-base-url",
-  });
-  const devServerUrl = parseTargetUrl({
-    rawValue: configuredDevServerUrl,
-    baseUrl: currentUrl.origin,
-    source: "configured",
-    urlKind: "development-server-url",
-  });
-
-  const isCurrentOriginDevServer =
-    (currentUrl.protocol === "http:" || currentUrl.protocol === "https:") &&
-    currentUrl.origin === devServerUrl.origin;
-
-  if (
-    !isCurrentOriginDevServer ||
-    currentUrl.origin === targetUrl.origin ||
-    !isLoopbackHostname(currentUrl.hostname) ||
-    !isLoopbackHostname(targetUrl.hostname)
-  ) {
-    return httpBaseUrl;
-  }
-
-  return currentUrl.origin;
-}
-
-function resolveConfiguredPrimaryTarget(): PrimaryEnvironmentTarget | null {
-  const configuredHttpBaseUrl = import.meta.env.VITE_HTTP_URL?.trim() || undefined;
-  const configuredWsBaseUrl = import.meta.env.VITE_WS_URL?.trim() || undefined;
-
-  if (!configuredHttpBaseUrl && !configuredWsBaseUrl) {
-    return null;
-  }
-
-  // Scheme checks run on the raw configured string, while the URL parser
-  // folds schemes to lowercase ("WSS://host" parses fine). Without the
-  // case folding an uppercase scheme would be classified as plaintext and
-  // swapped to http/ws, silently downgrading TLS.
-  const resolvedHttpBaseUrl =
-    configuredHttpBaseUrl ??
-    (configuredWsBaseUrl?.toLowerCase().startsWith("wss:")
-      ? swapBaseUrlProtocol(configuredWsBaseUrl, "https:", "websocket-base-url")
-      : swapBaseUrlProtocol(configuredWsBaseUrl!, "http:", "websocket-base-url"));
-  const resolvedWsBaseUrl =
-    configuredWsBaseUrl ??
-    (configuredHttpBaseUrl?.toLowerCase().startsWith("https:")
-      ? swapBaseUrlProtocol(configuredHttpBaseUrl, "wss:", "http-base-url")
-      : swapBaseUrlProtocol(configuredHttpBaseUrl!, "ws:", "http-base-url"));
-
-  return {
-    source: "configured",
-    target: {
-      httpBaseUrl: normalizeBaseUrl(resolvedHttpBaseUrl, "configured", "http-base-url"),
-      wsBaseUrl: normalizeBaseUrl(resolvedWsBaseUrl, "configured", "websocket-base-url"),
-    },
-  };
-}
-
-function resolveWindowOriginPrimaryTarget(): PrimaryEnvironmentTarget {
-  const url = parseTargetUrl({
-    rawValue: window.location.origin,
-    source: "window-origin",
-    urlKind: "http-base-url",
-  });
-  const httpBaseUrl = url.toString();
-  if (url.protocol === "http:") {
-    url.protocol = "ws:";
-  } else if (url.protocol === "https:") {
-    url.protocol = "wss:";
-  } else {
-    throw new PrimaryEnvironmentProtocolUnsupportedError({
-      source: "window-origin",
-      protocol: url.protocol,
-    });
-  }
-  return {
-    source: "window-origin",
-    target: {
-      httpBaseUrl,
-      wsBaseUrl: url.toString(),
-    },
-  };
 }
 
 function resolveDesktopPrimaryTarget(): PrimaryEnvironmentTarget | null {
@@ -278,7 +165,7 @@ export function resolvePrimaryEnvironmentHttpUrl(
   const primaryTarget = readPrimaryEnvironmentTarget();
 
   const url = parseTargetUrl({
-    rawValue: resolveHttpRequestBaseUrl(primaryTarget),
+    rawValue: primaryTarget.target.httpBaseUrl,
     source: primaryTarget.source,
     urlKind: "http-base-url",
   });
@@ -290,9 +177,12 @@ export function resolvePrimaryEnvironmentHttpUrl(
 }
 
 export function readPrimaryEnvironmentTarget(): PrimaryEnvironmentTarget {
-  return (
-    resolveDesktopPrimaryTarget() ??
-    resolveConfiguredPrimaryTarget() ??
-    resolveWindowOriginPrimaryTarget()
-  );
+  const target = resolveDesktopPrimaryTarget();
+  if (target === null) {
+    throw new DesktopEnvironmentBootstrapIncompleteError({
+      hasHttpBaseUrl: false,
+      hasWsBaseUrl: false,
+    });
+  }
+  return target;
 }

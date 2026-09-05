@@ -1,26 +1,25 @@
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 
-import { isCommandPaletteOpen } from "../commandPaletteBus";
-import { useClientSettings, useLegacySidebarEnabled } from "../hooks/useSettings";
-import { openCommandPalette } from "../commandPaletteBus";
-import { useProjects } from "../state/entities";
-import { usePrimaryEnvironmentId } from "../state/environments";
-import { selectProjectGroupingSettings } from "../logicalProject";
-import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
+import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { primaryServerKeybindingsAtom } from "~/state/server";
+import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useClientSettings, useLegacySidebarEnabled } from "../hooks/useSettings";
+import { resolveShortcutCommand } from "../keybindings";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { resolveShortcutCommand } from "../keybindings";
-import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { selectProjectGroupingSettings } from "../logicalProject";
 import { isPreviewSupportedInRuntime } from "../previewStateStore";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
+import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
+import { useProjects } from "../state/entities";
+import { usePrimaryEnvironmentId } from "../state/environments";
+import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
-import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { primaryServerKeybindingsAtom } from "~/state/server";
 
 function ChatRouteGlobalShortcuts() {
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
@@ -184,13 +183,5 @@ function ChatRouteLayout() {
 }
 
 export const Route = createFileRoute("/_chat")({
-  beforeLoad: async ({ context }) => {
-    if (
-      context.authGateState.status !== "authenticated" &&
-      context.authGateState.status !== "hosted-static"
-    ) {
-      throw redirect({ to: "/pair", replace: true });
-    }
-  },
   component: ChatRouteLayout,
 });

@@ -51,13 +51,26 @@ describe("normalizePreviewUrl", () => {
     expect(normalizePreviewUrl("127.0.0.1:3000")).toBe("http://127.0.0.1:3000/");
   });
 
-  it("treats bare public hosts as https", () => {
-    expect(normalizePreviewUrl("example.com")).toBe("https://example.com/");
+  it.each([
+    "example.com",
+    "http://192.168.1.10",
+    "http://localhost.evil.test",
+    "https://example.com/path?q=secret",
+  ])("rejects remote preview %s", (url) => {
+    expect(() => normalizePreviewUrl(url)).toThrow(PreviewUrlNormalizationError);
+  });
+  it("rejects embedded credentials", () => {
+    expect(() => normalizePreviewUrl("http://user:secret@localhost:3000")).toThrow(
+      PreviewUrlNormalizationError,
+    );
+  });
+  it("connects to wildcard development servers via loopback", () => {
+    expect(normalizePreviewUrl("http://0.0.0.0:3000")).toBe("http://127.0.0.1:3000/");
   });
 
   it("respects explicit schemes", () => {
     expect(normalizePreviewUrl("https://localhost:5173")).toBe("https://localhost:5173/");
-    expect(normalizePreviewUrl("http://example.com/path?q=1")).toBe("http://example.com/path?q=1");
+    expect(normalizePreviewUrl("http://localhost/path?q=1")).toBe("http://localhost/path?q=1");
   });
 
   it("rejects empty input", () => {

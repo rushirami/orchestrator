@@ -10,7 +10,6 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -26,28 +25,18 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
 import * as ServerConfig from "./config.ts";
-import * as Keybindings from "./keybindings.ts";
-import * as ExternalLauncher from "./process/externalLauncher.ts";
-import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
-import * as OrchestrationReactor from "./orchestration/Services/OrchestrationReactor.ts";
-import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
-import * as ServerSettings from "./serverSettings.ts";
-import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
-import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
+import * as Keybindings from "./keybindings.ts";
+import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
+import * as OrchestrationReactor from "./orchestration/Services/OrchestrationReactor.ts";
+import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as ProviderService from "./provider/Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDirectory.ts";
 import * as ProviderSessionReaper from "./provider/Services/ProviderSessionReaper.ts";
 import { forkParked } from "./serverActivation.ts";
-import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
+import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
+import * as ServerSettings from "./serverSettings.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
-import {
-  formatHeadlessServeOutput,
-  formatHostForUrl,
-  isWildcardHost,
-  issueHeadlessServeAccessInfo,
-} from "./startupAccess.ts";
 
 export class ServerRuntimeStartupError extends Schema.TaggedErrorClass<ServerRuntimeStartupError>()(
   "ServerRuntimeStartupError",
@@ -68,13 +57,6 @@ export class ServerRuntimeStartup extends Context.Service<
   {
     readonly awaitCommandReady: Effect.Effect<void, ServerRuntimeStartupError>;
     readonly markHttpListening: Effect.Effect<void>;
-    readonly markRunningProviderSessionsForContinuation: Effect.Effect<
-      ReadonlyArray<ThreadId>,
-      ServerUpdateThreadContinuationError
-    >;
-    readonly clearProviderSessionContinuationMarkers: (
-      threadIds: ReadonlyArray<ThreadId>,
-    ) => Effect.Effect<void, ServerUpdateThreadContinuationError>;
     readonly enqueueCommand: <A, E>(
       effect: Effect.Effect<A, E>,
     ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
@@ -144,37 +126,6 @@ export const makeCommandGate = Effect.gen(function* () {
       }),
   } satisfies CommandGate;
 });
-
-export const recordStartupHeartbeat = Effect.gen(function* () {
-  const analytics = yield* AnalyticsService.AnalyticsService;
-  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-
-  const { threadCount, projectCount } = yield* projectionSnapshotQuery.getCounts().pipe(
-    Effect.catch((cause) =>
-      Effect.logWarning("failed to gather startup projection counts for telemetry", {
-        cause,
-      }).pipe(
-        Effect.as({
-          threadCount: 0,
-          projectCount: 0,
-        }),
-      ),
-    ),
-  );
-
-  yield* analytics.record("server.boot.heartbeat", {
-    threadCount,
-    projectCount,
-  });
-});
-
-export const launchStartupHeartbeat = recordStartupHeartbeat.pipe(
-  Effect.annotateSpans({ "startup.phase": "heartbeat.record" }),
-  Effect.withSpan("server.startup.heartbeat.record"),
-  Effect.ignoreCause({ log: true }),
-  Effect.forkScoped,
-  Effect.asVoid,
-);
 
 export const getAutoBootstrapThreadModelSelection = (): ModelSelection => ({
   instanceId: ProviderInstanceId.make("codex"),
@@ -263,39 +214,6 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
   } as const;
 });
 
-const resolveStartupBrowserTarget = Effect.gen(function* () {
-  const serverConfig = yield* ServerConfig.ServerConfig;
-  const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-  const localUrl = `http://localhost:${serverConfig.port}`;
-  const bindUrl =
-    serverConfig.host && !isWildcardHost(serverConfig.host)
-      ? `http://${formatHostForUrl(serverConfig.host)}:${serverConfig.port}`
-      : localUrl;
-  const baseTarget = serverConfig.devUrl?.toString() ?? bindUrl;
-  return yield* Effect.succeed(serverConfig.mode === "desktop" ? baseTarget : undefined).pipe(
-    Effect.flatMap((target) =>
-      target ? Effect.succeed(target) : serverAuth.issueStartupPairingUrl(baseTarget),
-    ),
-  );
-});
-
-const maybeOpenBrowser = (target: string) =>
-  Effect.gen(function* () {
-    const serverConfig = yield* ServerConfig.ServerConfig;
-    if (serverConfig.noBrowser) {
-      return;
-    }
-    const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
-
-    yield* externalLauncher.launchBrowser(target).pipe(
-      Effect.catch(() =>
-        Effect.logInfo("browser auto-open unavailable", {
-          hint: `Open ${target} in your browser.`,
-        }),
-      ),
-    );
-  });
-
 const runStartupPhase = <A, E, R>(phase: string, effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.annotateSpans({ "startup.phase": phase }),
@@ -318,17 +236,6 @@ class ProviderSessionContinuationError extends Schema.TaggedErrorClass<ProviderS
   }
 }
 
-export class ServerUpdateThreadContinuationError extends Schema.TaggedErrorClass<ServerUpdateThreadContinuationError>()(
-  "ServerUpdateThreadContinuationError",
-  {
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return "Could not prepare running threads to continue after the update.";
-  }
-}
-
 function hasServerUpdateContinuationMarker(
   runtimePayload: unknown,
 ): runtimePayload is Record<string, unknown> {
@@ -348,8 +255,6 @@ function readRuntimePayload(runtimePayload: unknown): Record<string, unknown> {
     : {};
 }
 
-const isServerUpdateThreadContinuationError = Schema.is(ServerUpdateThreadContinuationError);
-
 function readServerUpdateContinuationTurnId(runtimePayload: unknown): TurnId | null {
   if (!hasServerUpdateContinuationMarker(runtimePayload)) {
     return null;
@@ -357,54 +262,6 @@ function readServerUpdateContinuationTurnId(runtimePayload: unknown): TurnId | n
   const value = runtimePayload[SERVER_UPDATE_CONTINUATION_KEY];
   return typeof value === "string" && value.length > 0 ? TurnId.make(value) : null;
 }
-
-const toServerUpdateThreadContinuationError = (cause: unknown) =>
-  isServerUpdateThreadContinuationError(cause)
-    ? cause
-    : new ServerUpdateThreadContinuationError({ cause });
-
-export const markRunningProviderSessionsForContinuation = Effect.gen(function* () {
-  const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-  const query = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-  const { threads } = yield* query.getCommandReadModel();
-  const running = threads.filter(
-    (thread) =>
-      thread.archivedAt === null &&
-      thread.deletedAt === null &&
-      thread.session?.status === "running" &&
-      thread.session.activeTurnId !== null,
-  );
-
-  const marked: ThreadId[] = [];
-  return yield* Effect.gen(function* () {
-    for (const thread of running) {
-      const activeTurnId = thread.session?.activeTurnId;
-      if (activeTurnId === null || activeTurnId === undefined) {
-        continue;
-      }
-      const binding = yield* directory.getBinding(thread.id);
-      if (Option.isNone(binding)) {
-        continue;
-      }
-      if (binding.value.resumeCursor === null || binding.value.resumeCursor === undefined) {
-        continue;
-      }
-      yield* directory.upsert({
-        ...binding.value,
-        runtimePayload: {
-          ...readRuntimePayload(binding.value.runtimePayload),
-          [SERVER_UPDATE_CONTINUATION_KEY]: activeTurnId,
-        },
-      });
-      marked.push(thread.id);
-    }
-    return marked;
-  }).pipe(
-    Effect.catchCause((cause) =>
-      clearProviderSessionContinuationMarkers(marked).pipe(Effect.andThen(Effect.failCause(cause))),
-    ),
-  );
-}).pipe(Effect.mapError(toServerUpdateThreadContinuationError));
 
 const clearContinuationMarkers = (
   directory: ProviderSessionDirectory.ProviderSessionDirectory["Service"],
@@ -430,12 +287,6 @@ const clearContinuationMarkers = (
       ),
     { concurrency: "unbounded", discard: true },
   );
-
-export const clearProviderSessionContinuationMarkers = (threadIds: ReadonlyArray<ThreadId>) =>
-  Effect.gen(function* () {
-    const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
-    yield* clearContinuationMarkers(directory, threadIds);
-  }).pipe(Effect.mapError(toServerUpdateThreadContinuationError));
 
 export const reconcileProviderSessions = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
@@ -705,9 +556,7 @@ export const make = (options?: StartupOptions) =>
     const serverSettings = yield* ServerSettings.ServerSettingsService;
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
     const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
-    const providerSessionDirectory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
     const crypto = yield* Crypto.Crypto;
-    const launcher = yield* ServiceLauncherClient.ServiceLauncherClient;
 
     const commandGate = yield* makeCommandGate;
     const httpListening = yield* Deferred.make<void>();
@@ -810,42 +659,12 @@ export const make = (options?: StartupOptions) =>
         );
       }
 
-      yield* forkParked(
-        Effect.gen(function* () {
-          yield* Effect.logDebug("startup phase: recording startup heartbeat");
-          yield* recordStartupHeartbeat.pipe(
-            Effect.annotateSpans({ "startup.phase": "heartbeat.record" }),
-            Effect.withSpan("server.startup.heartbeat.record"),
-            Effect.ignoreCause({ log: true }),
-          );
-          if (serverConfig.startupPresentation === "headless") {
-            const accessInfo = yield* issueHeadlessServeAccessInfo();
-            yield* runStartupPhase(
-              "headless.output",
-              Console.log(formatHeadlessServeOutput(accessInfo)),
-            );
-          } else {
-            const startupBrowserTarget = yield* resolveStartupBrowserTarget;
-            if (serverConfig.mode !== "desktop") {
-              yield* Effect.logInfo(
-                "Authentication required. Open T3 Code using the pairing URL.",
-              ).pipe(Effect.annotateLogs({ pairingUrl: startupBrowserTarget }));
-            }
-            yield* runStartupPhase("browser.open", maybeOpenBrowser(startupBrowserTarget));
-          }
-        }),
-      );
-
       yield* Effect.logDebug("startup phase: waiting for http listener");
       yield* runStartupPhase("http.wait", Deferred.await(httpListening));
       yield* runStartupPhase(
         "auxiliary-roots.parked",
         options?.awaitAuxiliaryParked ?? Effect.void,
       );
-
-      // This is the prepared boundary. Every dependency has been acquired and
-      // every runtime root has confirmed that it is parked before this request.
-      const updateOutcome = yield* launcher.prepareTrial;
       yield* runStartupPhase(
         "welcome.publish",
         lifecycleEvents.publish({
@@ -866,7 +685,6 @@ export const make = (options?: StartupOptions) =>
           payload: {
             at: DateTime.formatIso(yield* DateTime.now),
             environment,
-            ...(updateOutcome === undefined ? {} : { updateOutcome }),
           },
         }),
       );
@@ -903,23 +721,6 @@ export const make = (options?: StartupOptions) =>
     return {
       awaitCommandReady: commandGate.awaitCommandReady,
       markHttpListening: Deferred.succeed(httpListening, undefined),
-      markRunningProviderSessionsForContinuation: markRunningProviderSessionsForContinuation.pipe(
-        Effect.provideService(
-          ProjectionSnapshotQuery.ProjectionSnapshotQuery,
-          projectionSnapshotQuery,
-        ),
-        Effect.provideService(
-          ProviderSessionDirectory.ProviderSessionDirectory,
-          providerSessionDirectory,
-        ),
-      ),
-      clearProviderSessionContinuationMarkers: (threadIds) =>
-        clearProviderSessionContinuationMarkers(threadIds).pipe(
-          Effect.provideService(
-            ProviderSessionDirectory.ProviderSessionDirectory,
-            providerSessionDirectory,
-          ),
-        ),
       enqueueCommand: commandGate.enqueueCommand,
     } satisfies ServerRuntimeStartup["Service"];
   });

@@ -6,7 +6,6 @@ node_modules
 *.tsbuildinfo
 apps/*/dist
 infra/*/dist
-.astro
 packages/*/dist
 .env
 .env.local
@@ -29,7 +28,6 @@ squashfs-root/
 dist-electron/
 .electron-runtime/
 .showcase/
-apps/mobile/.showcase/
 artifacts/app-store/screenshots/
 .github/pr-assets/
 native/**/target/

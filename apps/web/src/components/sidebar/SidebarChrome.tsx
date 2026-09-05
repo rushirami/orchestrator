@@ -1,3 +1,4 @@
+import { Link, useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
@@ -6,12 +7,11 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
-import { Link, useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { useEnvironments } from "../../state/environments";
-import { T3Wordmark } from "../T3Wordmark";
+import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -19,6 +19,7 @@ import {
   SidebarStageBackdrop,
   useEnvironmentStageLabel,
 } from "../SidebarStageBackdrop";
+import { T3Wordmark } from "../T3Wordmark";
 import { Badge } from "../ui/badge";
 import {
   SidebarFooter,
@@ -30,9 +31,7 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
-import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -216,7 +215,6 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           />
         </>
       )}
-      <SidebarUpdatePill />
     </SidebarMenu>
   );
 });
@@ -225,7 +223,6 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
     <SidebarFooter className="p-[var(--sidebar-content-inset)]">
       <SidebarProviderUpdatePill />
-      <SidebarUpdateArchitectureWarning />
       <SidebarUtilityMenu />
     </SidebarFooter>
   );

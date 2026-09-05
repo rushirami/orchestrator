@@ -10,14 +10,14 @@ import { HttpClient } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as DesktopObservability from "../app/DesktopObservability.ts";
+import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
-import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
-import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 import type { DesktopBackendSnapshot, DesktopBackendStartConfig } from "./DesktopBackendManager.ts";
+import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 
 function makeStubInstance(
   id: DesktopBackendPool.BackendInstanceId,
@@ -73,10 +73,6 @@ function makePoolLayer(
           handleControl: () => Effect.void,
           handleControlForSource: () => Effect.void,
           removeControlSource: () => Effect.void,
-          publishUpdateReport: () => Effect.void,
-          updateRequests: Stream.empty,
-          updateCommits: Stream.empty,
-          updateCancellations: Stream.empty,
         }),
         Layer.succeed(DesktopBackendConfiguration.DesktopBackendConfiguration, {
           resolvePrimary: Effect.die("unexpected primary config resolve"),

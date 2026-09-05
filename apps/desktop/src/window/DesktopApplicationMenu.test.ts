@@ -7,13 +7,12 @@ import * as Option from "effect/Option";
 
 import type * as Electron from "electron";
 
+import * as DesktopConfig from "../app/DesktopConfig.ts";
+import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
 import * as DesktopApplicationMenu from "./DesktopApplicationMenu.ts";
-import * as DesktopConfig from "../app/DesktopConfig.ts";
-import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
 
 const environmentInput = {
@@ -58,21 +57,6 @@ const electronDialogLayer = Layer.succeed(ElectronDialog.ElectronDialog, {
   showErrorBox: () => Effect.void,
 } satisfies ElectronDialog.ElectronDialog["Service"]);
 
-const desktopUpdatesLayer = Layer.succeed(DesktopUpdates.DesktopUpdates, {
-  getState: Effect.die("unexpected getState"),
-  isActionActive: Effect.succeed(false),
-  isInstallActive: Effect.succeed(false),
-  subscribe: Effect.die("unexpected subscribe"),
-  emitState: Effect.void,
-  disabledReason: Effect.succeed(Option.none()),
-  configure: Effect.void,
-  setChannel: () => Effect.die("unexpected setChannel"),
-  check: () => Effect.die("unexpected check"),
-  download: Effect.die("unexpected download"),
-  install: Effect.die("unexpected install"),
-  installPrepared: () => Effect.die("unexpected installPrepared"),
-} satisfies DesktopUpdates.DesktopUpdates["Service"]);
-
 const makeDesktopWindowLayer = (selectedAction: Deferred.Deferred<string>) =>
   Layer.succeed(DesktopWindow.DesktopWindow, {
     createMain: Effect.die("unexpected createMain"),
@@ -112,7 +96,6 @@ const configureMenu = (
       DesktopApplicationMenu.layer.pipe(
         Layer.provideMerge(makeElectronMenuLayer(applicationMenuTemplate)),
         Layer.provideMerge(makeDesktopWindowLayer(selectedAction)),
-        Layer.provideMerge(desktopUpdatesLayer),
         Layer.provideMerge(electronDialogLayer),
         Layer.provideMerge(electronAppLayer),
         Layer.provideMerge(

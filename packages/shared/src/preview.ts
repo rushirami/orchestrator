@@ -41,7 +41,7 @@ export function isPreviewableUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-    return isLoopbackHost(parsed.hostname);
+    return isLoopbackHost(parsed.hostname) && parsed.username === "" && parsed.password === "";
   } catch {
     return false;
   }
@@ -51,7 +51,13 @@ export class PreviewUrlNormalizationError extends Schema.TaggedErrorClass<Previe
   "PreviewUrlNormalizationError",
   {
     inputLength: Schema.Number,
-    reason: Schema.Literals(["empty", "parse", "unsupported-protocol"]),
+    reason: Schema.Literals([
+      "empty",
+      "parse",
+      "unsupported-protocol",
+      "remote-host",
+      "credentials",
+    ]),
     protocol: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect()),
   },
@@ -72,7 +78,7 @@ function previewUrlProtocol(rawUrl: string): string | undefined {
  * Normalise a free-form URL string into a fully-qualified `http(s)://` URL.
  *
  * - Bare loopback hosts (`localhost`, `localhost:5173`) become `http://...`.
- * - Bare public hosts (`example.com`) become `https://...`.
+ * - Public and LAN hosts are rejected.
  * - Already-qualified URLs are validated and returned as `URL.href`.
  *
  * Throws `PreviewUrlNormalizationError` for empty, unparseable, or
@@ -105,5 +111,13 @@ export function normalizePreviewUrl(rawUrl: string): string {
       protocol: parsed.protocol,
     });
   }
+  if (!isLoopbackHost(parsed.hostname)) {
+    throw new PreviewUrlNormalizationError({ inputLength: rawUrl.length, reason: "remote-host" });
+  }
+  if (parsed.username || parsed.password) {
+    throw new PreviewUrlNormalizationError({ inputLength: rawUrl.length, reason: "credentials" });
+  }
+  // Development servers often advertise a wildcard bind address; connect via loopback.
+  if (parsed.hostname === "0.0.0.0") parsed.hostname = "127.0.0.1";
   return parsed.href;
 }

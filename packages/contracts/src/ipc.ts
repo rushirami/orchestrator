@@ -1,4 +1,17 @@
+import * as Schema from "effect/Schema";
+import type { AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
+import { EnvironmentId } from "./baseSchemas.ts";
+import { BrowserProfileId } from "./browserProfile.ts";
 import type {
+  DesktopAppActivationRequest,
+  DesktopAppActivationResponse,
+} from "./desktopAppActivation.ts";
+import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
+import type {
+  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestThreadResult,
+  GitPullRequestRefInput,
+  GitResolvePullRequestResult,
   VcsCreateRefInput,
   VcsCreateRefResult,
   VcsCreateWorktreeInput,
@@ -9,46 +22,22 @@ import type {
   VcsPullInput,
   VcsPullResult,
   VcsRemoveWorktreeInput,
-  VcsSwitchRefInput,
-  VcsSwitchRefResult,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
-  GitPullRequestRefInput,
-  GitResolvePullRequestResult,
   VcsStatusInput,
   VcsStatusResult,
+  VcsSwitchRefInput,
+  VcsSwitchRefResult,
 } from "./git.ts";
 import type {
-  ReviewDiffFileContentsInput,
-  ReviewDiffFileContentsResult,
-  ReviewDiffPreviewInput,
-  ReviewDiffPreviewResult,
-} from "./review.ts";
-import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
-import type { AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
-import type {
-  ProjectListEntriesInput,
-  ProjectListEntriesResult,
-  ProjectReadFileInput,
-  ProjectReadFileResult,
-  ProjectSearchEntriesInput,
-  ProjectSearchEntriesResult,
-  ProjectWriteFileInput,
-  ProjectWriteFileResult,
-} from "./project.ts";
-import type {
-  TerminalAttachInput,
-  TerminalAttachStreamEvent,
-  TerminalClearInput,
-  TerminalCloseInput,
-  TerminalMetadataStreamEvent,
-  TerminalOpenInput,
-  TerminalResizeInput,
-  TerminalRestartInput,
-  TerminalSessionSnapshot,
-  TerminalWriteInput,
-} from "./terminal.ts";
-import * as Schema from "effect/Schema";
+  ClientOrchestrationCommand,
+  OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetFullThreadDiffResult,
+  OrchestrationGetTurnDiffInput,
+  OrchestrationGetTurnDiffResult,
+  OrchestrationShellSnapshot,
+  OrchestrationShellStreamItem,
+  OrchestrationSubscribeThreadInput,
+  OrchestrationThreadStreamItem,
+} from "./orchestration.ts";
 import type {
   DiscoveredLocalServerList,
   PreviewCloseInput,
@@ -77,28 +66,22 @@ import {
   PreviewAutomationWaitForInput,
 } from "./previewAutomation.ts";
 import type {
-  ClientOrchestrationCommand,
-  OrchestrationGetFullThreadDiffInput,
-  OrchestrationGetFullThreadDiffResult,
-  OrchestrationGetTurnDiffInput,
-  OrchestrationGetTurnDiffResult,
-  OrchestrationShellSnapshot,
-  OrchestrationShellStreamItem,
-  OrchestrationSubscribeThreadInput,
-  OrchestrationThreadStreamItem,
-} from "./orchestration.ts";
-import { EnvironmentId } from "./baseSchemas.ts";
-import { BrowserProfileId } from "./browserProfile.ts";
+  ProjectListEntriesInput,
+  ProjectListEntriesResult,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
+  ProjectSearchEntriesInput,
+  ProjectSearchEntriesResult,
+  ProjectWriteFileInput,
+  ProjectWriteFileResult,
+} from "./project.ts";
 import type {
-  BrowserImportResult,
-  BrowserImportSource,
-  BrowserImportSourceId,
-} from "./browserImport.ts";
-import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
-import { AdvertisedEndpoint } from "./remoteAccess.ts";
-import { ExecutionEnvironmentDescriptor } from "./environment.ts";
+  ReviewDiffFileContentsInput,
+  ReviewDiffFileContentsResult,
+  ReviewDiffPreviewInput,
+  ReviewDiffPreviewResult,
+} from "./review.ts";
 import type { ClientSettings, QuitConfirmationMode } from "./settings.ts";
-import type { EditorId } from "./editor.ts";
 import type {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
@@ -108,9 +91,17 @@ import type {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import type {
-  DesktopAppActivationRequest,
-  DesktopAppActivationResponse,
-} from "./desktopAppActivation.ts";
+  TerminalAttachInput,
+  TerminalAttachStreamEvent,
+  TerminalClearInput,
+  TerminalCloseInput,
+  TerminalMetadataStreamEvent,
+  TerminalOpenInput,
+  TerminalResizeInput,
+  TerminalRestartInput,
+  TerminalSessionSnapshot,
+  TerminalWriteInput,
+} from "./terminal.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -156,34 +147,11 @@ export const ContextMenuItemSchema: Schema.Codec<ContextMenuItemSchemaType> = Sc
   ),
 });
 
-export type DesktopUpdateStatus =
-  | "disabled"
-  | "idle"
-  | "checking"
-  | "up-to-date"
-  | "available"
-  | "downloading"
-  | "downloaded"
-  | "error";
-
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
-export type DesktopUpdateChannel = "latest" | "nightly";
 export type DesktopAppStageLabel = "Alpha" | "Dev" | "Nightly";
-
-export const DesktopUpdateStatusSchema = Schema.Literals([
-  "disabled",
-  "idle",
-  "checking",
-  "up-to-date",
-  "available",
-  "downloading",
-  "downloaded",
-  "error",
-]);
 export const DesktopRuntimeArchSchema = Schema.Literals(["arm64", "x64", "other"]);
 export const DesktopThemeSchema = Schema.Literals(["light", "dark", "system"]);
-export const DesktopUpdateChannelSchema = Schema.Literals(["latest", "nightly"]);
 export const DesktopAppStageLabelSchema = Schema.Literals(["Alpha", "Dev", "Nightly"]);
 
 export interface DesktopAppBranding {
@@ -204,78 +172,6 @@ export interface DesktopRuntimeInfo {
   runningUnderArm64Translation: boolean;
 }
 
-export interface DesktopUpdateState {
-  enabled: boolean;
-  status: DesktopUpdateStatus;
-  channel: DesktopUpdateChannel;
-  currentVersion: string;
-  hostArch: DesktopRuntimeArch;
-  appArch: DesktopRuntimeArch;
-  runningUnderArm64Translation: boolean;
-  availableVersion: string | null;
-  downloadedVersion: string | null;
-  releaseNotes: ReadonlyArray<DesktopUpdateReleaseNote>;
-  omittedReleaseCount: number;
-  downloadPercent: number | null;
-  checkedAt: string | null;
-  message: string | null;
-  errorContext: "check" | "download" | "install" | null;
-  canRetry: boolean;
-}
-
-export interface DesktopUpdateReleaseNote {
-  version: string;
-  items: ReadonlyArray<string>;
-  totalItems: number;
-}
-
-export const DesktopUpdateReleaseNoteSchema = Schema.Struct({
-  version: Schema.String,
-  items: Schema.Array(Schema.String),
-  totalItems: Schema.Number,
-});
-
-export const DesktopUpdateStateSchema = Schema.Struct({
-  enabled: Schema.Boolean,
-  status: DesktopUpdateStatusSchema,
-  channel: DesktopUpdateChannelSchema,
-  currentVersion: Schema.String,
-  hostArch: DesktopRuntimeArchSchema,
-  appArch: DesktopRuntimeArchSchema,
-  runningUnderArm64Translation: Schema.Boolean,
-  availableVersion: Schema.NullOr(Schema.String),
-  downloadedVersion: Schema.NullOr(Schema.String),
-  releaseNotes: Schema.Array(DesktopUpdateReleaseNoteSchema),
-  omittedReleaseCount: Schema.Number,
-  downloadPercent: Schema.NullOr(Schema.Number),
-  checkedAt: Schema.NullOr(Schema.String),
-  message: Schema.NullOr(Schema.String),
-  errorContext: Schema.NullOr(Schema.Literals(["check", "download", "install"])),
-  canRetry: Schema.Boolean,
-});
-
-export interface DesktopUpdateActionResult {
-  accepted: boolean;
-  completed: boolean;
-  state: DesktopUpdateState;
-}
-
-export const DesktopUpdateActionResultSchema = Schema.Struct({
-  accepted: Schema.Boolean,
-  completed: Schema.Boolean,
-  state: DesktopUpdateStateSchema,
-});
-
-export interface DesktopUpdateCheckResult {
-  checked: boolean;
-  state: DesktopUpdateState;
-}
-
-export const DesktopUpdateCheckResultSchema = Schema.Struct({
-  checked: Schema.Boolean,
-  state: DesktopUpdateStateSchema,
-});
-
 // Stable id for the Windows-native primary backend. Desktop side wraps
 // this with a brand inside DesktopBackendManager; web side keeps it as
 // a plain string so the env-runtime can compare against it without
@@ -294,7 +190,6 @@ export interface DesktopEnvironmentBootstrap {
   runningDistro?: string | null;
   httpBaseUrl: string | null;
   wsBaseUrl: string | null;
-  bootstrapToken?: string;
 }
 
 export const DesktopEnvironmentBootstrapSchema = Schema.Struct({
@@ -303,135 +198,6 @@ export const DesktopEnvironmentBootstrapSchema = Schema.Struct({
   runningDistro: Schema.optionalKey(Schema.NullOr(Schema.String)),
   httpBaseUrl: Schema.NullOr(Schema.String),
   wsBaseUrl: Schema.NullOr(Schema.String),
-  bootstrapToken: Schema.optionalKey(Schema.String),
-});
-
-export const DesktopSshEnvironmentTargetSchema = Schema.Struct({
-  alias: Schema.String,
-  hostname: Schema.String,
-  username: Schema.NullOr(Schema.String),
-  port: Schema.NullOr(Schema.Number),
-});
-export type DesktopSshEnvironmentTarget = typeof DesktopSshEnvironmentTargetSchema.Type;
-
-export type DesktopSshHostSource = "ssh-config" | "known-hosts";
-export const DesktopSshHostSourceSchema = Schema.Literals(["ssh-config", "known-hosts"]);
-
-export interface DesktopDiscoveredSshHost extends DesktopSshEnvironmentTarget {
-  source: DesktopSshHostSource;
-}
-
-export const DesktopDiscoveredSshHostSchema = Schema.Struct({
-  alias: Schema.String,
-  hostname: Schema.String,
-  username: Schema.NullOr(Schema.String),
-  port: Schema.NullOr(Schema.Number),
-  source: DesktopSshHostSourceSchema,
-});
-
-export interface DesktopSshEnvironmentBootstrap {
-  target: DesktopSshEnvironmentTarget;
-  httpBaseUrl: string;
-  wsBaseUrl: string;
-  pairingToken: string | null;
-  remotePort?: number;
-  remoteServerKind?: "external" | "managed";
-}
-
-export const DesktopSshEnvironmentBootstrapSchema = Schema.Struct({
-  target: DesktopSshEnvironmentTargetSchema,
-  httpBaseUrl: Schema.String,
-  wsBaseUrl: Schema.String,
-  pairingToken: Schema.NullOr(Schema.String),
-  remotePort: Schema.optionalKey(Schema.Number),
-  remoteServerKind: Schema.optionalKey(Schema.Literals(["external", "managed"])),
-});
-
-export interface DesktopSshPasswordPromptRequest {
-  requestId: string;
-  destination: string;
-  username: string | null;
-  prompt: string;
-  expiresAt: string;
-}
-
-export const DesktopSshPasswordPromptCancelledType = "ssh-password-prompt-cancelled" as const;
-
-export const DesktopSshPasswordPromptCancelledResultSchema = Schema.Struct({
-  type: Schema.Literal(DesktopSshPasswordPromptCancelledType),
-  message: Schema.String,
-});
-
-export const DesktopSshEnvironmentEnsureOptionsSchema = Schema.Struct({
-  issuePairingToken: Schema.optionalKey(Schema.Boolean),
-});
-
-export const DesktopSshEnvironmentEnsureInputSchema = Schema.Struct({
-  target: DesktopSshEnvironmentTargetSchema,
-  options: Schema.optionalKey(DesktopSshEnvironmentEnsureOptionsSchema),
-});
-
-export const DesktopSshEnvironmentEnsureResultSchema = Schema.Union([
-  DesktopSshEnvironmentBootstrapSchema,
-  DesktopSshPasswordPromptCancelledResultSchema,
-]);
-
-export const DesktopSshHttpBaseUrlInputSchema = Schema.Struct({
-  httpBaseUrl: Schema.String,
-});
-
-export const DesktopSshBearerRequestInputSchema = Schema.Struct({
-  httpBaseUrl: Schema.String,
-  bearerToken: Schema.String,
-});
-
-export const DesktopSshBearerBootstrapInputSchema = Schema.Struct({
-  httpBaseUrl: Schema.String,
-  credential: Schema.String,
-});
-
-export const DesktopSshPasswordPromptResolutionInputSchema = Schema.Struct({
-  requestId: Schema.String,
-  password: Schema.NullOr(Schema.String),
-});
-
-export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
-  environmentId: EnvironmentId,
-  label: Schema.String,
-  wsBaseUrl: Schema.String,
-  httpBaseUrl: Schema.String,
-  createdAt: Schema.String,
-  lastConnectedAt: Schema.NullOr(Schema.String),
-  desktopSsh: Schema.optionalKey(DesktopSshEnvironmentTargetSchema),
-  relayManaged: Schema.optionalKey(
-    Schema.Struct({
-      relayUrl: Schema.String,
-    }),
-  ),
-});
-export type PersistedSavedEnvironmentRecord = typeof PersistedSavedEnvironmentRecordSchema.Type;
-
-export type DesktopServerExposureMode = "local-only" | "network-accessible";
-
-export const DesktopServerExposureModeSchema = Schema.Literals([
-  "local-only",
-  "network-accessible",
-]);
-
-export interface DesktopServerExposureState {
-  mode: DesktopServerExposureMode;
-  endpointUrl: string | null;
-  advertisedHost: string | null;
-  tailscaleServeEnabled: boolean;
-  tailscaleServePort: number;
-}
-
-export const DesktopServerExposureStateSchema = Schema.Struct({
-  mode: DesktopServerExposureModeSchema,
-  endpointUrl: Schema.NullOr(Schema.String),
-  advertisedHost: Schema.NullOr(Schema.String),
-  tailscaleServeEnabled: Schema.Boolean,
-  tailscaleServePort: Schema.Number,
 });
 
 export interface PickFolderOptions {
@@ -1067,39 +833,8 @@ export interface DesktopBridge {
   // info (omits instances whose backend hasn't produced a config yet).
   // The primary backend is identified by id === PRIMARY_LOCAL_ENVIRONMENT_ID.
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
-  getLocalEnvironmentBearerToken: () => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
-  getConnectionCatalog?: () => Promise<string | null>;
-  setConnectionCatalog?: (catalog: string) => Promise<boolean>;
-  clearConnectionCatalog?: () => Promise<void>;
-  discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
-  /** Resolves a suggested SSH alias before populating the connection form. */
-  resolveSshHost: (alias: string) => Promise<DesktopSshEnvironmentTarget>;
-  ensureSshEnvironment: (
-    target: DesktopSshEnvironmentTarget,
-    options?: { issuePairingToken?: boolean },
-  ) => Promise<DesktopSshEnvironmentBootstrap>;
-  disconnectSshEnvironment: (target: DesktopSshEnvironmentTarget) => Promise<void>;
-  fetchSshEnvironmentDescriptor: (httpBaseUrl: string) => Promise<ExecutionEnvironmentDescriptor>;
-  bootstrapSshBearerSession: (
-    httpBaseUrl: string,
-    credential: string,
-  ) => Promise<AuthAccessTokenResult>;
-  fetchSshSessionState: (httpBaseUrl: string, bearerToken: string) => Promise<AuthSessionState>;
-  issueSshWebSocketTicket: (
-    httpBaseUrl: string,
-    bearerToken: string,
-  ) => Promise<AuthWebSocketTicketResult>;
-  onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => () => void;
-  resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
-  getServerExposureState: () => Promise<DesktopServerExposureState>;
-  setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
-  setTailscaleServeEnabled: (input: {
-    readonly enabled: boolean;
-    readonly port?: number;
-  }) => Promise<DesktopServerExposureState>;
-  getAdvertisedEndpoints: () => Promise<readonly AdvertisedEndpoint[]>;
   getWslState: () => Promise<DesktopWslState>;
   setWslBackendEnabled: (enabled: boolean) => Promise<DesktopWslState>;
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
@@ -1119,12 +854,6 @@ export interface DesktopBridge {
     position?: { x: number; y: number },
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
-  /**
-   * Probe this desktop machine for installed remote-capable editor CLIs
-   * (used for remote open-in-editor deep links). Optional: older desktop
-   * builds lack it; callers fall back to VS Code only.
-   */
-  probeRemoteEditors?: () => Promise<readonly EditorId[]>;
   onMenuAction: (listener: (action: string) => void) => () => void;
   /**
    * Quit-confirmation hint pushes. Optional: older desktop builds never emit
@@ -1133,12 +862,6 @@ export interface DesktopBridge {
   onQuitShortcut?: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
-  getUpdateState: () => Promise<DesktopUpdateState>;
-  setUpdateChannel: (channel: DesktopUpdateChannel) => Promise<DesktopUpdateState>;
-  checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
-  downloadUpdate: () => Promise<DesktopUpdateActionResult>;
-  installUpdate: () => Promise<DesktopUpdateActionResult>;
-  onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
   /** Present when the desktop shell accepts `t3 app` activation requests. */
   appActivation?: {
     setReady: (ready: boolean) => Promise<void>;
@@ -1195,14 +918,6 @@ export interface DesktopPreviewBridge {
     environmentId: EnvironmentId,
     profileId?: string,
   ) => Promise<DesktopPreviewWebviewConfig>;
-  /** Browsers on this machine whose cookies can be imported. */
-  listBrowserImportSources: () => Promise<ReadonlyArray<BrowserImportSource>>;
-  importBrowserCookies: (input: {
-    readonly environmentId: EnvironmentId;
-    readonly sourceId: BrowserImportSourceId;
-    readonly sourceProfileDirectory: string;
-    readonly targetProfileId: string;
-  }) => Promise<BrowserImportResult>;
   setAnnotationTheme: (theme: DesktopPreviewAnnotationTheme) => Promise<void>;
   /**
    * Activate the in-page element picker for the given tab. Resolves with

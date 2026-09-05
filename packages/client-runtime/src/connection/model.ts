@@ -6,52 +6,18 @@ const ConnectionTargetBase = {
   label: Schema.String,
 };
 
-export class PrimaryConnectionTarget extends Schema.TaggedClass<PrimaryConnectionTarget>()(
-  "PrimaryConnectionTarget",
+export class LocalConnectionTarget extends Schema.TaggedClass<LocalConnectionTarget>()(
+  "LocalConnectionTarget",
   {
     ...ConnectionTargetBase,
+    backendId: Schema.optionalKey(Schema.String),
     httpBaseUrl: Schema.String,
     wsBaseUrl: Schema.String,
   },
 ) {}
 
-export class BearerConnectionTarget extends Schema.TaggedClass<BearerConnectionTarget>()(
-  "BearerConnectionTarget",
-  {
-    ...ConnectionTargetBase,
-    connectionId: Schema.String,
-  },
-) {}
-
-export class RelayConnectionTarget extends Schema.TaggedClass<RelayConnectionTarget>()(
-  "RelayConnectionTarget",
-  {
-    ...ConnectionTargetBase,
-  },
-) {}
-
-export class SshConnectionTarget extends Schema.TaggedClass<SshConnectionTarget>()(
-  "SshConnectionTarget",
-  {
-    ...ConnectionTargetBase,
-    connectionId: Schema.String,
-  },
-) {}
-
-export const ConnectionTarget = Schema.Union([
-  PrimaryConnectionTarget,
-  BearerConnectionTarget,
-  RelayConnectionTarget,
-  SshConnectionTarget,
-]);
-export type ConnectionTarget = typeof ConnectionTarget.Type;
-
-export const PersistedConnectionTarget = Schema.Union([
-  BearerConnectionTarget,
-  RelayConnectionTarget,
-  SshConnectionTarget,
-]);
-export type PersistedConnectionTarget = typeof PersistedConnectionTarget.Type;
+export const ConnectionTarget = LocalConnectionTarget;
+export type ConnectionTarget = LocalConnectionTarget;
 
 export type ConnectionTargetKind = ConnectionTarget["_tag"];
 
@@ -62,17 +28,11 @@ export const ConnectionTransientReason = Schema.Literals([
   "timeout",
   "transport",
   "endpoint-unavailable",
-  "relay-unavailable",
   "remote-unavailable",
 ]);
 export type ConnectionTransientReason = typeof ConnectionTransientReason.Type;
 
-export const ConnectionBlockedReason = Schema.Literals([
-  "authentication",
-  "configuration",
-  "permission",
-  "unsupported",
-]);
+export const ConnectionBlockedReason = Schema.Literals(["configuration", "unsupported"]);
 export type ConnectionBlockedReason = typeof ConnectionBlockedReason.Type;
 
 export class ConnectionTransientError extends Schema.TaggedErrorClass<ConnectionTransientError>()(
@@ -103,25 +63,11 @@ export class ConnectionBlockedError extends Schema.TaggedErrorClass<ConnectionBl
 
 export type ConnectionAttemptError = ConnectionTransientError | ConnectionBlockedError;
 
-export const DPOP_ACCESS_TOKEN_REFRESH_SKEW_MS = 60_000;
-
-export type PreparedHttpAuthorization =
-  | {
-      readonly _tag: "Bearer";
-      readonly token: string;
-    }
-  | {
-      readonly _tag: "Dpop";
-      readonly accessToken: string;
-      readonly expiresAtEpochMs: number;
-    };
-
 export interface PreparedConnection {
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly httpBaseUrl: string;
   readonly socketUrl: string;
-  readonly httpAuthorization: PreparedHttpAuthorization | null;
   readonly target: ConnectionTarget;
 }
 

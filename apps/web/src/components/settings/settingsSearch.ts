@@ -53,7 +53,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
   "/settings/source-control": "Source Control",
-  "/settings/connections": "Connections",
+  "/settings/connections": "Local environment",
   "/settings/archived": "Archive",
 };
 
@@ -216,12 +216,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     searchTerms: ["installed cli versions newer available codex claude cursor grok opencode"],
   },
-  {
-    id: "continue-threads-after-server-update",
-    title: "Continue threads after server updates",
-    to: "/settings/general",
-    searchTerms: ["resume running active work restart desktop update automatically"],
-  },
+
   {
     id: "background-activity",
     title: "Background activity",
@@ -439,25 +434,8 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "environment-icon",
     title: "Environment icon",
     to: "/settings/connections",
-    targetId: "connections-environment",
+    targetId: "local-environment",
     searchTerms: ["machine glyph sidebar mac mini studio laptop desktop server cloud vm"],
-    localBackendManagementOnly: true,
-  },
-  {
-    id: "network-access",
-    title: "Network access",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["expose backend remote pairing local machine interfaces host restart"],
-    localBackendManagementOnly: true,
-  },
-  {
-    id: "tailscale-https",
-    title: "Tailscale HTTPS",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["serve magicdns endpoint remote secure network"],
-    desktopOnly: true,
     localBackendManagementOnly: true,
   },
   {
@@ -471,37 +449,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     windowsOnly: true,
     localBackendManagementOnly: true,
     wslAvailableOnly: true,
-  },
-  {
-    id: "t3-connect",
-    title: "T3 Connect",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["managed tunnel cloud other devices remote"],
-    desktopOnly: true,
-    cloudOnly: true,
-  },
-  {
-    id: "publish-agent-activity",
-    title: "Publish agent activity",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["mobile push notifications live activities cloud tunnel"],
-    cloudOnly: true,
-  },
-  {
-    id: "connections-environment",
-    title: "This environment",
-    to: "/settings/connections",
-    searchTerms: [
-      "connections server backend local remote access administrative permissions scope pairing links qr code authorized clients sessions revoke endpoint",
-    ],
-  },
-  {
-    id: "remote-environments",
-    title: "Remote environments",
-    to: "/settings/connections",
-    searchTerms: ["add pair backend host code ssh config agent tunnel saved t3 connect"],
   },
   {
     id: "archive",

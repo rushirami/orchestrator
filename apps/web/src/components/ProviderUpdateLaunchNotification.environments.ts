@@ -1,9 +1,7 @@
-import type { ConnectionCatalogEntry } from "@t3tools/client-runtime/connection";
 import type { ServerConfig } from "@t3tools/contracts";
 import { useMemo } from "react";
 
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
-import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import {
   buildLocalEnvironmentUpdateGroups,
   deriveEnvironmentDisplayLabel,
@@ -11,16 +9,6 @@ import {
   type LocalEnvironmentProvidersInput,
   type LocalEnvironmentUpdateGroup,
 } from "./ProviderUpdateLaunchNotification.logic";
-
-/**
- * A local environment is either the same-origin primary backend or a
- * desktop-local secondary (the parallel WSL backend), which connects over
- * loopback with a bearer token and carries a `local:<backendInstanceId>`
- * connection id. SSH, relay, and other remote targets are excluded.
- */
-function isLocalConnectionTarget(target: ConnectionCatalogEntry["target"]): boolean {
-  return target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target);
-}
 
 function normalizeConnectionState(phase: string | undefined): EnvironmentUpdateConnectionState {
   switch (phase) {
@@ -58,18 +46,13 @@ export function useLocalEnvironmentUpdateGroups(): {
     const inputs: LocalEnvironmentProvidersInput[] = [];
 
     for (const environment of environments) {
-      if (!isLocalConnectionTarget(environment.entry.target)) {
-        continue;
-      }
-
       const isPrimary = environment.environmentId === primaryEnvironmentId;
       const serverConfig: ServerConfig | null = environment.serverConfig;
 
       inputs.push({
         environmentId: environment.environmentId,
         // Secondaries carry a meaningful label straight from the platform source
-        // (e.g. "WSL (Ubuntu)"). The primary's catalog label can be the account
-        // name, so fall back to its platform OS so the row reads "Windows"/"Linux".
+        // (e.g. "WSL (Ubuntu)"). For the primary, use its platform OS so the row reads "Windows"/"Linux".
         label: isPrimary
           ? deriveEnvironmentDisplayLabel({
               isWsl: false,

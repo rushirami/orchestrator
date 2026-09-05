@@ -1,4 +1,3 @@
-import { RotateCcwIcon } from "lucide-react";
 import {
   Outlet,
   createFileRoute,
@@ -7,10 +6,11 @@ import {
   useLocation,
   useNavigate,
 } from "@tanstack/react-router";
+import { RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { SettingsBreadcrumb } from "../components/settings/SettingsBreadcrumb";
+import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { Button } from "../components/ui/button";
 import { SidebarInset } from "../components/ui/sidebar";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
@@ -95,14 +95,7 @@ function SettingsRouteLayout() {
 }
 
 export const Route = createFileRoute("/settings")({
-  beforeLoad: async ({ context, location }) => {
-    if (
-      context.authGateState.status !== "authenticated" &&
-      context.authGateState.status !== "hosted-static"
-    ) {
-      throw redirect({ to: "/pair", replace: true });
-    }
-
+  beforeLoad: async ({ location }) => {
     if (location.pathname === "/settings") {
       throw redirect({ to: "/settings/general", replace: true });
     }

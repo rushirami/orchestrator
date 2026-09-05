@@ -6,30 +6,29 @@ import * as Schema from "effect/Schema";
 
 import * as NetService from "@t3tools/shared/Net";
 import * as Crypto from "effect/Crypto";
+import * as DesktopBackendEndpoint from "../backend/DesktopBackendEndpoint.ts";
+import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
-import * as DesktopAppActivation from "./DesktopAppActivation.ts";
-import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
-import * as DesktopClerk from "./DesktopClerk.ts";
+import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
-import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
+import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
+import * as DesktopAppActivation from "./DesktopAppActivation.ts";
+import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLifecycle from "./DesktopLifecycle.ts";
 import * as DesktopLinuxUrlHandler from "./DesktopLinuxUrlHandler.ts";
 import * as DesktopObservability from "./DesktopObservability.ts";
 import * as DesktopPreReadyPlatform from "./DesktopPreReadyPlatform.ts";
 import * as DesktopShutdown from "./DesktopShutdown.ts";
-import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
-import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
-import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopState from "./DesktopState.ts";
-import * as DesktopRemoteUpdates from "../updates/DesktopRemoteUpdates.ts";
-import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
-import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
+
+import { removeLegacyConnections } from "./DesktopLegacyConnectionCleanup.ts";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
 const MAX_TCP_PORT = 65_535;
@@ -62,8 +61,7 @@ export class DesktopDevelopmentBackendPortRequiredError extends Schema.TaggedErr
   }
 }
 
-const { logInfo: logBootstrapInfo, logWarning: logBootstrapWarning } =
-  DesktopObservability.makeComponentLogger("desktop-bootstrap");
+const { logInfo: logBootstrapInfo } = DesktopObservability.makeComponentLogger("desktop-bootstrap");
 
 const { logInfo: logStartupInfo, logError: logStartupError } =
   DesktopObservability.makeComponentLogger("desktop-startup");
@@ -147,7 +145,7 @@ const bootstrap = Effect.gen(function* () {
   const state = yield* DesktopState.DesktopState;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
-  const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+  const backendEndpoint = yield* DesktopBackendEndpoint.DesktopBackendEndpoint;
   const wslBackend = yield* DesktopWslBackend.DesktopWslBackend;
   const desktopWindow = yield* DesktopWindow.DesktopWindow;
   const appActivation = yield* DesktopAppActivation.DesktopAppActivation;
@@ -170,42 +168,25 @@ const bootstrap = Effect.gen(function* () {
   );
 
   const settings = yield* desktopSettings.get;
-  if (settings.serverExposureMode !== environment.defaultDesktopSettings.serverExposureMode) {
-    yield* logBootstrapInfo("bootstrap restoring persisted server exposure mode", {
-      mode: settings.serverExposureMode,
-    });
-  }
-  const serverExposureState = yield* serverExposure.configureFromSettings({ port: backendPort });
-  const backendConfig = yield* serverExposure.backendConfig;
+  yield* backendEndpoint.configure({ port: backendPort });
+  const backendConfig = yield* backendEndpoint.backendConfig;
   const electronProtocol = yield* ElectronProtocol.ElectronProtocol;
-  const rendererTarget = environment.isDevelopment
-    ? Option.getOrThrow(environment.devServerUrl)
-    : backendConfig.httpBaseUrl;
   yield* electronProtocol.registerDesktopProtocol({
     scheme: ElectronProtocol.getDesktopScheme(environment.isDevelopment),
-    targetOrigin: rendererTarget,
+    renderer: environment.isDevelopment
+      ? { devOrigin: Option.getOrThrow(environment.devServerUrl) }
+      : { directory: environment.path.join(environment.appRoot, "apps/web/dist") },
     backendOrigin: backendConfig.httpBaseUrl,
-    clerkFrontendApiHostname: DesktopClerk.desktopClerkFrontendApiHostname,
   });
   yield* logBootstrapInfo("bootstrap resolved backend endpoint", {
     baseUrl: backendConfig.httpBaseUrl.href,
   });
-  if (serverExposureState.endpointUrl) {
-    yield* logBootstrapInfo("bootstrap enabled network access", {
-      endpointUrl: serverExposureState.endpointUrl,
-    });
-  } else if (settings.serverExposureMode === "network-accessible") {
-    yield* logBootstrapWarning(
-      "bootstrap fell back to local-only because no advertised network host was available",
-    );
-  }
-
   yield* installDesktopIpcHandlers();
   yield* logBootstrapInfo("bootstrap ipc handlers registered");
 
   if (!(yield* Ref.get(state.quitting))) {
-    // In wsl-only mode the renderer is served by the WSL backend, which can be
-    // slow to cold-boot — show a "Connecting to WSL" splash immediately so the
+    // A WSL backend can be slow to cold-boot. Show a "Connecting to WSL"
+    // splash immediately so the
     // app feels responsive instead of presenting no window until WSL is ready.
     // (Dual mode opens fast off the Windows primary, so no splash there.)
     if (settings.wslOnly === true && settings.wslBackendEnabled === true) {
@@ -231,12 +212,10 @@ const startup = Effect.gen(function* () {
   const electronApp = yield* ElectronApp.ElectronApp;
   const lifecycle = yield* DesktopLifecycle.DesktopLifecycle;
   const linuxUrlHandler = yield* DesktopLinuxUrlHandler.DesktopLinuxUrlHandler;
-  const clerk = yield* DesktopClerk.DesktopClerk;
   const shellEnvironment = yield* DesktopShellEnvironment.DesktopShellEnvironment;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
   const preReadyElectronOptions = yield* DesktopPreReadyPlatform.DesktopPreReadyElectronOptions;
   const safeStorage = yield* ElectronSafeStorage.ElectronSafeStorage;
-  const updates = yield* DesktopUpdates.DesktopUpdates;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
 
   yield* shellEnvironment.installIntoProcess;
@@ -264,6 +243,9 @@ const startup = Effect.gen(function* () {
   yield* electronApp.setPath("userData", userDataPath);
   yield* logStartupInfo("runtime logging configured", { logDir: environment.logDir });
   yield* desktopSettings.load;
+  yield* removeLegacyConnections(environment.stateDir).pipe(
+    Effect.catch((error) => logStartupError("Could not remove legacy connection files", { error })),
+  );
 
   if (linuxElectronOptions !== null) {
     yield* logStartupInfo("linux password store configured", {
@@ -277,7 +259,6 @@ const startup = Effect.gen(function* () {
 
   yield* appIdentity.configure;
   yield* lifecycle.register;
-  yield* clerk.configure;
 
   yield* electronApp.whenReady.pipe(
     Effect.withSpan("desktop.electron.whenReady"),
@@ -292,8 +273,6 @@ const startup = Effect.gen(function* () {
   }
   yield* appIdentity.configure;
   yield* applicationMenu.configure;
-  yield* updates.configure;
-  yield* DesktopRemoteUpdates.listen;
   yield* linuxUrlHandler.register;
   yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
 }).pipe(Effect.withSpan("desktop.startup"));

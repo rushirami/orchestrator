@@ -8,7 +8,7 @@ import {
   stripSlashPrefixedWindowsDrive,
 } from "./markdownLinks.ts";
 
-const DIRECT_IMAGE_SOURCE_PATTERN = /^(?:https?:|data:|blob:|\/\/)/i;
+const DIRECT_IMAGE_SOURCE_PATTERN = /^(?:data:|blob:)/i;
 const URI_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 
 export type MarkdownImageSource =
@@ -42,6 +42,8 @@ export function classifyMarkdownImageSource(
   if (source.length === 0 || source.startsWith("#") || source.startsWith("?")) {
     return { _tag: "Blocked" };
   }
+  // Authored network URLs must never make automatic requests when a conversation opens.
+  if (/^(?:https?:|\/\/)/i.test(source)) return { _tag: "Blocked" };
   if (DIRECT_IMAGE_SOURCE_PATTERN.test(source)) {
     return { _tag: "Direct", uri: source };
   }

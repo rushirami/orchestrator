@@ -52,7 +52,6 @@ import {
 import { useBrowserDefaults } from "~/browser/browserDefaults";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { PanelTabCloseButton } from "~/components/ui/panel-tab-close-button";
-import { faviconUrlForOrigin } from "~/lib/favicon";
 import { useTheme } from "~/hooks/useTheme";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
@@ -617,11 +616,10 @@ function surfaceTitle(
   }
 }
 
-function PreviewFavicon({ capturedUrl, url }: { capturedUrl: string | null; url: string | null }) {
-  const publicProviderUrl = faviconUrlForOrigin(url, 32);
+function PreviewFavicon({ capturedUrl }: { capturedUrl: string | null }) {
   return (
     <FaviconImage
-      sources={[capturedUrl, publicProviderUrl]}
+      sources={[capturedUrl]}
       fallback={<Globe2 className="size-3 shrink-0" />}
       className="size-3 shrink-0 rounded-sm object-contain"
     />
@@ -658,7 +656,7 @@ function SurfaceIcon({
       const favicon = snapshot ? (desktopByTabId[snapshot.tabId]?.favicon ?? null) : null;
       const capturedUrl =
         favicon && url && sameOrigin(favicon.pageUrl, url) ? favicon.dataUrl : null;
-      return <PreviewFavicon capturedUrl={capturedUrl} url={url} />;
+      return <PreviewFavicon capturedUrl={capturedUrl} />;
     }
     case "diff":
       return <FileDiff className="size-3 shrink-0" />;

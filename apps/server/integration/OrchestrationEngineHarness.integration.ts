@@ -47,7 +47,6 @@ import {
 } from "../src/provider/Layers/ProviderEventLoggers.ts";
 import { ProviderService } from "../src/provider/Services/ProviderService.ts";
 import { ProviderAuthService } from "../src/provider/Services/ProviderAuthService.ts";
-import { AnalyticsService } from "../src/telemetry/AnalyticsService.ts";
 import { CheckpointReactorLive } from "../src/orchestration/Layers/CheckpointReactor.ts";
 import * as RepositoryIdentityResolver from "../src/project/RepositoryIdentityResolver.ts";
 import { OrchestrationEngineLive } from "../src/orchestration/Layers/OrchestrationEngine.ts";
@@ -85,7 +84,6 @@ import * as VcsDriverRegistry from "../src/vcs/VcsDriverRegistry.ts";
 import { VcsStatusBroadcaster } from "../src/vcs/VcsStatusBroadcaster.ts";
 import { GitWorkflowService } from "../src/git/GitWorkflowService.ts";
 import * as VcsProcess from "../src/vcs/VcsProcess.ts";
-import * as AgentAwarenessRelay from "../src/relay/AgentAwarenessRelay.ts";
 import * as PullRequestService from "../src/pullRequest/PullRequestService.ts";
 
 const decodeCodexSettings = Schema.decodeEffect(CodexSettings);
@@ -297,13 +295,11 @@ export const makeOrchestrationIntegrationHarness = (
       ? makeProviderServiceLive().pipe(
           Layer.provide(providerSessionDirectoryLayer),
           Layer.provide(realCodexRegistry),
-          Layer.provide(AnalyticsService.layerTest),
           Layer.provide(providerEventLoggersLayer),
         )
       : makeProviderServiceLive().pipe(
           Layer.provide(providerSessionDirectoryLayer),
           Layer.provide(fakeRegistry!),
-          Layer.provide(AnalyticsService.layerTest),
           Layer.provide(providerEventLoggersLayer),
         );
     const providerRegistryLayer = makeProviderRegistryLayer();
@@ -398,12 +394,6 @@ export const makeOrchestrationIntegrationHarness = (
         Layer.succeed(ThreadSettlementReactor.ThreadSettlementReactor, {
           start: () => Effect.void,
           drain: Effect.void,
-        }),
-      ),
-      Layer.provideMerge(
-        Layer.succeed(AgentAwarenessRelay.AgentAwarenessRelay, {
-          publishThread: () => Effect.void,
-          start: () => Effect.void,
         }),
       ),
     );

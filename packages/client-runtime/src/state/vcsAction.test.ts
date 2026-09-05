@@ -1,10 +1,10 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
-  WS_METHODS,
   type GitActionProgressEvent,
   type GitRunStackedActionResult,
+  WS_METHODS,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -16,7 +16,7 @@ import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 
 import {
   AVAILABLE_CONNECTION_STATE,
-  PrimaryConnectionTarget,
+  LocalConnectionTarget,
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
@@ -73,7 +73,7 @@ const result: GitRunStackedActionResult = {
   },
 };
 
-const target = new PrimaryConnectionTarget({
+const target = new LocalConnectionTarget({
   environmentId,
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",

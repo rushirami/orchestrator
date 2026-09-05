@@ -1,5 +1,5 @@
-import { EnvironmentId, ProjectId, WS_METHODS } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import { EnvironmentId, ProjectId, WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
@@ -11,7 +11,7 @@ import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 
 import {
   AVAILABLE_CONNECTION_STATE,
-  PrimaryConnectionTarget,
+  LocalConnectionTarget,
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
@@ -19,11 +19,11 @@ import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { createPullRequestEnvironmentAtoms } from "./pullRequests.ts";
 import { PullRequestDiffLoader } from "./pullRequestDiffHttp.ts";
+import { createPullRequestEnvironmentAtoms } from "./pullRequests.ts";
 import { executeAtomQuery } from "./runtime.ts";
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",

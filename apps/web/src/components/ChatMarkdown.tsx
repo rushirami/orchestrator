@@ -1,5 +1,38 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
+  type CodexArtifactTemplate,
+  type CodexArtifactTemplateKind,
+  codexArtifactTemplatePresentationLabel,
+} from "@t3tools/client-runtime/codex-artifact-templates";
+import {
+  artifactTemplateFromHastProperties,
+  CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES,
+  remarkCodexDirectives,
+  renderCodexFileCitationsAsMarkdown,
+} from "@t3tools/client-runtime/codex-markdown-directives";
+import {
+  classifyMarkdownImageSource,
+  markdownImageSourceFragment,
+} from "@t3tools/client-runtime/markdown-images";
+import { inlineCodeFilePathCandidate } from "@t3tools/client-runtime/markdown-links";
+import { mediaFileReference, mediaUrlReference } from "@t3tools/client-runtime/media-reference";
+import {
+  type AtomCommandResult,
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import type {
+  AssetResource,
+  EnvironmentId,
+  ScopedThreadRef,
+  ServerProviderSkill,
+  ThreadLinkedPullRequest,
+} from "@t3tools/contracts";
+import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
+import { mediaKindFromPath, mediaMimeTypeFromExtension } from "@t3tools/shared/filePreview";
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/unstable/reactivity";
+import {
   CheckIcon,
   ChevronRightIcon,
   CopyIcon,
@@ -9,6 +42,7 @@ import {
   ImageIcon,
   InfoIcon,
   LightbulbIcon,
+  type LucideIcon,
   MailIcon,
   Maximize2Icon,
   MessageSquareIcon,
@@ -19,145 +53,30 @@ import {
   SparklesIcon,
   TriangleAlertIcon,
   WrapTextIcon,
-  type LucideIcon,
 } from "lucide-react";
-import type {
-  AssetResource,
-  EnvironmentId,
-  ScopedThreadRef,
-  ServerProviderSkill,
-  ThreadLinkedPullRequest,
-} from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import {
-  codexArtifactTemplatePresentationLabel,
-  type CodexArtifactTemplate,
-  type CodexArtifactTemplateKind,
-} from "@t3tools/client-runtime/codex-artifact-templates";
-import {
-  classifyMarkdownImageSource,
-  markdownImageSourceFragment,
-} from "@t3tools/client-runtime/markdown-images";
-import { inlineCodeFilePathCandidate } from "@t3tools/client-runtime/markdown-links";
-import { mediaFileReference, mediaUrlReference } from "@t3tools/client-runtime/media-reference";
-import { mediaKindFromPath, mediaMimeTypeFromExtension } from "@t3tools/shared/filePreview";
-import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/unstable/reactivity";
 import React, {
   Children,
-  Suspense,
   type CSSProperties,
+  isValidElement,
+  memo,
   type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  isValidElement,
+  type ReactNode,
+  Suspense,
   use,
   useCallback,
-  memo,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import type { Components, Options as ReactMarkdownOptions } from "react-markdown";
-import ReactMarkdown from "react-markdown";
-import { defaultUrlTransform } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
-import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
-import { AssistantCitationChip } from "./chat/AssistantCitationChip";
 import remarkGfm from "remark-gfm";
-import { remarkGithubAlerts } from "../markdown-github-alerts";
-import {
-  artifactTemplateFromHastProperties,
-  CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES,
-  remarkCodexDirectives,
-  renderCodexFileCitationsAsMarkdown,
-} from "@t3tools/client-runtime/codex-markdown-directives";
-import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
-import {
-  resolveMarkdownMediaPreview,
-  type ExpandedImagePreview,
-} from "./chat/ExpandedImagePreview";
-import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
-import { MediaVideoPlayer } from "./media/MediaVideoPlayer";
-import { MediaActions, type MediaActionSource } from "./media/MediaActions";
-import { resolveProtocolRelativeMediaUrl } from "./media/mediaContent";
-import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
-import { PierreEntryIcon } from "./chat/PierreEntryIcon";
-import {
-  revealInFileExplorerLabelForKind,
-  revealInFileExplorerLabelForOs,
-} from "./preview/fileExplorerLabel";
-import {
-  resolveExternalWebLinkHost,
-  showExternalLinkContextMenu,
-} from "./chat/externalLinkContextMenu";
-import { hasSpecificPierreIconForFileName, syntheticFileNameForLanguageId } from "../pierre-icons";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { Button } from "./ui/button";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
-import { ScrollArea } from "./ui/scroll-area";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
-import { stackedThreadToast, toastManager } from "./ui/toast";
-import { recordVisitForThread } from "../browserHistoryStore";
-import {
-  PreferredEditorEnvironmentRequiredError,
-  useOpenInPreferredEditor,
-  usePreferredEditor,
-} from "../editorPreferences";
-import { openInEditorMenuLabel } from "../editorLabels";
-import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
-import { fnv1a32 } from "../lib/diffRendering";
-import { LRUCache } from "../lib/lruCache";
-import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
-import { RenderErrorBoundary } from "./RenderErrorBoundary";
-import { useTheme } from "../hooks/useTheme";
-import { getClientSettings, useClientSettings } from "../hooks/useSettings";
-import {
-  chatMarkdownClipboardPayload,
-  serializeTableElementToCsv,
-  serializeTableElementToMarkdown,
-} from "../markdown-clipboard";
-import { remarkNormalizeListItemIndentation } from "../markdown-list-indentation";
-import {
-  extractMarkdownLinkHrefs,
-  isWindowsDrivePathHref,
-  normalizeMarkdownLinkDestination,
-  resolveInlineCodeFileLinkMeta,
-  resolveMarkdownFileLinkMeta,
-  rewriteMarkdownFileUriHref,
-  shouldOpenMarkdownFileLinkInBrowserByDefault,
-  shouldOpenMarkdownFileLinkInEditor,
-  type MarkdownFileLinkMeta,
-} from "../markdown-links";
-import { readLocalApi } from "../localApi";
-import { useAssetUrlRefresh, useAssetUrlState } from "../assets/assetUrls";
-import { cn } from "../lib/utils";
-import { useRemoteOpenResolution, type RemoteOpenMode } from "../remoteOpen";
-import { useRightPanelStore } from "../rightPanelStore";
-import { readThreadShell, useProjects } from "../state/entities";
-import { serverEnvironment } from "../state/server";
-import { shellEnvironment } from "../state/shell";
-import { assetEnvironment } from "../state/assets";
-import { usePreparedConnection } from "../state/session";
-import { previewEnvironment } from "../state/preview";
-import { useAtomCommand } from "../state/use-atom-command";
-import { useAtomQueryRunner } from "../state/use-atom-query-runner";
-import { projectEnvironment } from "../state/projects";
-import { threadEnvironment } from "../state/threads";
-import {
-  claimWorkspaceBasenameLookup,
-  needsWorkspaceBasenameLookup,
-  pickWorkspaceBasenameMatch,
-  WORKSPACE_BASENAME_LOOKUP_LIMIT,
-} from "../workspaceBasenameLookup";
 import {
   findProjectForChangeRequest,
   matchesLinkedPullRequestUrl,
@@ -165,18 +84,96 @@ import {
   pullRequestCandidateUrlFromReferenceAutolink,
   useOpenChangeRequestLink,
 } from "~/lib/openPullRequestLink";
-import { useOpenLink } from "../browser/useOpenLink";
-import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
-import { isPreviewSupportedInRuntime } from "../previewStateStore";
-import { isAbsolutePath, resolvePathLinkTarget } from "../terminal-links";
+import { useAssetUrlRefresh, useAssetUrlState } from "../assets/assetUrls";
+import { resolveLinkTarget } from "../browser/browserLinkTarget";
 import {
+  BrowserPreviewUnavailableError,
   isBrowserPreviewFile,
   openFileInPreview,
   openUrlInPreview,
-  BrowserPreviewUnavailableError,
 } from "../browser/openFileInPreview";
-import { resolveLinkTarget } from "../browser/browserLinkTarget";
+import { useOpenLink } from "../browser/useOpenLink";
+import { recordVisitForThread } from "../browserHistoryStore";
+import { openInEditorMenuLabel } from "../editorLabels";
+import {
+  PreferredEditorEnvironmentRequiredError,
+  useOpenInPreferredEditor,
+  usePreferredEditor,
+} from "../editorPreferences";
+import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { getClientSettings, useClientSettings } from "../hooks/useSettings";
+import { useTheme } from "../hooks/useTheme";
+import { type DiffThemeName, fnv1a32, resolveDiffThemeName } from "../lib/diffRendering";
+import { LRUCache } from "../lib/lruCache";
+import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
+import { cn } from "../lib/utils";
+import { readLocalApi } from "../localApi";
+import {
+  chatMarkdownClipboardPayload,
+  serializeTableElementToCsv,
+  serializeTableElementToMarkdown,
+} from "../markdown-clipboard";
+import { remarkGithubAlerts } from "../markdown-github-alerts";
+import {
+  extractMarkdownLinkHrefs,
+  isWindowsDrivePathHref,
+  type MarkdownFileLinkMeta,
+  normalizeMarkdownLinkDestination,
+  resolveInlineCodeFileLinkMeta,
+  resolveMarkdownFileLinkMeta,
+  rewriteMarkdownFileUriHref,
+  shouldOpenMarkdownFileLinkInBrowserByDefault,
+  shouldOpenMarkdownFileLinkInEditor,
+} from "../markdown-links";
+import { remarkNormalizeListItemIndentation } from "../markdown-list-indentation";
+import { hasSpecificPierreIconForFileName, syntheticFileNameForLanguageId } from "../pierre-icons";
+import { isPreviewSupportedInRuntime } from "../previewStateStore";
+import { useRightPanelStore } from "../rightPanelStore";
+import { assetEnvironment } from "../state/assets";
+import { readThreadShell, useProjects } from "../state/entities";
+import { previewEnvironment } from "../state/preview";
+import { projectEnvironment } from "../state/projects";
+import { serverEnvironment } from "../state/server";
+import { usePreparedConnection } from "../state/session";
+import { shellEnvironment } from "../state/shell";
+import { threadEnvironment } from "../state/threads";
+import { useAtomCommand } from "../state/use-atom-command";
+import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import { isAbsolutePath, resolvePathLinkTarget } from "../terminal-links";
+import {
+  claimWorkspaceBasenameLookup,
+  needsWorkspaceBasenameLookup,
+  pickWorkspaceBasenameMatch,
+  WORKSPACE_BASENAME_LOOKUP_LIMIT,
+} from "../workspaceBasenameLookup";
+import { AssistantCitationChip } from "./chat/AssistantCitationChip";
+import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
+import {
+  type ExpandedImagePreview,
+  resolveMarkdownMediaPreview,
+} from "./chat/ExpandedImagePreview";
+import {
+  resolveExternalWebLinkHost,
+  showExternalLinkContextMenu,
+} from "./chat/externalLinkContextMenu";
+import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
+import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
+import { MediaActions, type MediaActionSource } from "./media/MediaActions";
+import { resolveProtocolRelativeMediaUrl } from "./media/mediaContent";
+import { MediaVideoPlayer } from "./media/MediaVideoPlayer";
+import {
+  revealInFileExplorerLabelForKind,
+  revealInFileExplorerLabelForOs,
+} from "./preview/fileExplorerLabel";
 import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
+import { Button } from "./ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
+import { ScrollArea } from "./ui/scroll-area";
+import { stackedThreadToast, toastManager } from "./ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 interface ChatMarkdownProps {
   text: string;
@@ -199,14 +196,6 @@ interface ChatMarkdownProps {
   imageBaseDir?: string | undefined;
   onImageExpand?: ((preview: ExpandedImagePreview) => void) | undefined;
   extraRemarkPlugins?: NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
-}
-
-export function canUseMarkdownFileShellActions(
-  environmentId: EnvironmentId | null,
-  remoteOpenMode: RemoteOpenMode,
-  isRemoteOpenResolved: boolean,
-): boolean {
-  return environmentId !== null && isRemoteOpenResolved && remoteOpenMode === "local-exec";
 }
 
 export function hasMarkdownFilePrimaryAction(input: {
@@ -1126,33 +1115,13 @@ function normalizeMarkdownLinkHrefKey(href: string): string {
     : rewrittenHref;
 }
 
-const MARKDOWN_LINK_FAVICON_CLASS_NAME = "block size-full shrink-0 select-none";
-
-/** Hosts whose favicon request already failed this session — skip straight to the globe. */
-const failedFaviconHosts = new Set<string>();
-
-const MarkdownLinkFavicon = memo(function MarkdownLinkFavicon({ host }: { host: string }) {
-  const [failedHost, setFailedHost] = useState<string | null>(null);
+const MarkdownLinkFavicon = memo(function MarkdownLinkFavicon() {
   return (
     <span
       className="ms-[0.25em] me-[0.2em] inline-flex size-[14px] [vertical-align:-0.125em]"
       aria-hidden
     >
-      {failedHost === host || failedFaviconHosts.has(host) ? (
-        <GlobeIcon className={MARKDOWN_LINK_FAVICON_CLASS_NAME} />
-      ) : (
-        <img
-          src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`}
-          alt=""
-          loading="lazy"
-          draggable={false}
-          className={cn(MARKDOWN_LINK_FAVICON_CLASS_NAME, "rounded-sm")}
-          onError={() => {
-            failedFaviconHosts.add(host);
-            setFailedHost(host);
-          }}
-        />
-      )}
+      <GlobeIcon className="block size-full shrink-0 select-none" />
     </span>
   );
 });
@@ -1533,11 +1502,9 @@ function handleMarkdownFragmentClick(event: ReactMouseEvent<HTMLAnchorElement>, 
 }
 
 function MarkdownExternalLinkContent({
-  host,
   plainText,
   children,
 }: {
-  host: string;
   plainText: string | null;
   children: ReactNode;
 }) {
@@ -1546,7 +1513,7 @@ function MarkdownExternalLinkContent({
     return (
       <>
         <span className="whitespace-nowrap">
-          <MarkdownLinkFavicon host={host} />
+          <MarkdownLinkFavicon />
           {plainText.slice(0, leadingLength)}
         </span>
         {breakableExternalLinkText(plainText.slice(leadingLength))}
@@ -1562,7 +1529,7 @@ function MarkdownExternalLinkContent({
     return (
       <>
         <span className="whitespace-nowrap">
-          <MarkdownLinkFavicon host={host} />
+          <MarkdownLinkFavicon />
           {firstChild.slice(0, leadingLength)}
         </span>
         {breakableExternalLinkText(firstChild.slice(leadingLength))}
@@ -1574,7 +1541,7 @@ function MarkdownExternalLinkContent({
   return (
     <>
       <span className="whitespace-nowrap">
-        <MarkdownLinkFavicon host={host} />
+        <MarkdownLinkFavicon />
         {firstChild}
       </span>
       {childNodes.slice(1)}
@@ -1991,13 +1958,8 @@ function useChatMarkdownState({
     reportFailure: false,
   });
   const environmentId = threadRef?.environmentId ?? explicitEnvironmentId ?? null;
-  const remoteOpen = useRemoteOpenResolution(environmentId);
-  const canUseShellActions = canUseMarkdownFileShellActions(
-    environmentId,
-    remoteOpen.state.mode,
-    remoteOpen.isResolved,
-  );
   const preparedConnection = usePreparedConnection(environmentId);
+  const canUseShellActions = environmentId !== null && preparedConnection !== null;
   const openMarkdownMedia = useCallback(
     (source: string, resolvedFilePath?: string) => {
       const requestId = ++mediaRequestId.current;
@@ -2686,7 +2648,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
           }}
         >
           {faviconHost && hastHasText(node) && !isPullRequestAutolink ? (
-            <MarkdownExternalLinkContent host={faviconHost} plainText={plainHastText(node)}>
+            <MarkdownExternalLinkContent plainText={plainHastText(node)}>
               {linkChildren}
             </MarkdownExternalLinkContent>
           ) : (

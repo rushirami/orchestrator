@@ -1,10 +1,10 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   ORCHESTRATION_WS_METHODS,
   type OrchestrationShellSnapshot,
   type OrchestrationShellStreamItem,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
@@ -14,17 +14,17 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import {
   AVAILABLE_CONNECTION_STATE,
-  PrimaryConnectionTarget,
+  LocalConnectionTarget,
   type PreparedConnection,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as ConnectionWakeups from "../connection/wakeups.ts";
 import * as Persistence from "../platform/persistence.ts";
-import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
+import * as RpcSession from "../rpc/session.ts";
 import { makeEnvironmentShellState, ShellSnapshotLoader } from "./shell.ts";
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",
@@ -36,7 +36,6 @@ const PREPARED: PreparedConnection = {
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
   socketUrl: TARGET.wsBaseUrl,
-  httpAuthorization: null,
   target: TARGET,
 };
 

@@ -9,8 +9,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { buildRemoteNodeEnvScript } from "@t3tools/ssh/tunnel";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
+import { buildWslNodeEnvScript } from "./nodeEnvironment.ts";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { parseWslDistroList, type WslDistro } from "./wslPathParsing.ts";
@@ -162,13 +162,12 @@ export const formatWslShellTransportFailureReason = (
   }
 };
 
-// Reuse the SSH remote resolver so WSL and SSH discover version-managed Node
-// the same way. Passing the engine range lets the resolver fall through to
-// version managers like nvm when a system node exists but is too old.
+// Discover an installed Node runtime in WSL, including version-managed installs.
+// Fall through to version managers when the system Node is too old.
 export const buildWslNodeEnvPreamble = (
   nodeEngineRange?: string | null,
-): string => `${buildRemoteNodeEnvScript({ nodeEngineRange: nodeEngineRange ?? null })}
-ensure_remote_node_path || true
+): string => `${buildWslNodeEnvScript({ nodeEngineRange: nodeEngineRange ?? null })}
+ensure_wsl_node_path || true
 `;
 
 // wsl.exe re-escapes args before forwarding them to the Linux side, which

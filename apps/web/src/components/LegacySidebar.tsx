@@ -1,57 +1,20 @@
 import {
-  ArchiveIcon,
-  ArrowUpDownIcon,
-  ChevronRightIcon,
-  CloudIcon,
-  ContainerIcon,
-  FolderPlusIcon,
-  Globe2Icon,
-  LoaderIcon,
-  SearchIcon,
-  SquarePenIcon,
-  TerminalIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
-import {
-  ChangeRequestStatusIcon,
-  prStatusIndicator,
-  PrStatusTooltipContent,
-  resolveThreadPr,
-  terminalStatusFromRunningIds,
-  ThreadStatusLabel,
-  ThreadWorktreeIndicator,
-  useLinkedThreadPullRequest,
-} from "./ThreadStatusIndicators";
-import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
-import { ProjectFavicon } from "./ProjectFavicon";
-import { useAtomValue } from "@effect/atom-react";
-import { autoAnimate } from "@formkit/auto-animate";
-import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
-import {
+  closestCorners,
+  type CollisionDetection,
   DndContext,
   type DragCancelEvent,
-  type CollisionDetection,
-  PointerSensor,
+  type DragEndEvent,
   type DragStartEvent,
-  closestCorners,
+  PointerSensor,
   pointerWithin,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  type ContextMenuItem,
-  ProjectId,
-  type ScopedThreadRef,
-  type ResolvedKeybindingsConfig,
-  type SidebarProjectGroupingMode,
-  resolveEnvironmentMachineKind,
-  ThreadId,
-} from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import { autoAnimate } from "@formkit/auto-animate";
 import {
   parseScopedThreadKey,
   scopedProjectKey,
@@ -65,7 +28,15 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import {
+  type ContextMenuItem,
+  ProjectId,
+  type ResolvedKeybindingsConfig,
+  resolveEnvironmentMachineKind,
+  type ScopedThreadRef,
+  type SidebarProjectGroupingMode,
+  ThreadId,
+} from "@t3tools/contracts";
 import {
   MAX_SIDEBAR_THREAD_PREVIEW_COUNT,
   MIN_SIDEBAR_THREAD_PREVIEW_COUNT,
@@ -73,32 +44,29 @@ import {
   type SidebarThreadPreviewCount,
   type SidebarThreadSortOrder,
 } from "@t3tools/contracts/settings";
+import { useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import {
+  ArchiveIcon,
+  ArrowUpDownIcon,
+  ChevronRightIcon,
+  CloudIcon,
+  ContainerIcon,
+  FolderPlusIcon,
+  Globe2Icon,
+  LoaderIcon,
+  SearchIcon,
+  SquarePenIcon,
+  TerminalIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { useComposerDraftStore } from "../composerDraftStore";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { isElectron } from "../env";
+import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
-import { useOpenPrLink } from "../lib/openPullRequestLink";
-import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
-import { isTerminalFocused } from "../lib/terminalFocus";
-import { isMacPlatform } from "../lib/utils";
-import {
-  readThreadShell,
-  useProject,
-  useProjects,
-  useThreadShells,
-  useThreadShellsForProjectRefs,
-} from "../state/entities";
-import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { useThreadRunningTerminalIds } from "../state/terminalSessions";
-import { useThreadDiscoveredPorts } from "../portDiscoveryState";
-import { openDiscoveredPort } from "./preview/openDiscoveredPort";
-import { useAtomCommand } from "../state/use-atom-command";
-import { previewEnvironment } from "../state/preview";
-import {
-  legacyProjectCwdPreferenceKey,
-  resolveProjectExpanded,
-  useUiStateStore,
-} from "../uiStateStore";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
@@ -107,39 +75,99 @@ import {
   threadJumpIndexFromCommand,
   threadTraversalDirectionFromCommand,
 } from "../keybindings";
+import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
+import { useOpenPrLink } from "../lib/openPullRequestLink";
+import { isTerminalFocused } from "../lib/terminalFocus";
+import { isMacPlatform } from "../lib/utils";
+import { readLocalApi } from "../localApi";
 import { isModelPickerOpen } from "../modelPickerVisibility";
+import { useThreadDiscoveredPorts } from "../portDiscoveryState";
 import { useShortcutModifierState } from "../shortcutModifierState";
-import { ensureLocalApi, readLocalApi } from "../localApi";
-import { useComposerDraftStore } from "../composerDraftStore";
-import { useNewThreadHandler } from "../hooks/useHandleNewThread";
-import { useDesktopUpdateState } from "../state/desktopUpdate";
+import {
+  readThreadShell,
+  useProject,
+  useProjects,
+  useThreadShells,
+  useThreadShellsForProjectRefs,
+} from "../state/entities";
+import { previewEnvironment } from "../state/preview";
+import { useThreadRunningTerminalIds } from "../state/terminalSessions";
+import { useAtomCommand } from "../state/use-atom-command";
+import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import {
+  legacyProjectCwdPreferenceKey,
+  resolveProjectExpanded,
+  useUiStateStore,
+} from "../uiStateStore";
+import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
+import { openDiscoveredPort } from "./preview/openDiscoveredPort";
+import { ProjectFavicon } from "./ProjectFavicon";
+import {
+  ChangeRequestStatusIcon,
+  prStatusIndicator,
+  PrStatusTooltipContent,
+  resolveThreadPr,
+  terminalStatusFromRunningIds,
+  ThreadStatusLabel,
+  ThreadWorktreeIndicator,
+  useLinkedThreadPullRequest,
+} from "./ThreadStatusIndicators";
 
+import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { useIsMobile } from "~/hooks/useMediaQuery";
+import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
+import { openCommandPalette } from "../commandPaletteBus";
 import { useThreadActions } from "../hooks/useThreadActions";
+import { sortThreads } from "../lib/threadSort";
+import {
+  derivePhysicalProjectKey,
+  deriveProjectGroupingOverrideKey,
+  getProjectOrderKey,
+  selectProjectGroupingSettings,
+} from "../logicalProject";
+import {
+  buildPhysicalToLogicalProjectKeyMap,
+  buildSidebarProjectSnapshots,
+  type SidebarProjectGroupMember,
+  type SidebarProjectSnapshot,
+} from "../sidebarProjectGrouping";
+import { useEnvironment, useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { projectEnvironment } from "../state/projects";
 import { useEnvironmentQuery } from "../state/query";
+import { primaryServerKeybindingsAtom } from "../state/server";
 import { threadEnvironment, useEnvironmentThread } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
-import { useEnvironment, useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import {
   buildThreadRouteParams,
   resolveActiveThreadRouteRef,
   resolveThreadRouteTarget,
 } from "../threadRoutes";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { useThreadSelectionStore } from "../threadSelectionStore";
 import { formatRelativeTimeLabel } from "../timestampFormat";
-import { Kbd } from "./ui/kbd";
+import type { SidebarThreadSummary } from "../types";
 import {
-  getArm64IntelBuildWarningDescription,
-  getDesktopUpdateActionError,
-  getDesktopUpdateInstallConfirmationMessage,
-  isDesktopUpdateButtonDisabled,
-  resolveDesktopUpdateButtonAction,
-  shouldShowArm64IntelBuildWarning,
-  shouldToastDesktopUpdateActionResult,
-} from "./desktopUpdate.logic";
-import { showDesktopUpdateDownloadedToast } from "./desktopUpdate.toast";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
+  archiveSelectedThreadEntries,
+  buildMultiSelectThreadContextMenuItems,
+  getSidebarThreadIdsToPrewarm,
+  isContextMenuPointerDown,
+  isSidebarNestedLinkClick,
+  isTrailingDoubleClick,
+  orderItemsByPreferredIds,
+  resolveAdjacentThreadId,
+  resolveProjectStatusIndicator,
+  resolveThreadRowClassName,
+  resolveThreadStatusPill,
+  shouldClearThreadSelectionOnMouseDown,
+  sortProjectsForSidebar,
+  ThreadStatusPill,
+  useRetainedValue,
+  useSidebarRowSubscriptionLease,
+  useThreadJumpHintVisibility,
+} from "./Sidebar.logic";
+import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
+import { CommandDialogTrigger } from "./ui/command";
 import {
   Dialog,
   DialogDescription,
@@ -150,6 +178,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { Kbd } from "./ui/kbd";
 import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import {
   NumberField,
@@ -159,7 +188,6 @@ import {
   NumberFieldInput,
 } from "./ui/number-field";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "./ui/select";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
   SidebarContent,
   SidebarGroup,
@@ -171,47 +199,8 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "./ui/sidebar";
-import { useThreadSelectionStore } from "../threadSelectionStore";
-import { openCommandPalette } from "../commandPaletteBus";
-import {
-  archiveSelectedThreadEntries,
-  buildMultiSelectThreadContextMenuItems,
-  getSidebarThreadIdsToPrewarm,
-  resolveAdjacentThreadId,
-  isContextMenuPointerDown,
-  isSidebarNestedLinkClick,
-  isTrailingDoubleClick,
-  resolveProjectStatusIndicator,
-  resolveThreadRowClassName,
-  resolveThreadStatusPill,
-  orderItemsByPreferredIds,
-  shouldClearThreadSelectionOnMouseDown,
-  sortProjectsForSidebar,
-  useRetainedValue,
-  useSidebarRowSubscriptionLease,
-  useThreadJumpHintVisibility,
-  ThreadStatusPill,
-} from "./Sidebar.logic";
-import { sortThreads } from "../lib/threadSort";
-import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
-import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { useIsMobile } from "~/hooks/useMediaQuery";
-import { CommandDialogTrigger } from "./ui/command";
-import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
-import { primaryServerKeybindingsAtom } from "../state/server";
-import {
-  derivePhysicalProjectKey,
-  deriveProjectGroupingOverrideKey,
-  getProjectOrderKey,
-  selectProjectGroupingSettings,
-} from "../logicalProject";
-import type { SidebarThreadSummary } from "../types";
-import {
-  buildPhysicalToLogicalProjectKeyMap,
-  buildSidebarProjectSnapshots,
-  type SidebarProjectGroupMember,
-  type SidebarProjectSnapshot,
-} from "../sidebarProjectGrouping";
+import { stackedThreadToast, toastManager } from "./ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -2822,12 +2811,6 @@ function SortableProjectItem({
 }
 
 interface SidebarProjectsContentProps {
-  showArm64IntelBuildWarning: boolean;
-  arm64IntelBuildWarningDescription: string | null;
-  desktopUpdateButtonAction: "download" | "install" | "none";
-  desktopUpdateButtonDisabled: boolean;
-  desktopUpdateActionPending: boolean;
-  handleDesktopUpdateButtonClick: () => void;
   projectSortOrder: SidebarProjectSortOrder;
   threadSortOrder: SidebarThreadSortOrder;
   threadPreviewCount: SidebarThreadPreviewCount;
@@ -2864,12 +2847,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
   props: SidebarProjectsContentProps,
 ) {
   const {
-    showArm64IntelBuildWarning,
-    arm64IntelBuildWarningDescription,
-    desktopUpdateButtonAction,
-    desktopUpdateButtonDisabled,
-    desktopUpdateActionPending,
-    handleDesktopUpdateButtonClick,
     projectSortOrder,
     threadSortOrder,
     threadPreviewCount,
@@ -2951,29 +2928,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       }
     >
-      {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
-        <SidebarGroup className="px-2 pt-2 pb-0">
-          <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
-            <TriangleAlertIcon />
-            <AlertTitle>Intel build on Apple Silicon</AlertTitle>
-            <AlertDescription>{arm64IntelBuildWarningDescription}</AlertDescription>
-            {desktopUpdateButtonAction !== "none" ? (
-              <AlertAction>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  disabled={desktopUpdateButtonDisabled || desktopUpdateActionPending}
-                  onClick={handleDesktopUpdateButtonClick}
-                >
-                  {desktopUpdateButtonAction === "download"
-                    ? "Download ARM build"
-                    : "Install ARM build"}
-                </Button>
-              </AlertAction>
-            ) : null}
-          </Alert>
-        </SidebarGroup>
-      ) : null}
       <LocalSecondaryStatus />
       <SidebarGroup className="px-2 py-2">
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
@@ -3134,8 +3088,6 @@ export default function LegacySidebar() {
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
   const suppressProjectClickForContextMenuRef = useRef(false);
-  const desktopUpdateState = useDesktopUpdateState();
-  const [desktopUpdateActionPending, setDesktopUpdateActionPending] = useState(false);
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const platform = navigator.platform;
@@ -3587,118 +3539,11 @@ export default function LegacySidebar() {
       window.removeEventListener("mousedown", onMouseDown);
     };
   }, [clearSelection]);
-
-  const desktopUpdateButtonDisabled = isDesktopUpdateButtonDisabled(desktopUpdateState);
-  const desktopUpdateButtonAction = desktopUpdateState
-    ? resolveDesktopUpdateButtonAction(desktopUpdateState)
-    : "none";
-  const showArm64IntelBuildWarning =
-    isElectron && shouldShowArm64IntelBuildWarning(desktopUpdateState);
-  const arm64IntelBuildWarningDescription =
-    desktopUpdateState && showArm64IntelBuildWarning
-      ? getArm64IntelBuildWarningDescription(desktopUpdateState)
-      : null;
   const commandPaletteShortcutLabel = shortcutLabelForCommand(
     keybindings,
     "commandPalette.toggle",
     newThreadShortcutLabelOptions,
   );
-  const handleDesktopUpdateButtonClick = useCallback(async () => {
-    const bridge = window.desktopBridge;
-    if (!bridge || !desktopUpdateState) return;
-    if (
-      desktopUpdateButtonDisabled ||
-      desktopUpdateButtonAction === "none" ||
-      desktopUpdateActionPending
-    ) {
-      return;
-    }
-
-    setDesktopUpdateActionPending(true);
-
-    if (desktopUpdateButtonAction === "download") {
-      void bridge
-        .downloadUpdate()
-        .then((result) => {
-          if (result.completed) {
-            showDesktopUpdateDownloadedToast(bridge, result.state);
-          }
-          if (!shouldToastDesktopUpdateActionResult(result)) return;
-          const actionError = getDesktopUpdateActionError(result);
-          if (!actionError) return;
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not download update",
-              description: actionError,
-            }),
-          );
-        })
-        .catch((error) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not start update download",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
-            }),
-          );
-        })
-        .finally(() => setDesktopUpdateActionPending(false));
-      return;
-    }
-
-    if (desktopUpdateButtonAction === "install") {
-      let confirmed = false;
-      try {
-        confirmed = await ensureLocalApi().dialogs.confirm(
-          getDesktopUpdateInstallConfirmationMessage(desktopUpdateState),
-        );
-      } catch (error) {
-        setDesktopUpdateActionPending(false);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not confirm update",
-            description: error instanceof Error ? error.message : "Update confirmation failed.",
-          }),
-        );
-        return;
-      }
-      if (!confirmed) {
-        setDesktopUpdateActionPending(false);
-        return;
-      }
-      void bridge
-        .installUpdate()
-        .then((result) => {
-          if (!shouldToastDesktopUpdateActionResult(result)) return;
-          const actionError = getDesktopUpdateActionError(result);
-          if (!actionError) return;
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not install update",
-              description: actionError,
-            }),
-          );
-        })
-        .catch((error) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
-            }),
-          );
-        })
-        .finally(() => setDesktopUpdateActionPending(false));
-    }
-  }, [
-    desktopUpdateActionPending,
-    desktopUpdateButtonAction,
-    desktopUpdateButtonDisabled,
-    desktopUpdateState,
-  ]);
 
   const expandThreadListForProject = useCallback((projectKey: string) => {
     setExpandedThreadListsByProject((current) => {
@@ -3726,12 +3571,6 @@ export default function LegacySidebar() {
       <SidebarChromeHeader isElectron={isElectron} />
 
       <SidebarProjectsContent
-        showArm64IntelBuildWarning={showArm64IntelBuildWarning}
-        arm64IntelBuildWarningDescription={arm64IntelBuildWarningDescription}
-        desktopUpdateButtonAction={desktopUpdateButtonAction}
-        desktopUpdateButtonDisabled={desktopUpdateButtonDisabled}
-        desktopUpdateActionPending={desktopUpdateActionPending}
-        handleDesktopUpdateButtonClick={handleDesktopUpdateButtonClick}
         projectSortOrder={sidebarProjectSortOrder}
         threadSortOrder={sidebarThreadSortOrder}
         threadPreviewCount={sidebarThreadPreviewCount}

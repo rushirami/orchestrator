@@ -1,77 +1,15 @@
-# Install T3 Code
+# Install the desktop app
 
-T3 Code is a web and desktop GUI for running coding agents on your machine.
+Install a desktop package built from this fork, then open it to start the local backend.
+Upstream T3 Code downloads and the public `npx t3` package do not contain this fork's privacy
+changes. There is no standalone web or mobile app.
 
-## Requirements
+At least one provider runtime must be installed and authenticated. Provider setup in Settings
+remains available, including managed Antigravity installation. See the provider list below.
 
-Node.js `^22.16 || ^23.11 || >=24.10` on the machine that runs the T3 Code server.
-
-At least one provider runtime, installed and authenticated. You can install Antigravity from
-T3 Code settings. See [Providers](#providers) below.
-
-## Run Without Installing
-
-```bash
-npx t3@latest
-```
-
-This starts the T3 Code server on your machine and opens the local web app. Use
-`npx t3@latest --help` for the full CLI reference.
-
-If the web or desktop app shows "T3 Code could not load", check your connection and select
-**Reload** to try again.
-
-## Open a project in the desktop app
-
-When the T3 Code desktop app is running on the same machine, open the current directory with:
-
-```bash
-npx t3 app
-```
-
-Pass a path to open another directory:
-
-```bash
-npx t3 app ../my-project
-```
-
-The command adds the directory as a project when needed, focuses the desktop app, and opens a new
-thread. It does not launch the desktop app, open a browser, or start a T3 Code server. A background
-server does not count as the desktop app. The command also rejects SSH sessions because a remote
-shell cannot focus a local desktop window. The CLI package and the running desktop app must both
-include `t3 app` support.
-
-## Desktop App
-
-Download the latest release from
-[GitHub Releases](https://github.com/pingdotgg/t3code/releases), or install from a package
-registry.
-
-Windows:
-
-```bash
-winget install T3Tools.T3Code
-```
-
-macOS:
-
-```bash
-brew install --cask t3-code
-```
-
-Arch Linux:
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
+Replace the desktop package manually when you want to update it. The app does not check for or
+download T3 updates. If the app shows "T3 Code could not load", use **Reload** to retry the local
+backend connection.
 
 ### Windows Subsystem for Linux
 
@@ -137,6 +75,6 @@ For multi-account setups, see [Codex](./providers-codex.md), [Claude](./provider
 ## Next Steps
 
 - [Permission modes](./permission-modes.md): how much T3 Code asks before acting
-- [Remote access](./remote-access.md): connect from a phone, tablet, or another desktop
-- [Keeping T3 Code in sync](./updating.md): client and server version skew
-- [Running in the background](./background-service.md): Linux background service
+- [Network access](./network-access.md): local operation and approved integrations
+- [Updating](./updating.md): manually replace the desktop package
+- [Local backend lifecycle](./background-service.md): desktop-managed backends

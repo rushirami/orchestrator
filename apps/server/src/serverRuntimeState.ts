@@ -6,7 +6,6 @@ import * as Schema from "effect/Schema";
 
 import { writeFileStringAtomically } from "./atomicWrite.ts";
 import type * as ServerConfig from "./config.ts";
-import { formatHostForUrl, isWildcardHost } from "./startupAccess.ts";
 
 export const PersistedServerRuntimeState = Schema.Struct({
   version: Schema.Literal(1),
@@ -14,8 +13,7 @@ export const PersistedServerRuntimeState = Schema.Struct({
   host: Schema.optional(Schema.String),
   port: Schema.Int,
   origin: Schema.String,
-  // Present when the server fronts a dev web server (VITE_DEV_SERVER_URL).
-  // Dev is single-origin: browsers must pair through this URL, not `origin`.
+  // Internal renderer development origin.
   devUrl: Schema.optional(Schema.String),
   startedAt: Schema.String,
 });
@@ -42,8 +40,7 @@ const runtimeOriginForConfig = (
   config: Pick<ServerConfig.ServerConfig["Service"], "host">,
   port: number,
 ): PersistedServerRuntimeState["origin"] => {
-  const hostname =
-    config.host && !isWildcardHost(config.host) ? formatHostForUrl(config.host) : "127.0.0.1";
+  const hostname = config.host === "::1" || config.host === "[::1]" ? "[::1]" : "127.0.0.1";
   return `http://${hostname}:${port}`;
 };
 

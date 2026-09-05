@@ -2,9 +2,13 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as NodeTimersPromises from "node:timers/promises";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as NodeURL from "node:url";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 
 import * as Electron from "electron";
 
@@ -50,9 +54,8 @@ export class ElectronProtocolUnregistrationError extends Schema.TaggedErrorClass
 
 export interface DesktopProtocolRegistrationInput {
   readonly scheme: string;
-  readonly targetOrigin: URL;
+  readonly renderer: { readonly devOrigin: URL } | { readonly directory: string };
   readonly backendOrigin: URL;
-  readonly clerkFrontendApiHostname: string | undefined;
 }
 
 export class ElectronProtocol extends Context.Service<
@@ -65,33 +68,20 @@ export class ElectronProtocol extends Context.Service<
 >()("@t3tools/desktop/electron/ElectronProtocol") {}
 
 export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrationInput): string {
-  const clerkOrigin = input.clerkFrontendApiHostname
-    ? `https://${input.clerkFrontendApiHostname}`
-    : undefined;
-  const scriptSources = [
-    "'self'",
-    "'unsafe-inline'",
-    "'wasm-unsafe-eval'",
-    ...(clerkOrigin ? [clerkOrigin] : []),
-    "https://challenges.cloudflare.com",
-  ];
+  const scriptSources = ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"];
 
-  // The renderer connects directly to user-configured environments in addition to
-  // the build-configured Clerk, relay, and OTLP endpoints. Those environment
-  // origins are not known when this response policy is created, so restrict
-  // connections by the network schemes the client supports instead of by host.
   const connectSources = ["'self'", "http:", "https:", "ws:", "wss:"];
 
   return [
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     `connect-src ${connectSources.join(" ")}`,
-    `img-src 'self' ${input.scheme}: blob: data: http: https:`,
-    `media-src 'self' ${input.scheme}: blob: http: https:`,
+    `img-src 'self' ${input.scheme}: blob: data: https://open-vsx.org http://127.0.0.1:* http://localhost:*`,
+    `media-src 'self' ${input.scheme}: blob: http://127.0.0.1:* http://localhost:*`,
     "style-src 'self' 'unsafe-inline'",
     `font-src 'self' ${input.scheme}: data:`,
     "worker-src 'self' blob:",
-    "frame-src 'self' https://challenges.cloudflare.com",
+    "frame-src 'self' http://127.0.0.1:* http://localhost:*",
     "form-action 'self'",
   ].join("; ");
 }
@@ -144,6 +134,7 @@ async function proxyRequest(
   request: Request,
   targetOrigin: URL,
   contentSecurityPolicy: string,
+  preserveBrowserContext = false,
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
   if (requestUrl.host !== DESKTOP_HOST) {
@@ -156,13 +147,12 @@ async function proxyRequest(
   for (const name of headers.keys()) {
     if (
       name === "host" ||
-      name === "origin" ||
-      name === "referer" ||
+      (!preserveBrowserContext &&
+        (name === "origin" || name === "referer" || name.startsWith("sec-fetch-"))) ||
       name === "connection" ||
       name === "content-length" ||
       name === "accept-encoding" ||
-      name === "upgrade-insecure-requests" ||
-      name.startsWith("sec-fetch-")
+      name === "upgrade-insecure-requests"
     ) {
       headersToRemove.push(name);
     }
@@ -182,7 +172,74 @@ async function proxyRequest(
     request.method === "GET" || request.method === "HEAD"
       ? await fetchWithTransientRetry(targetUrl.toString(), init)
       : await Electron.net.fetch(targetUrl.toString(), init);
-  return withContentSecurityPolicy(response, contentSecurityPolicy);
+  // Backend documents keep their own sandbox and resource policy.
+  return preserveBrowserContext
+    ? response
+    : withContentSecurityPolicy(response, contentSecurityPolicy);
+}
+
+/** Packaged renderer files are read by Electron, independently of the backend. */
+const readRendererAsset = Effect.fn("desktop.protocol.readRendererAsset")(function* (
+  request: Request,
+  directory: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response(null, { status: 405, headers: { Allow: "GET, HEAD" } });
+  }
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(request.url).pathname);
+  } catch {
+    return new Response(null, { status: 400 });
+  }
+  if (pathname.includes("\\") || pathname.includes("\0") || pathname.split("/").includes("..")) {
+    return new Response(null, { status: 400 });
+  }
+  const relativePath = pathname === "/" ? "index.html" : pathname.slice(1);
+  return yield* Effect.gen(function* () {
+    const root = yield* fs.realPath(directory);
+    const file = yield* fs.realPath(path.resolve(root, relativePath));
+    const relative = path.relative(root, file);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      return new Response(null, { status: 404 });
+    }
+    if ((yield* fs.stat(file)).type !== "File") return new Response(null, { status: 404 });
+    const response = yield* Effect.promise(() =>
+      Electron.net.fetch(NodeURL.pathToFileURL(file).href, { method: request.method }),
+    );
+    const headers = new Headers(response.headers);
+    headers.set("Cache-Control", "no-cache");
+    headers.set("X-Content-Type-Options", "nosniff");
+    return new Response(response.body, { status: response.status, headers });
+  }).pipe(
+    Effect.catchTag("PlatformError", () => Effect.succeed(new Response(null, { status: 404 }))),
+  );
+});
+
+async function handleDesktopRequest(
+  request: Request,
+  input: DesktopProtocolRegistrationInput,
+  contentSecurityPolicy: string,
+  readAsset: (request: Request, directory: string) => Promise<Response>,
+): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.host !== DESKTOP_HOST) return new Response(null, { status: 404 });
+  if (
+    ["/api", "/oauth", "/.well-known", "/mcp"].some(
+      (prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`),
+    )
+  ) {
+    return proxyRequest(request, input.backendOrigin, contentSecurityPolicy, true);
+  }
+  if ("devOrigin" in input.renderer) {
+    return proxyRequest(request, input.renderer.devOrigin, contentSecurityPolicy);
+  }
+  return withContentSecurityPolicy(
+    await readAsset(request, input.renderer.directory),
+    contentSecurityPolicy,
+  );
 }
 
 const TRANSIENT_FETCH_RETRY_DELAYS_MS = [0, 50, 150] as const;
@@ -207,6 +264,9 @@ async function fetchWithTransientRetry(url: string, init: RequestInit): Promise<
 
 export const make = Effect.gen(function* () {
   const registered = yield* Ref.make(false);
+  const runPromise = Effect.runPromiseWith(
+    yield* Effect.context<FileSystem.FileSystem | Path.Path>(),
+  );
 
   const registerDesktopProtocol = Effect.fn("desktop.electron.protocol.registerDesktopProtocol")(
     function* (input: DesktopProtocolRegistrationInput) {
@@ -218,7 +278,9 @@ export const make = Effect.gen(function* () {
         Effect.try({
           try: () => {
             Electron.protocol.handle(input.scheme, (request) =>
-              proxyRequest(request, input.targetOrigin, contentSecurityPolicy),
+              handleDesktopRequest(request, input, contentSecurityPolicy, (request, directory) =>
+                runPromise(readRendererAsset(request, directory)),
+              ),
             );
           },
           catch: (cause) => new ElectronProtocolRegistrationError({ scheme: input.scheme, cause }),
@@ -239,4 +301,4 @@ export const make = Effect.gen(function* () {
   return ElectronProtocol.of({ registerDesktopProtocol });
 });
 
-export const layer = Layer.effect(ElectronProtocol, make);
+export const layer = Layer.effect(ElectronProtocol, make).pipe(Layer.provide(NodeServices.layer));

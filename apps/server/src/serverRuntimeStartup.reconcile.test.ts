@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import {
   type OrchestrationCommand,
   ProviderDriverKind,
@@ -7,7 +8,6 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { assert, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -61,7 +61,6 @@ const makeProviderService = (liveThreadIds: ReadonlyArray<ThreadId> = []) =>
     assertConversationRollbackSupported: () => Effect.die("unused"),
     getInstanceInfo: () => Effect.die("unused"),
     rollbackConversation: () => Effect.die("unused"),
-    uploadFeedback: () => Effect.die("unused"),
     streamEvents: Stream.empty,
   }) satisfies ProviderService.ProviderService["Service"];
 
@@ -99,59 +98,6 @@ const runReconciliation = (input: {
     }),
     Effect.provide(NodeServices.layer),
   );
-
-it.effect("marks active running sessions that have persisted resume state", () => {
-  const active = makeThread("thread-mark-active", "running", TurnId.make("turn-mark-active"));
-  const archived = makeThread(
-    "thread-mark-archived",
-    "running",
-    TurnId.make("turn-mark-archived"),
-    updatedAt,
-  );
-  const ready = makeThread("thread-mark-ready", "ready");
-  const missingResumeState = makeThread(
-    "thread-mark-missing-resume-state",
-    "running",
-    TurnId.make("turn-mark-missing-resume-state"),
-  );
-  const bindingReads: ThreadId[] = [];
-  const upserts: ProviderSessionDirectory.ProviderRuntimeBinding[] = [];
-
-  return ServerRuntimeStartup.markRunningProviderSessionsForContinuation.pipe(
-    Effect.provideService(
-      ProjectionSnapshotQuery.ProjectionSnapshotQuery,
-      queryWithThreads([active, archived, ready, missingResumeState]),
-    ),
-    Effect.provideService(ProviderSessionDirectory.ProviderSessionDirectory, {
-      getBinding: (threadId) =>
-        Effect.sync(() => bindingReads.push(threadId)).pipe(
-          Effect.as(
-            Option.some({
-              threadId,
-              provider: ProviderDriverKind.make("codex"),
-              providerInstanceId,
-              ...(threadId === active.id ? { resumeCursor: { threadId } } : {}),
-              runtimePayload: { activeTurnId: "turn-mark-active" },
-            }),
-          ),
-        ),
-      upsert: (binding) => Effect.sync(() => upserts.push(binding)),
-      getProvider: () => Effect.die("unused"),
-      listThreadIds: () => Effect.die("unused"),
-      listBindings: () => Effect.die("unused"),
-    }),
-    Effect.tap((marked) =>
-      Effect.sync(() => {
-        assert.deepStrictEqual(bindingReads, [active.id, missingResumeState.id]);
-        assert.deepStrictEqual(marked, [active.id]);
-        assert.deepStrictEqual(upserts[0]?.runtimePayload, {
-          activeTurnId: "turn-mark-active",
-          continueAfterServerUpdate: active.session.activeTurnId,
-        });
-      }),
-    ),
-  );
-});
 
 it.effect("continues marked sessions after activation with provider-specific input", () =>
   Effect.gen(function* () {

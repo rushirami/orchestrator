@@ -1,51 +1,50 @@
-import {
-  type EnvironmentId,
-  type EditorId,
-  type ProjectScript,
-  type ResolvedKeybindingsConfig,
-  type ThreadId,
-} from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import {
+  type EditorId,
+  type EnvironmentId,
+  type ProjectScript,
+  type ResolvedKeybindingsConfig,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { ChevronDownIcon } from "lucide-react";
 import {
   memo,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
-import GitActionsControl from "../GitActionsControl";
-import { isTrailingDoubleClick } from "../Sidebar.logic";
 import { type DraftId } from "~/composerDraftStore";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { toastManager } from "../ui/toast";
+import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
+import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
+import { cn } from "~/lib/utils";
+import { readLocalApi } from "~/localApi";
+import { observeResponsiveBreakpointFade, usePanelAnimationSettings } from "../../panelAnimations";
+import { usePrimaryEnvironmentId } from "../../state/environments";
+import { threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
+import GitActionsControl from "../GitActionsControl";
+import { ProjectFavicon } from "../ProjectFavicon";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
 } from "../ProjectScriptsControl";
-import { OpenInPicker } from "./OpenInPicker";
-import { useRemoteOpenState, type RemoteOpenMode } from "../../remoteOpen";
-import { usePrimaryEnvironmentId } from "../../state/environments";
-import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
-import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
-import { readLocalApi } from "~/localApi";
-import { threadEnvironment } from "../../state/threads";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { observeResponsiveBreakpointFade, usePanelAnimationSettings } from "../../panelAnimations";
-import { ProjectFavicon } from "../ProjectFavicon";
+import { isTrailingDoubleClick } from "../Sidebar.logic";
+import { toastManager } from "../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   WorkspaceBreadcrumb,
   WorkspaceBreadcrumbItem,
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
-import { cn } from "~/lib/utils";
+import { OpenInPicker } from "./OpenInPicker";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -105,7 +104,6 @@ export function shouldShowOpenInPicker(input: {
   readonly activeProjectName: string | undefined;
   readonly activeThreadEnvironmentId: EnvironmentId;
   readonly primaryEnvironmentId: EnvironmentId | null;
-  readonly remoteOpenMode: RemoteOpenMode;
 }): boolean {
   if (!input.activeProjectName) return false;
   if (
@@ -114,10 +112,7 @@ export function shouldShowOpenInPicker(input: {
   ) {
     return true;
   }
-  // Remote environments get the picker in deep-link mode (or its explicit
-  // "no SSH route" state). Non-primary local backends (e.g. WSL) keep it
-  // hidden, matching pre-remote behavior.
-  return input.remoteOpenMode !== "local-exec";
+  return false;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -165,12 +160,10 @@ export const ChatHeader = memo(function ChatHeader({
     activeThreadEnvironmentId,
     activeProjectScripts ? activeProjectCwd : null,
   );
-  const remoteOpenState = useRemoteOpenState(activeThreadEnvironmentId);
   const showOpenInPicker = shouldShowOpenInPicker({
     activeProjectName,
     activeThreadEnvironmentId,
     primaryEnvironmentId,
-    remoteOpenMode: remoteOpenState.mode,
   });
   const activeThreadRef = useMemo(
     () => scopeThreadRef(activeThreadEnvironmentId, activeThreadId),

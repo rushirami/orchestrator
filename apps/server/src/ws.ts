@@ -1,3 +1,49 @@
+import type { LocalClientId } from "@t3tools/contracts";
+import {
+  AssetWorkspaceContextNotFoundError,
+  AssetWorkspaceContextResolutionError,
+  ClientSurface,
+  CommandId,
+  DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL,
+  type DiscoveredLocalServerList,
+  type EditorId,
+  EventId,
+  type FileManagerRevealKind,
+  FilesystemBrowseError,
+  type FilesystemBrowseFailure,
+  type GitActionProgressEvent,
+  type GitManagerServiceError,
+  ORCHESTRATION_WS_METHODS,
+  type OrchestrationClientOrigin,
+  type OrchestrationCommand,
+  OrchestrationDispatchCommandError,
+  type OrchestrationEvent,
+  OrchestrationGetFullThreadDiffError,
+  OrchestrationGetSnapshotError,
+  OrchestrationGetTurnDiffError,
+  OrchestrationSearchThreadsError,
+  type OrchestrationShellStreamEvent,
+  type OrchestrationShellStreamItem,
+  type ProjectEntriesFailure,
+  type ProjectFileFailure,
+  type ProjectFileOperation,
+  type ProjectId,
+  ProjectListEntriesError,
+  ProjectReadFileError,
+  ProjectSearchContentsError,
+  ProjectSearchEntriesError,
+  ProjectWriteFileError,
+  ProviderSetupError,
+  RpcClientId,
+  type TerminalAttachStreamEvent,
+  type TerminalError,
+  type TerminalEvent,
+  type TerminalMetadataStreamEvent,
+  ThreadId,
+  WS_METHODS,
+  WsRpcGroup,
+} from "@t3tools/contracts";
+import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -9,78 +55,32 @@ import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import {
-  DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL,
-  AuthAccessStreamError,
-  type AuthAccessStreamEvent,
-  type AuthEnvironmentScope,
-  AuthSessionId,
-  ClientConnectionMethod,
-  ClientDeviceType,
-  ClientOs,
-  ClientSurface,
-  ClientWebDeployment,
-  CommandId,
-  type DiscoveredLocalServerList,
-  EventId,
-  type EditorId,
-  type FileManagerRevealKind,
-  type OrchestrationClientOrigin,
-  type OrchestrationCommand,
-  type GitActionProgressEvent,
-  type GitManagerServiceError,
-  OrchestrationDispatchCommandError,
-  type OrchestrationEvent,
-  type OrchestrationShellStreamEvent,
-  type OrchestrationShellStreamItem,
-  OrchestrationGetFullThreadDiffError,
-  OrchestrationGetSnapshotError,
-  OrchestrationSearchThreadsError,
-  OrchestrationGetTurnDiffError,
-  ORCHESTRATION_WS_METHODS,
-  type ProjectId,
-  type ProjectEntriesFailure,
-  type ProjectFileFailure,
-  type ProjectFileOperation,
-  ProjectListEntriesError,
-  ProjectReadFileError,
-  ProjectSearchContentsError,
-  ProjectSearchEntriesError,
-  ProjectWriteFileError,
-  ProviderUploadFeedbackError,
-  ProviderSetupError,
-  RelayClientInstallFailedError,
-  type RelayClientInstallProgressEvent,
-  ServerSelfUpdateError,
-  type ServerSelfUpdateProgressEvent,
-  type FilesystemBrowseFailure,
-  FilesystemBrowseError,
-  AssetWorkspaceContextNotFoundError,
-  AssetWorkspaceContextResolutionError,
-  RpcClientId,
-  EnvironmentAuthorizationError,
-  ThreadId,
-  type TerminalAttachStreamEvent,
-  type TerminalError,
-  type TerminalEvent,
-  type TerminalMetadataStreamEvent,
-  WS_METHODS,
-  WsRpcGroup,
-} from "@t3tools/contracts";
-import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
-import { HttpRouter, HttpServerRequest, HttpServerRespondable } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { localClientIdentity } from "./localClientIdentity.ts";
 
+import { issueAssetUrl } from "./assets/AssetAccess.ts";
+import { deletePendingAttachment, issueAttachmentUploadUrl } from "./assets/AttachmentUpload.ts";
+import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
+import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
+import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
+import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
+import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
+import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as Keybindings from "./keybindings.ts";
-import * as ExternalLauncher from "./process/externalLauncher.ts";
+import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
+import {
+  observeRpcEffect as instrumentRpcEffect,
+  observeRpcStream as instrumentRpcStream,
+  observeRpcStreamEffect as instrumentRpcStreamEffect,
+} from "./observability/RpcInstrumentation.ts";
 import {
   projectActivityEvent,
   projectThreadDetailSnapshot,
 } from "./orchestration/ActivityPayloadProjection.ts";
-import { makeThreadLiveEventCoalescer } from "./orchestration/ThreadLiveEventCoalescer.ts";
 import { makeLiveStreamBudget, type RetainedLiveItem } from "./orchestration/LiveStreamBudget.ts";
 import {
   cleanupFailedUploadedAttachments,
@@ -89,63 +89,41 @@ import {
 import * as OrchestrationEngine from "./orchestration/Services/OrchestrationEngine.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ThreadDeletionReactor } from "./orchestration/Services/ThreadDeletionReactor.ts";
-import {
-  observeRpcEffect as instrumentRpcEffect,
-  observeRpcStream as instrumentRpcStream,
-  observeRpcStreamEffect as instrumentRpcStreamEffect,
-} from "./observability/RpcInstrumentation.ts";
-import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
-import * as ProviderService from "./provider/Services/ProviderService.ts";
-import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
+import { makeThreadLiveEventCoalescer } from "./orchestration/ThreadLiveEventCoalescer.ts";
+import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
+import * as PreviewManager from "./preview/Manager.ts";
+import * as PortScanner from "./preview/PortScanner.ts";
+import * as ExternalLauncher from "./process/externalLauncher.ts";
+import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import { ProviderAuthService } from "./provider/Services/ProviderAuthService.ts";
 import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
+import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import { makeProviderInstallation } from "./provider/providerInstallation.ts";
-import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
+import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
+import * as PullRequestService from "./pullRequest/PullRequestService.ts";
+import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
+import * as ReviewService from "./review/ReviewService.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
-import * as TerminalManager from "./terminal/Manager.ts";
-import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
-import * as PreviewManager from "./preview/Manager.ts";
-import { issueAssetUrl } from "./assets/AssetAccess.ts";
-import { deletePendingAttachment, issueAttachmentUploadUrl } from "./assets/AttachmentUpload.ts";
-import * as PortScanner from "./preview/PortScanner.ts";
-import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
-import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
-import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
-import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
-import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
-import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
-import * as GitWorkflowService from "./git/GitWorkflowService.ts";
-import * as ReviewService from "./review/ReviewService.ts";
-import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
-import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
-import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
-import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
-import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
-import { requiredScopeForRpcMethod } from "./auth/RpcAuthorization.ts";
-import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
-import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
-import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
-import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
-import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
-import * as UsageService from "./usage/UsageService.ts";
-import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
-import * as PullRequestService from "./pullRequest/PullRequestService.ts";
-import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
-import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as AzureDevOpsCli from "./sourceControl/AzureDevOpsCli.ts";
 import * as BitbucketApi from "./sourceControl/BitbucketApi.ts";
 import * as GitHubCli from "./sourceControl/GitHubCli.ts";
 import * as GitLabCli from "./sourceControl/GitLabCli.ts";
+import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
 import * as SourceControlProviderRegistry from "./sourceControl/SourceControlProviderRegistry.ts";
+import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
+import * as TerminalManager from "./terminal/Manager.ts";
+import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
+import * as UsageService from "./usage/UsageService.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
 import * as VcsProjectConfig from "./vcs/VcsProjectConfig.ts";
-import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
-import * as SessionStore from "./auth/SessionStore.ts";
-import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
-import * as RelayClient from "@t3tools/shared/relayClient";
+import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
+import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
+import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
+import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
+import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
@@ -341,56 +319,10 @@ const THREAD_RESUME_MAX_EVENTS = 1_000;
 // payload bytes of the range in SQL and reset with a snapshot past this budget.
 const ORCHESTRATION_REPLAY_PAYLOAD_BUDGET_BYTES = 8 * 1024 * 1024;
 
-function toAuthAccessStreamEvent(
-  change: PairingGrantStore.BootstrapCredentialChange | SessionStore.SessionCredentialChange,
-  revision: number,
-  currentSessionId: AuthSessionId,
-): AuthAccessStreamEvent {
-  switch (change.type) {
-    case "pairingLinkUpserted":
-      return {
-        version: 1,
-        revision,
-        type: "pairingLinkUpserted",
-        payload: change.pairingLink,
-      };
-    case "pairingLinkRemoved":
-      return {
-        version: 1,
-        revision,
-        type: "pairingLinkRemoved",
-        payload: { id: change.id },
-      };
-    case "clientUpserted":
-      return {
-        version: 1,
-        revision,
-        type: "clientUpserted",
-        payload: {
-          ...change.clientSession,
-          current: change.clientSession.sessionId === currentSessionId,
-        },
-      };
-    case "clientRemoved":
-      return {
-        version: 1,
-        revision,
-        type: "clientRemoved",
-        payload: { sessionId: change.sessionId },
-      };
-  }
-}
-
 const isClientSurface = Schema.is(ClientSurface);
-const isClientConnectionMethod = Schema.is(ClientConnectionMethod);
-const isClientDeviceType = Schema.is(ClientDeviceType);
-const isClientOs = Schema.is(ClientOs);
-const isClientWebDeployment = Schema.is(ClientWebDeployment);
 const MAX_CLIENT_APP_VERSION_LENGTH = 64;
-const MAX_CLIENT_BROWSER_LENGTH = 64;
-const MAX_CLIENT_DEVICE_MODEL_LENGTH = 80;
 
-// Optional client identity announced on the /ws upgrade URL next to wsTicket.
+// Optional client metadata announced on the local /ws upgrade URL.
 // Lenient by design: absent or malformed values degrade to {} so a connection
 // never fails over attribution metadata.
 function readClientConnectionOrigin(
@@ -410,66 +342,17 @@ function readClientConnectionOrigin(
   };
 }
 
-// Client telemetry stays in this socket's RPC layer. It must not become a
-// server-global "current client" because several client types can connect at once.
-function readClientAnalyticsProps(request: HttpServerRequest.HttpServerRequest) {
-  const url = HttpServerRequest.toURL(request);
-  if (Option.isNone(url)) {
-    return {};
-  }
-
-  const surface = url.value.searchParams.get("clientSurface");
-  const appVersion = url.value.searchParams.get("clientAppVersion")?.trim() ?? "";
-  const deviceType = url.value.searchParams.get("clientDeviceType");
-  const os = url.value.searchParams.get("clientOs");
-  const webDeployment = url.value.searchParams.get("clientWebDeployment");
-  const browser = url.value.searchParams.get("clientBrowser")?.trim() ?? "";
-  const connectionMethod = url.value.searchParams.get("connectionMethod");
-  const rawOsMajorVersion = url.value.searchParams.get("clientOsMajorVersion") ?? "";
-  const osMajorVersion = Number(rawOsMajorVersion);
-  const deviceModel = url.value.searchParams.get("clientDeviceModel")?.trim() ?? "";
-  const isMobile = surface === "mobile";
-  const hasOsMajorVersion =
-    isMobile && rawOsMajorVersion !== "" && Number.isInteger(osMajorVersion) && osMajorVersion > 0;
-  const hasDeviceModel =
-    isMobile && deviceModel !== "" && deviceModel.length <= MAX_CLIENT_DEVICE_MODEL_LENGTH;
-
-  return {
-    ...(isClientSurface(surface) ? { surface } : {}),
-    ...(appVersion !== "" && appVersion.length <= MAX_CLIENT_APP_VERSION_LENGTH
-      ? { appVersion, clientAppVersion: appVersion }
-      : {}),
-    ...(isClientOs(os)
-      ? {
-          clientOs: os,
-          ...(isMobile && (os === "iOS" || os === "Android") ? { os } : {}),
-        }
-      : {}),
-    ...(isClientDeviceType(deviceType) ? { clientDeviceType: deviceType } : {}),
-    ...(surface === "web" && isClientWebDeployment(webDeployment) ? { webDeployment } : {}),
-    ...(surface === "web" && browser !== "" && browser.length <= MAX_CLIENT_BROWSER_LENGTH
-      ? { clientBrowser: browser }
-      : {}),
-    ...(hasOsMajorVersion ? { osMajorVersion, clientOsMajorVersion: osMajorVersion } : {}),
-    ...(hasDeviceModel ? { deviceModel, clientDeviceModel: deviceModel } : {}),
-    ...(isClientConnectionMethod(connectionMethod) ? { connectionMethod } : {}),
-  };
-}
-
 const makeWsRpcLayer = (
-  currentSession: EnvironmentAuth.AuthenticatedSession,
+  currentSessionId: LocalClientId,
   clientOrigin: OrchestrationClientOrigin,
-  clientAnalyticsProps: Readonly<Record<string, unknown>>,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
-      const currentSessionId = currentSession.sessionId;
       const crypto = yield* Crypto.Crypto;
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
       const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
       const threadDeletionReactor = yield* ThreadDeletionReactor;
-      const analytics = yield* AnalyticsService.AnalyticsService;
       // Every command dispatched on this connection carries the connecting
       // client's origin, including server-generated bootstrap sub-commands:
       // the client's request caused them.
@@ -482,27 +365,11 @@ const makeWsRpcLayer = (
           command,
           hasClientOrigin ? { origin: clientOrigin } : undefined,
         );
-      const recordClientCommandAnalytics = (command: OrchestrationCommand) => {
-        switch (command.type) {
-          case "thread.create":
-            return analytics.record("client.thread.started", clientAnalyticsProps);
-          case "thread.turn.start":
-            return command.bootstrap?.createThread
-              ? Effect.andThen(
-                  analytics.record("client.thread.started", clientAnalyticsProps),
-                  analytics.record("client.turn.requested", clientAnalyticsProps),
-                )
-              : analytics.record("client.turn.requested", clientAnalyticsProps);
-          default:
-            return Effect.void;
-        }
-      };
       const checkpointDiffQuery = yield* CheckpointDiffQuery.CheckpointDiffQuery;
       const keybindings = yield* Keybindings.Keybindings;
       const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
       const usageLimitSources = yield* UsageLimitSources.UsageLimitSources;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
-      const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
       const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
       const review = yield* ReviewService.ReviewService;
       const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
@@ -511,12 +378,10 @@ const makeWsRpcLayer = (
       const previewManager = yield* PreviewManager.PreviewManager;
       const portDiscovery = yield* PortScanner.PortDiscovery;
       const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
-      const providerService = yield* ProviderService.ProviderService;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const providerAuth = yield* ProviderAuthService;
       const providerInstances = yield* ProviderInstanceRegistry;
       const providerInstallation = yield* makeProviderInstallation();
-      const serverUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
       const config = yield* ServerConfig.ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
@@ -577,7 +442,6 @@ const makeWsRpcLayer = (
           Effect.ignore,
         ),
       );
-      const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
       const sourceControlDiscovery = yield* SourceControlDiscovery.SourceControlDiscovery;
       const automaticGitFetchInterval = serverSettings.getSettings.pipe(
         Effect.map(
@@ -592,52 +456,20 @@ const makeWsRpcLayer = (
       const sourceControlRepositories =
         yield* SourceControlRepositoryService.SourceControlRepositoryService;
       const pullRequests = yield* PullRequestService.PullRequestService;
-      const bootstrapCredentials = yield* PairingGrantStore.PairingGrantStore;
-      const sessions = yield* SessionStore.SessionStore;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
       const usage = yield* UsageService.UsageService;
-      const relayClient = yield* RelayClient.RelayClient;
-      const authorizationError = (requiredScope: AuthEnvironmentScope) =>
-        new EnvironmentAuthorizationError({
-          message: `The authenticated token is missing required scope: ${requiredScope}.`,
-          requiredScope,
-        });
-      const authorizeEffect = <A, E, R>(
-        requiredScope: AuthEnvironmentScope,
-        effect: Effect.Effect<A, E, R>,
-      ): Effect.Effect<A, E | EnvironmentAuthorizationError, R> =>
-        currentSession.scopes.includes(requiredScope)
-          ? effect
-          : Effect.fail(authorizationError(requiredScope));
-      const authorizeStream = <A, E, R>(
-        requiredScope: AuthEnvironmentScope,
-        stream: Stream.Stream<A, E, R>,
-      ): Stream.Stream<A, E | EnvironmentAuthorizationError, R> =>
-        currentSession.scopes.includes(requiredScope)
-          ? stream
-          : Stream.fail(authorizationError(requiredScope));
       const observeRpcEffect = <A, E, R>(
         method: string,
         effect: Effect.Effect<A, E, R>,
         traceAttributes?: Readonly<Record<string, unknown>>,
-      ) =>
-        instrumentRpcEffect(
-          method,
-          authorizeEffect(requiredScopeForRpcMethod(method), effect),
-          traceAttributes,
-        );
+      ) => instrumentRpcEffect(method, effect, traceAttributes);
       const observeRpcStream = <A, E, R>(
         method: string,
         stream: Stream.Stream<A, E, R>,
         traceAttributes?: Readonly<Record<string, unknown>>,
-      ) =>
-        instrumentRpcStream(
-          method,
-          authorizeStream(requiredScopeForRpcMethod(method), stream),
-          traceAttributes,
-        );
+      ) => instrumentRpcStream(method, stream, traceAttributes);
       const observeRpcStreamEffect = <A, StreamError, StreamContext, EffectError, EffectContext>(
         method: string,
         effect: Effect.Effect<
@@ -646,12 +478,7 @@ const makeWsRpcLayer = (
           EffectContext
         >,
         traceAttributes?: Readonly<Record<string, unknown>>,
-      ) =>
-        instrumentRpcStreamEffect(
-          method,
-          authorizeEffect(requiredScopeForRpcMethod(method), effect),
-          traceAttributes,
-        );
+      ) => instrumentRpcStreamEffect(method, effect, traceAttributes);
       const toDispatchCommandError = (cause: unknown, fallbackMessage: string) =>
         isOrchestrationDispatchCommandError(cause)
           ? cause
@@ -667,19 +494,6 @@ const makeWsRpcLayer = (
       const serverEventId = randomUUID.pipe(Effect.map(EventId.make));
       const serverCommandId = (tag: string) =>
         randomUUID.pipe(Effect.map((uuid) => CommandId.make(`server:${tag}:${uuid}`)));
-
-      const loadAuthAccessSnapshot = () =>
-        Effect.all({
-          pairingLinks: serverAuth.listPairingLinks(),
-          clientSessions: serverAuth.listClientSessions(currentSessionId),
-        }).pipe(
-          Effect.mapError(
-            (error) =>
-              new AuthAccessStreamError({
-                message: error.message,
-              }),
-          ),
-        );
 
       const appendSetupScriptActivity = (input: {
         readonly threadId: ThreadId;
@@ -1207,7 +1021,6 @@ const makeWsRpcLayer = (
           yield* serverSettings.getSettings,
         );
         const environment = yield* serverEnvironment.getDescriptor;
-        const auth = yield* serverAuth.getDescriptor();
         const availableEditors: ReadonlyArray<EditorId> = yield* resolveAvailableEditorsForConfig(
           externalLauncher.resolveAvailableEditors(),
         );
@@ -1219,27 +1032,15 @@ const makeWsRpcLayer = (
 
         return {
           environment,
-          auth,
           cwd: config.cwd,
           keybindingsConfigPath: config.keybindingsConfigPath,
           keybindings: keybindingsConfig.keybindings,
           issues: keybindingsConfig.issues,
           providers,
           availableEditors,
-          // Same discovery-with-timeout treatment as editors: a slow probe
-          // must not stall server.getConfig, so it degrades to no targets.
-          remoteOpenTargets: yield* resolveAvailableEditorsForConfig(
-            remoteOpenTargets.resolveTargets(),
-          ),
           observability: {
             logsDirectoryPath: config.logsDir,
             localTracingEnabled: true,
-            ...(config.otlpTracesUrl !== undefined ? { otlpTracesUrl: config.otlpTracesUrl } : {}),
-            otlpTracesEnabled: config.otlpTracesUrl !== undefined,
-            ...(config.otlpMetricsUrl !== undefined
-              ? { otlpMetricsUrl: config.otlpMetricsUrl }
-              : {}),
-            otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
           },
           settings,
           shellResumeCompletionMarker: true,
@@ -1294,7 +1095,6 @@ const makeWsRpcLayer = (
               const result = yield* dispatchNormalizedCommand(normalizedCommand).pipe(
                 Effect.tapError(() => cleanupFailedUploadedAttachments(command, normalizedCommand)),
               );
-              yield* recordClientCommandAnalytics(normalizedCommand);
               if (archiveCommand) {
                 if (shouldStopSessionAfterCommand) {
                   yield* Effect.gen(function* () {
@@ -1781,20 +1581,6 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "server" },
           ),
-        [WS_METHODS.providerUploadFeedback]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.providerUploadFeedback,
-            providerService.uploadFeedback(input).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ProviderUploadFeedbackError({
-                    threadId: input.threadId,
-                    cause,
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "provider" },
-          ),
         [WS_METHODS.serverUpdateProvider]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverUpdateProvider,
@@ -1884,43 +1670,6 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.providerInstallRemove, providerInstallation.remove(input), {
             "rpc.aggregate": "provider",
           }),
-        [WS_METHODS.serverUpdateServer]: (input) =>
-          observeRpcEffect(WS_METHODS.serverUpdateServer, serverUpdate.update(input), {
-            "rpc.aggregate": "server",
-          }),
-        [WS_METHODS.serverUpdateServerWithProgress]: (input) =>
-          observeRpcStream(
-            WS_METHODS.serverUpdateServerWithProgress,
-            Stream.callback<ServerSelfUpdateProgressEvent, ServerSelfUpdateError>((queue) =>
-              serverUpdate
-                .update(input, (stage) =>
-                  Queue.offer(queue, {
-                    type: "progress",
-                    stage,
-                  }).pipe(Effect.asVoid),
-                )
-                .pipe(
-                  Effect.flatMap((result) =>
-                    Queue.offer(queue, {
-                      type: "complete",
-                      result,
-                    }),
-                  ),
-                  Effect.catchTags({
-                    ServerSelfUpdateError: (error) => Queue.fail(queue, error),
-                  }),
-                  Effect.andThen(Queue.end(queue)),
-                  Effect.forkScoped,
-                ),
-            ),
-            { "rpc.aggregate": "server" },
-          ),
-        [WS_METHODS.serverCommitDesktopUpdate]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.serverCommitDesktopUpdate,
-            serverUpdate.commitDesktopUpdate(input.requestId),
-            { "rpc.aggregate": "server" },
-          ),
         [WS_METHODS.serverUpsertKeybinding]: (rule) =>
           observeRpcEffect(
             WS_METHODS.serverUpsertKeybinding,
@@ -2042,39 +1791,6 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverGetBackgroundPolicy, backgroundPolicy.snapshot, {
             "rpc.aggregate": "server",
           }),
-        [WS_METHODS.cloudGetRelayClientStatus]: (_input) =>
-          observeRpcEffect(WS_METHODS.cloudGetRelayClientStatus, relayClient.resolve, {
-            "rpc.aggregate": "cloud",
-          }),
-        [WS_METHODS.cloudInstallRelayClient]: (_input) =>
-          observeRpcStream(
-            WS_METHODS.cloudInstallRelayClient,
-            Stream.callback<RelayClientInstallProgressEvent, RelayClientInstallFailedError>(
-              (queue) =>
-                relayClient
-                  .installWithProgress((event) => Queue.offer(queue, event).pipe(Effect.asVoid))
-                  .pipe(
-                    Effect.flatMap((status) =>
-                      Queue.offer(queue, {
-                        type: "complete",
-                        status,
-                      }),
-                    ),
-                    Effect.catchTag("RelayClientInstallError", (error) =>
-                      Queue.fail(
-                        queue,
-                        new RelayClientInstallFailedError({
-                          reason: error.reason,
-                          message: error.message,
-                        }),
-                      ),
-                    ),
-                    Effect.andThen(Queue.end(queue)),
-                    Effect.forkScoped,
-                  ),
-            ),
-            { "rpc.aggregate": "cloud" },
-          ),
         [WS_METHODS.pullRequestsList]: (input) =>
           observeRpcEffect(WS_METHODS.pullRequestsList, pullRequests.list(input), {
             "rpc.aggregate": "pull-requests",
@@ -2741,38 +2457,6 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "server" },
           ),
-        [WS_METHODS.subscribeAuthAccess]: (_input) =>
-          observeRpcStreamEffect(
-            WS_METHODS.subscribeAuthAccess,
-            Effect.gen(function* () {
-              const initialSnapshot = yield* loadAuthAccessSnapshot();
-              const revisionRef = yield* Ref.make(1);
-              const accessChanges: Stream.Stream<
-                PairingGrantStore.BootstrapCredentialChange | SessionStore.SessionCredentialChange
-              > = Stream.merge(bootstrapCredentials.streamChanges, sessions.streamChanges);
-
-              const liveEvents: Stream.Stream<AuthAccessStreamEvent> = accessChanges.pipe(
-                Stream.mapEffect((change) =>
-                  Ref.updateAndGet(revisionRef, (revision) => revision + 1).pipe(
-                    Effect.map((revision) =>
-                      toAuthAccessStreamEvent(change, revision, currentSessionId),
-                    ),
-                  ),
-                ),
-              );
-
-              return Stream.concat(
-                Stream.make({
-                  version: 1 as const,
-                  revision: 1,
-                  type: "snapshot" as const,
-                  payload: initialSnapshot,
-                }),
-                liveEvents,
-              );
-            }),
-            { "rpc.aggregate": "auth" },
-          ),
         [WS_METHODS.subscribeBackgroundPolicy]: (_input) =>
           observeRpcStream(
             WS_METHODS.subscribeBackgroundPolicy,
@@ -2800,69 +2484,23 @@ const makeWsRpcLayer = (
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
-    const baseServerSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
-    const config = yield* ServerConfig.ServerConfig;
-    const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
-    const serverSelfUpdate = yield* ServerSelfUpdate.withRunningThreadContinuation({
-      mode: config.mode,
-      selfUpdate: baseServerSelfUpdate,
-      prepare: startup.markRunningProviderSessionsForContinuation.pipe(
-        Effect.mapError(
-          (cause) =>
-            new ServerSelfUpdateError({
-              reason: "Could not prepare running threads to continue after the update.",
-              cause,
-            }),
-        ),
-      ),
-      clear: (threadIds) =>
-        startup.clearProviderSessionContinuationMarkers(threadIds).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ServerSelfUpdateError({
-                reason: "Could not clear thread continuation markers after the update failed.",
-                cause,
-              }),
-          ),
-        ),
-    });
     const pullRequests = yield* PullRequestService.PullRequestService;
     return HttpRouter.add(
       "GET",
       "/ws",
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-        const sessions = yield* SessionStore.SessionStore;
-        const analytics = yield* AnalyticsService.AnalyticsService;
-        const session = yield* serverAuth.authenticateWebSocketUpgrade(request).pipe(
-          Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-            failEnvironmentAuthInvalid(
-              EnvironmentAuth.serverAuthCredentialReason(error),
-              EnvironmentAuth.serverAuthDpopFailureReason(error),
-            ),
-          ),
-          Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
-            failEnvironmentInternal("internal_error", error),
-          ),
-        );
+        const crypto = yield* Crypto.Crypto;
+        const fallbackClientId = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
+        const clientId = localClientIdentity(request.url, fallbackClientId);
         const clientOrigin = readClientConnectionOrigin(request);
-        const clientAnalyticsProps = readClientAnalyticsProps(request);
-        yield* sessions.recordClientConnection(session.sessionId, clientOrigin);
-        yield* analytics.record("client.connected", clientAnalyticsProps);
         const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
           disableTracing: true,
         }).pipe(
           Effect.provide(
-            makeWsRpcLayer(
-              session,
-              clientOrigin,
-              clientAnalyticsProps,
-              previewAutomationBroker,
-            ).pipe(
+            makeWsRpcLayer(clientId, clientOrigin, previewAutomationBroker).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(ProviderMaintenanceRunner.layer),
-              Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
               // One server-lifetime service means clients share the same PR caches, and a WS
               // mutation invalidates the HTTP diff cache that every client reads from.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
@@ -2889,17 +2527,8 @@ export const websocketRpcRouteLayer = Layer.unwrap(
             ),
           ),
         );
-        return yield* Effect.acquireUseRelease(
-          sessions.markConnected(session.sessionId),
-          () => rpcWebSocketHttpEffect,
-          () => sessions.markDisconnected(session.sessionId),
-        );
-      }).pipe(
-        Effect.catchTags({
-          EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
-          EnvironmentInternalError: HttpServerRespondable.toResponse,
-        }),
-      ),
+        return yield* rpcWebSocketHttpEffect;
+      }),
     );
   }),
 );

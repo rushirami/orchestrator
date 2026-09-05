@@ -1,3 +1,11 @@
+import { type SelectedLineRange, VirtualizedFile } from "@pierre/diffs";
+import { Editor } from "@pierre/diffs/editor";
+import { EditProvider, File, type FileOptions, Virtualizer } from "@pierre/diffs/react";
+import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type {
   ChatFileAttachment,
   EditorId,
@@ -9,40 +17,30 @@ import {
   isWorkspaceImagePreviewPath,
   isWorkspaceVideoPreviewPath,
 } from "@t3tools/shared/filePreview";
-import { VirtualizedFile, type SelectedLineRange } from "@pierre/diffs";
-import { Editor } from "@pierre/diffs/editor";
-import { EditProvider, File, type FileOptions, Virtualizer } from "@pierre/diffs/react";
-import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
-import { Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
 import * as Schema from "effect/Schema";
+import { Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 
-import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
+import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
 import { PierreEntryIcon } from "~/components/chat/PierreEntryIcon";
-import { MediaVideoPlayer } from "~/components/media/MediaVideoPlayer";
 import { MediaActions, type MediaActionSource } from "~/components/media/MediaActions";
-import { useRemoteOpenState } from "~/remoteOpen";
+import { MediaVideoPlayer } from "~/components/media/MediaVideoPlayer";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { Toggle } from "~/components/ui/toggle";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
-import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS, resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
 import { cn } from "~/lib/utils";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
-import { isAbsolutePath, resolvePathLinkTarget } from "~/terminal-links";
-import { ScrollArea } from "~/components/ui/scroll-area";
-import { Toggle } from "~/components/ui/toggle";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileReviewComment } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
@@ -50,9 +48,11 @@ import { previewEnvironment } from "~/state/preview";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
+import { isAbsolutePath, resolvePathLinkTarget } from "~/terminal-links";
 
-import FileBrowserPanel from "./FileBrowserPanel";
+import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
+import FileBrowserPanel from "./FileBrowserPanel";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import {
   type FileCommentAnnotationEntry,
@@ -63,10 +63,9 @@ import {
   normalizeFileCommentRange,
   remapFileCommentAnnotations,
 } from "./fileCommentAnnotations";
+import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
 import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
-import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
-import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
 import {
   isMarkdownPreviewFile,
   setMarkdownTaskChecked,
@@ -1000,7 +999,6 @@ export default function FilePreviewPanel({
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const remoteOpenState = useRemoteOpenState(environmentId);
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
@@ -1162,8 +1160,7 @@ export default function FilePreviewPanel({
               </div>
             </ScrollArea>
           )}
-          {absolutePath &&
-          (environmentId === primaryEnvironmentId || remoteOpenState.mode !== "local-exec") ? (
+          {absolutePath && environmentId === primaryEnvironmentId ? (
             <OpenInPicker
               environmentId={environmentId}
               keybindings={keybindings}

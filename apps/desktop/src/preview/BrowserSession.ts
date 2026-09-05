@@ -9,6 +9,8 @@ import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
+import { isLocalPreviewRequest } from "./NetworkPolicy.ts";
+
 const PREVIEW_PARTITION_PREFIX = "persist:t3code-preview-";
 /**
  * Incognito partitions deliberately omit the `persist:` prefix, which is what
@@ -32,7 +34,6 @@ const ALLOWED_PREVIEW_PERMISSIONS: ReadonlySet<string> = new Set([
   "clipboard-read",
   "clipboard-sanitized-write",
   "notifications",
-  "geolocation",
   // Deliberately NOT local-fonts: preview sessions run untrusted web content,
   // and silently granting it would hand every page the user's installed-font
   // fingerprint (and font file bytes via FontData.blob()). The app's own font
@@ -198,6 +199,9 @@ export const make = Effect.gen(function* BrowserSessionMake() {
       return Effect.try({
         try: () => {
           const browserSession = session.fromPartition(partition);
+          browserSession.webRequest.onBeforeRequest((details, callback) => {
+            callback({ cancel: !isLocalPreviewRequest(details.url) });
+          });
           const userAgent = browserSession
             .getUserAgent()
             .replace(/Electron\/[\d.]+ /, "")

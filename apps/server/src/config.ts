@@ -6,8 +6,8 @@
  *
  * @module ServerConfig
  */
-import * as Context from "effect/Context";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -21,9 +21,6 @@ export const DEFAULT_PORT = 3773;
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
-
-export const StartupPresentation = Schema.Literals(["browser", "headless"]);
-export type StartupPresentation = typeof StartupPresentation.Type;
 
 /**
  * ServerDerivedPaths - Derived paths from the base directory.
@@ -66,28 +63,17 @@ export class ServerConfig extends Context.Service<
     readonly traceBatchWindowMs: number;
     readonly traceMaxBytes: number;
     readonly traceMaxFiles: number;
-    readonly otlpTracesUrl: string | undefined;
-    readonly otlpMetricsUrl: string | undefined;
-    readonly otlpExportIntervalMs: number;
-    readonly otlpServiceName: string;
     readonly mode: RuntimeMode;
     readonly port: number;
     readonly host: string | undefined;
     readonly cwd: string;
     readonly baseDir: string;
-    readonly staticDir: string | undefined;
     readonly devUrl: URL | undefined;
-    readonly devAllowedOrigins: ReadonlyArray<string>;
-    readonly noBrowser: boolean;
-    readonly startupPresentation: StartupPresentation;
-    readonly desktopBootstrapToken: string | undefined;
     readonly desktopTelemetryFd?: number | undefined;
     readonly desktopTelemetryControlFd?: number | undefined;
     readonly resourceMonitorPath?: string | undefined;
     readonly autoBootstrapProjectFromCwd: boolean;
     readonly logWebSocketEvents: boolean;
-    readonly tailscaleServeEnabled: boolean;
-    readonly tailscaleServePort: number;
   }
 >()("t3/config/ServerConfig") {
   /** @deprecated Import and use `layerTest` from this module. */
@@ -188,52 +174,20 @@ const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
     traceBatchWindowMs: 200,
     traceMaxBytes: 10 * 1024 * 1024,
     traceMaxFiles: 10,
-    otlpTracesUrl: undefined,
-    otlpMetricsUrl: undefined,
-    otlpExportIntervalMs: 10_000,
-    otlpServiceName: "t3-server",
     cwd,
     baseDir,
     ...derivedPaths,
     mode: "web",
     autoBootstrapProjectFromCwd: false,
     logWebSocketEvents: false,
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
     port: 0,
     host: undefined,
-    desktopBootstrapToken: undefined,
     desktopTelemetryFd: undefined,
     desktopTelemetryControlFd: undefined,
     resourceMonitorPath: undefined,
-    staticDir: undefined,
     devUrl,
-    devAllowedOrigins: [],
-    noBrowser: false,
-    startupPresentation: "browser",
   });
 });
 
 export const layerTest = (cwd: string, baseDirOrPrefix: string | { readonly prefix: string }) =>
   Layer.effect(ServerConfig, makeTest(cwd, baseDirOrPrefix));
-
-export const resolveStaticDir = Effect.fn(function* () {
-  const { join, resolve } = yield* Path.Path;
-  const { exists } = yield* FileSystem.FileSystem;
-  const bundledClient = resolve(join(import.meta.dirname, "client"));
-  const bundledStat = yield* exists(join(bundledClient, "index.html")).pipe(
-    Effect.orElseSucceed(() => false),
-  );
-  if (bundledStat) {
-    return bundledClient;
-  }
-
-  const monorepoClient = resolve(join(import.meta.dirname, "../../web/dist"));
-  const monorepoStat = yield* exists(join(monorepoClient, "index.html")).pipe(
-    Effect.orElseSucceed(() => false),
-  );
-  if (monorepoStat) {
-    return monorepoClient;
-  }
-  return undefined;
-});

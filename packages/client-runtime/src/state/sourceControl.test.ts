@@ -1,9 +1,9 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
-  WS_METHODS,
   type SourceControlPublishRepositoryResult,
+  WS_METHODS,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -12,7 +12,7 @@ import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 
 import {
   AVAILABLE_CONNECTION_STATE,
-  PrimaryConnectionTarget,
+  LocalConnectionTarget,
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
@@ -25,7 +25,7 @@ import type { RpcSession } from "../rpc/session.ts";
 import { createSourceControlEnvironmentAtoms } from "./sourceControl.ts";
 import { vcsRefsCacheStateAtom } from "./vcsRefInvalidation.ts";
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",

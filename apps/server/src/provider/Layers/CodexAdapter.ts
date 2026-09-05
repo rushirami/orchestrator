@@ -8,32 +8,33 @@
  * @module CodexAdapterLive
  */
 import {
-  EventId,
   type CanonicalItemType,
   type CanonicalRequestType,
   type CodexSettings,
+  EventId,
+  ProviderApprovalDecision,
   ProviderDriverKind,
   type ProviderEvent,
   ProviderInstanceId,
-  type ProviderRuntimeEvent,
   type ProviderRequestKind,
-  type ThreadTokenUsageSnapshot,
-  type ToolActivityIcon,
-  type ToolActivityNativeAppReference,
-  type ToolActivitySource,
+  type ProviderRuntimeEvent,
+  ProviderSendTurnInput,
   type ProviderUserInputAnswers,
   RuntimeItemId,
   RuntimeRequestId,
   RuntimeTaskId,
   type RuntimeTaskUsage,
-  type TurnTokenUsage,
-  ProviderApprovalDecision,
   ThreadId,
-  ProviderSendTurnInput,
+  type ThreadTokenUsageSnapshot,
+  type ToolActivityIcon,
+  type ToolActivityNativeAppReference,
+  type ToolActivitySource,
+  type TurnTokenUsage,
 } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as NodeCrypto from "node:crypto";
+import * as CodexErrors from "effect-codex-app-server/errors";
+import * as EffectCodexSchema from "effect-codex-app-server/schema";
 import * as Crypto from "effect/Crypto";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -42,32 +43,31 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import * as CodexErrors from "effect-codex-app-server/errors";
-import * as EffectCodexSchema from "effect-codex-app-server/schema";
+import * as NodeCrypto from "node:crypto";
 
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 
-import {
-  ProviderAdapterRequestError,
-  ProviderAdapterProcessError,
-  ProviderAdapterSessionClosedError,
-  ProviderAdapterSessionNotFoundError,
-  ProviderAdapterValidationError,
-  type ProviderAdapterError,
-} from "../Errors.ts";
-import { type CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import {
+  type ProviderAdapterError,
+  ProviderAdapterProcessError,
+  ProviderAdapterRequestError,
+  ProviderAdapterSessionClosedError,
+  ProviderAdapterSessionNotFoundError,
+  ProviderAdapterValidationError,
+} from "../Errors.ts";
+import { type CodexAdapterShape } from "../Services/CodexAdapter.ts";
+import {
   CodexResumeCursorSchema,
-  CodexSessionRuntimeThreadIdMissingError,
-  describeMcpElicitation,
-  makeCodexSessionRuntime,
   type CodexSessionRuntimeError,
   type CodexSessionRuntimeOptions,
   type CodexSessionRuntimeShape,
+  CodexSessionRuntimeThreadIdMissingError,
+  describeMcpElicitation,
+  makeCodexSessionRuntime,
 } from "./CodexSessionRuntime.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { resolveCodexLaunchArgs } from "./codexLaunchArgs.ts";
@@ -2232,16 +2232,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           ...(serviceTier ? { serviceTier } : {}),
           ...(mcpSession
             ? {
-                environment: {
-                  ...(options?.environment ?? process.env),
-                  T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
-                },
-                appServerArgs: [
-                  "-c",
-                  `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
-                  "-c",
-                  'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
-                ],
+                appServerArgs: ["-c", `mcp_servers.t3-code.url=${mcpSession.endpoint}`],
               }
             : {}),
         };
@@ -2526,17 +2517,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     );
   };
 
-  const uploadFeedback: CodexAdapterShape["uploadFeedback"] = (input) =>
-    requireSession(input.threadId).pipe(
-      Effect.flatMap((session) => session.runtime.uploadFeedback(input.reason)),
-      Effect.map(({ threadId }) => ({ feedbackId: threadId })),
-      Effect.mapError((cause) =>
-        cause._tag === "ProviderAdapterSessionNotFoundError"
-          ? cause
-          : mapCodexRuntimeError(input.threadId, "feedback/upload", cause),
-      ),
-    );
-
   const respondToRequest: CodexAdapterShape["respondToRequest"] = (threadId, requestId, decision) =>
     requireSession(threadId).pipe(
       Effect.flatMap((session) => session.runtime.respondToRequest(requestId, decision)),
@@ -2626,7 +2606,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     interruptTurn,
     readThread,
     rollbackThread,
-    uploadFeedback,
     respondToRequest,
     respondToUserInput,
     stopSession,

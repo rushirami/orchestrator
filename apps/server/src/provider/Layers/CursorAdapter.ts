@@ -554,12 +554,7 @@ export function makeCursorAdapter(
                       type: "http" as const,
                       name: "t3-code",
                       url: mcpSession.endpoint,
-                      headers: [
-                        {
-                          name: "Authorization",
-                          value: mcpSession.authorizationHeader,
-                        },
-                      ],
+                      headers: [],
                     },
                   ],
                 }

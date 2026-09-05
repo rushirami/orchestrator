@@ -1,22 +1,17 @@
-import { ArchiveIcon, ArchiveX, ChevronRightIcon, LoaderIcon, SettingsIcon } from "lucide-react";
-import { Link, useNavigate } from "@tanstack/react-router";
-import type { CSSProperties, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import {
-  type BackgroundActivityProfile,
-  type DesktopUpdateChannel,
-  ProviderDriverKind,
-  type ProviderInstanceId,
-  type ScopedThreadRef,
-  type SidebarProjectGroupingMode,
-} from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import {
+  type BackgroundActivityProfile,
+  ProviderDriverKind,
+  type ProviderInstanceId,
+  type ScopedThreadRef,
+  type SidebarProjectGroupingMode,
+} from "@t3tools/contracts";
 import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
@@ -30,8 +25,8 @@ import {
   MAX_PROMPT_FONT_SIZE,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MAX_TERMINAL_FONT_SIZE,
-  MIN_CODE_FONT_SIZE,
   MIN_APPEARANCE_CONTRAST,
+  MIN_CODE_FONT_SIZE,
   MIN_GLASS_OPACITY,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PANEL_ANIMATION_DURATION_MS,
@@ -42,36 +37,38 @@ import {
 } from "@t3tools/contracts/settings";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import { createModelSelection } from "@t3tools/shared/model";
+import { Link, useNavigate } from "@tanstack/react-router";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
-import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
+import { ArchiveIcon, ArchiveX, ChevronRightIcon, LoaderIcon, SettingsIcon } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  canCheckForUpdate,
-  getDesktopUpdateButtonTooltip,
-  getDesktopUpdateInstallConfirmationMessage,
-  isDesktopUpdateButtonDisabled,
-  resolveDesktopUpdateButtonAction,
-} from "../../components/desktopUpdate.logic";
-import { ProviderModelPicker } from "../chat/ProviderModelPicker";
-import { TraitsPicker } from "../chat/TraitsPicker";
-import {
-  resolveEnvironmentIdentificationPillLabel,
-  useEnvironmentStageLabel,
-} from "../SidebarStageBackdrop";
+  DEFAULT_CODE_FONT_STACK,
+  DEFAULT_SANS_FONT_STACK,
+  isFontFamilyAvailable,
+  isMonospaceFamily,
+  resolveDefaultFamilyLabel,
+  resolveTerminalFontPreference,
+  resolveTerminalFontSizePreference,
+  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+} from "../../appearanceFonts";
+import { APP_VERSION } from "../../branding";
 import { isElectron } from "../../env";
-import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
 import {
   readAppearanceModePreference,
   readThemeHalves,
   readThemePreference,
   useTheme,
 } from "../../hooks/useTheme";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
-import { useDesktopUpdateState } from "../../state/desktopUpdate";
+import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
+import { isMacPlatform } from "../../lib/utils";
+import { ensureLocalApi, readLocalApi } from "../../localApi";
 import {
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
@@ -82,17 +79,21 @@ import {
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
 } from "../../providerInstances";
-import { ensureLocalApi, readLocalApi } from "../../localApi";
-import { isMacPlatform } from "../../lib/utils";
+import { useProjects } from "../../state/entities";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import {
   primaryServerConfigAtom,
   primaryServerObservabilityAtom,
   primaryServerProvidersAtom,
 } from "../../state/server";
-import { useProjects } from "../../state/entities";
-import { usePrimaryEnvironmentId } from "../../state/environments";
-import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
+import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { TraitsPicker } from "../chat/TraitsPicker";
+import { ProjectFavicon } from "../ProjectFavicon";
+import {
+  resolveEnvironmentIdentificationPillLabel,
+  useEnvironmentStageLabel,
+} from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
@@ -107,19 +108,6 @@ import {
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
 import {
-  DEFAULT_CODE_FONT_STACK,
-  DEFAULT_SANS_FONT_STACK,
-  isFontFamilyAvailable,
-  isMonospaceFamily,
-  resolveDefaultFamilyLabel,
-  resolveTerminalFontPreference,
-  resolveTerminalFontSizePreference,
-  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-} from "../../appearanceFonts";
-import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
-import { SharedSettingsMismatchAlert } from "./SharedSettingsMismatchAlert";
-import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
-import {
   NumberField,
   NumberFieldDecrement,
   NumberFieldGroup,
@@ -130,7 +118,19 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ThemeLibrary } from "./ThemeSettings";
+import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
+import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
+import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
+import {
+  PolicyTooltip,
+  SettingResetButton,
+  SETTINGS_PICKER_TRIGGER_CLASSNAME,
+  SettingsPageContainer,
+  SettingsRow,
+  SettingsSection,
+  useSettingsSearchTarget,
+  useSettingsSearchTargetId,
+} from "./settingsLayout";
 import {
   backgroundActivityOverrideSettings,
   backgroundActivitySharedPolicySettings,
@@ -138,28 +138,18 @@ import {
   formatDiagnosticsDescription,
   getChangedBrowserSettingLabels,
   getChangedTypographySettingLabels,
-  normalizeIntervalSeconds,
-  PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
   hasChangedBackgroundActivitySettings,
   isProjectGroupingEnabled,
+  normalizeIntervalSeconds,
   projectGroupingModeFromToggle,
+  PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
   readLastEnabledProjectGroupingMode,
   rememberEnabledProjectGroupingMode,
   resolveBackgroundActivityProfileOption,
 } from "./SettingsPanels.logic";
-import {
-  PolicyTooltip,
-  SETTINGS_PICKER_TRIGGER_CLASSNAME,
-  SettingResetButton,
-  SettingsPageContainer,
-  SettingsRow,
-  SettingsSection,
-  useSettingsSearchTarget,
-  useSettingsSearchTargetId,
-} from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
-import { ProjectFavicon } from "../ProjectFavicon";
-import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
+import { SharedSettingsMismatchAlert } from "./SharedSettingsMismatchAlert";
+import { ThemeLibrary } from "./ThemeSettings";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
@@ -252,234 +242,8 @@ function AboutVersionTitle() {
 }
 
 function AboutVersionSection() {
-  const updateState = useDesktopUpdateState();
-  const [isChangingUpdateChannel, setIsChangingUpdateChannel] = useState(false);
-  const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
-
-  const hasDesktopBridge = typeof window !== "undefined" && Boolean(window.desktopBridge);
-  const selectedUpdateChannel = updateState?.channel ?? "latest";
-  const selectedHostedAppChannel = hasDesktopBridge ? null : HOSTED_APP_CHANNEL;
-
-  const handleUpdateChannelChange = useCallback(
-    (channel: DesktopUpdateChannel) => {
-      const bridge = window.desktopBridge;
-      if (
-        !bridge ||
-        typeof bridge.setUpdateChannel !== "function" ||
-        channel === selectedUpdateChannel
-      ) {
-        return;
-      }
-
-      setIsChangingUpdateChannel(true);
-      void bridge
-        .setUpdateChannel(channel)
-        .catch((error: unknown) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not change update track",
-              description: error instanceof Error ? error.message : "Update track change failed.",
-            }),
-          );
-        })
-        .finally(() => {
-          setIsChangingUpdateChannel(false);
-        });
-    },
-    [selectedUpdateChannel],
-  );
-
-  const handleButtonClick = useCallback(async () => {
-    const bridge = window.desktopBridge;
-    if (!bridge) return;
-
-    const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
-
-    if (action === "download") {
-      void bridge.downloadUpdate().catch((error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not download update",
-            description: error instanceof Error ? error.message : "Download failed.",
-          }),
-        );
-      });
-      return;
-    }
-
-    if (action === "install") {
-      if (isUpdateActionPending) return;
-      setIsUpdateActionPending(true);
-      let confirmed = false;
-      try {
-        confirmed = await ensureLocalApi().dialogs.confirm(
-          getDesktopUpdateInstallConfirmationMessage(
-            updateState ?? { availableVersion: null, downloadedVersion: null },
-          ),
-        );
-      } catch (error) {
-        setIsUpdateActionPending(false);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not confirm update",
-            description: error instanceof Error ? error.message : "Update confirmation failed.",
-          }),
-        );
-        return;
-      }
-      if (!confirmed) {
-        setIsUpdateActionPending(false);
-        return;
-      }
-      void bridge
-        .installUpdate()
-        .catch((error: unknown) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "Install failed.",
-            }),
-          );
-        })
-        .finally(() => setIsUpdateActionPending(false));
-      return;
-    }
-
-    if (typeof bridge.checkForUpdate !== "function") return;
-    void bridge
-      .checkForUpdate()
-      .then((result) => {
-        if (!result.checked) {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not check for updates",
-              description:
-                result.state.message ?? "Automatic updates are not available in this build.",
-            }),
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not check for updates",
-            description: error instanceof Error ? error.message : "Update check failed.",
-          }),
-        );
-      });
-  }, [isUpdateActionPending, updateState]);
-
-  const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
-  const buttonTooltip = updateState ? getDesktopUpdateButtonTooltip(updateState) : null;
-  const buttonDisabled =
-    action === "none"
-      ? !canCheckForUpdate(updateState)
-      : isDesktopUpdateButtonDisabled(updateState);
-
-  const actionLabel: Record<string, string> = { download: "Download", install: "Install" };
-  const statusLabel: Record<string, string> = {
-    checking: "Checking…",
-    downloading: "Downloading…",
-    "up-to-date": "Up to Date",
-  };
-  const buttonLabel =
-    actionLabel[action] ?? statusLabel[updateState?.status ?? ""] ?? "Check for Updates";
-  const description =
-    action === "download" || action === "install"
-      ? "Update available."
-      : "Current version of the application.";
-
   return (
-    <>
-      <SettingsRow
-        title={<AboutVersionTitle />}
-        description={description}
-        control={
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={buttonDisabled || isUpdateActionPending}
-                  onClick={handleButtonClick}
-                >
-                  {buttonLabel}
-                </Button>
-              }
-            />
-            {buttonTooltip ? <TooltipPopup>{buttonTooltip}</TooltipPopup> : null}
-          </Tooltip>
-        }
-      />
-      {hasDesktopBridge ? (
-        <SettingsRow
-          title="Update track"
-          description="Use stable releases or nightly builds. Switch back anytime."
-          control={
-            <Select
-              value={selectedUpdateChannel}
-              onValueChange={(value) => {
-                handleUpdateChannelChange(value as DesktopUpdateChannel);
-              }}
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-full sm:w-40"
-                aria-label="Update track"
-                disabled={isChangingUpdateChannel}
-              >
-                <SelectValue>
-                  {selectedUpdateChannel === "nightly" ? "Nightly" : "Stable"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="latest">
-                  Stable
-                </SelectItem>
-                <SelectItem hideIndicator value="nightly">
-                  Nightly
-                </SelectItem>
-              </SelectPopup>
-            </Select>
-          }
-        />
-      ) : selectedHostedAppChannel ? (
-        <SettingsRow
-          title="Update track"
-          description="Switches the hosted app release channel."
-          control={
-            <Select
-              value={selectedHostedAppChannel}
-              onValueChange={(value) => {
-                if (value === selectedHostedAppChannel) return;
-                window.location.assign(
-                  buildHostedChannelSelectionUrl({ channel: value as HostedAppChannel }),
-                );
-              }}
-            >
-              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Update track">
-                <SelectValue>{HOSTED_APP_CHANNEL_LABEL}</SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="latest">
-                  Latest
-                </SelectItem>
-                <SelectItem hideIndicator value="nightly">
-                  Nightly
-                </SelectItem>
-              </SelectPopup>
-            </Select>
-          }
-        />
-      ) : null}
-    </>
+    <SettingsRow title={<AboutVersionTitle />} description="Current version of the application." />
   );
 }
 
@@ -562,10 +326,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks
         ? ["Provider update checks"]
         : []),
-      ...(settings.continueThreadsAfterServerUpdate !==
-      DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate
-        ? ["Continue threads after server updates"]
-        : []),
       ...(isBackgroundActivityDirty ? ["Background activity"] : []),
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
         ? ["New thread mode"]
@@ -630,7 +390,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.panelAnimationDurationMs,
       settings.enableLegacyTokenStreaming,
       settings.enableProviderUpdateChecks,
-      settings.continueThreadsAfterServerUpdate,
       settings.sidebarAutoSettleAfterDays,
       settings.sidebarAutoSettleOnMerge,
       settings.sidebarProjectGroupingMode,
@@ -726,7 +485,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
       enableLegacyTokenStreaming: DEFAULT_UNIFIED_SETTINGS.enableLegacyTokenStreaming,
       enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
-      continueThreadsAfterServerUpdate: DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate,
       backgroundActivity: DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
       backgroundActivityProfile: DEFAULT_UNIFIED_SETTINGS.backgroundActivityProfile,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
@@ -2036,10 +1794,6 @@ export function GeneralSettingsPanel() {
   );
   const diagnosticsDescription = formatDiagnosticsDescription({
     localTracingEnabled: observability?.localTracingEnabled ?? false,
-    otlpTracesEnabled: observability?.otlpTracesEnabled ?? false,
-    otlpTracesUrl: observability?.otlpTracesUrl,
-    otlpMetricsEnabled: observability?.otlpMetricsEnabled ?? false,
-    otlpMetricsUrl: observability?.otlpMetricsUrl,
   });
 
   const textGenerationProviders = serverProviders.filter(
@@ -2432,34 +2186,6 @@ export function GeneralSettingsPanel() {
                 updateSettings({ enableProviderUpdateChecks: Boolean(checked) })
               }
               aria-label="Check provider versions"
-            />
-          }
-        />
-
-        <SettingsRow
-          {...searchableSetting("continue-threads-after-server-update")}
-          description="Automatically resume active threads after a server update restarts the environment."
-          resetAction={
-            settings.continueThreadsAfterServerUpdate !==
-            DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate ? (
-              <SettingResetButton
-                label="continue threads after server updates"
-                onClick={() =>
-                  updateSettings({
-                    continueThreadsAfterServerUpdate:
-                      DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Switch
-              checked={settings.continueThreadsAfterServerUpdate}
-              onCheckedChange={(checked) =>
-                updateSettings({ continueThreadsAfterServerUpdate: Boolean(checked) })
-              }
-              aria-label="Continue threads after server updates"
             />
           }
         />
@@ -2881,7 +2607,7 @@ export function GeneralSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="about" title="About">
-        {isElectron || HOSTED_APP_CHANNEL ? (
+        {isElectron ? (
           <AboutVersionSection />
         ) : (
           <SettingsRow

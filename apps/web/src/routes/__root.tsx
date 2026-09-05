@@ -1,91 +1,64 @@
-import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import {
-  Outlet,
   createRootRoute,
   type ErrorComponentProps,
+  Outlet,
   useLocation,
   useNavigate,
 } from "@tanstack/react-router";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
+import { useAtomValue } from "@effect/atom-react";
+import { applyAppearanceContrast } from "~/appearanceContrast";
+import { applyAppearanceFontVariables } from "~/appearanceFonts";
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
-import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDialog";
-import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
-import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { DesktopAppActivationCoordinator } from "../components/desktop/DesktopAppActivationCoordinator";
+import {
+  createKeybindingsUpdateToastController,
+  type KeybindingsUpdateToastController,
+} from "../components/KeybindingsUpdateToast.logic";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
-import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToastCoordinator";
 import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
-import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
-import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
-import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
+import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToastCoordinator";
 import { Button } from "../components/ui/button";
 import {
   AnchoredToastProvider,
   stackedThreadToast,
-  ToastProvider,
   toastManager,
+  ToastProvider,
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
-import { applyAppearanceFontVariables } from "~/appearanceFonts";
-import { applyAppearanceContrast } from "~/appearanceContrast";
+import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
+import { useDefaultThemeAdoption } from "../hooks/useDefaultTheme";
+import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
 import { useClientSettings } from "../hooks/useSettings";
-import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
+import { syncBrowserChromeTheme } from "../hooks/useTheme";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
   selectProjectGroupingSettings,
 } from "../logicalProject";
-import { useUiStateStore } from "../uiStateStore";
-import { syncBrowserChromeTheme } from "../hooks/useTheme";
 import { configureClientTracing } from "../observability/clientTracing";
-import { resolveInitialServerAuthGateState } from "../environments/primary";
-import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
-import { shellEnvironment } from "../state/shell";
-import { useAtomValue } from "@effect/atom-react";
-import { useAtomCommand } from "../state/use-atom-command";
-import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
+import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
+import { readProject, setActiveEnvironmentId } from "../state/entities";
+import { usePrimaryEnvironment } from "../state/environments";
 import {
   primaryServerConfigAtom,
   primaryServerConfigEventAtom,
   primaryServerWelcomeAtom,
 } from "../state/server";
-import { readProject, setActiveEnvironmentId, useActiveEnvironmentId } from "../state/entities";
-import {
-  createKeybindingsUpdateToastController,
-  type KeybindingsUpdateToastController,
-} from "../components/KeybindingsUpdateToast.logic";
+import { shellEnvironment } from "../state/shell";
+import { useAtomCommand } from "../state/use-atom-command";
+import { useUiStateStore } from "../uiStateStore";
 
 export const Route = createRootRoute({
-  beforeLoad: async ({ location }) => {
-    if (location.pathname === "/pair" && hasHostedPairingRequest(new URL(window.location.href))) {
-      return {
-        authGateState: {
-          status: "hosted-pairing",
-        } as const,
-      };
-    }
-
-    if (isHostedStaticApp(new URL(window.location.href))) {
-      return {
-        authGateState: {
-          status: "hosted-static",
-        } as const,
-      };
-    }
-
-    const authGateState = await resolveInitialServerAuthGateState();
-    return {
-      authGateState,
-    };
-  },
   component: RootRouteView,
   errorComponent: RootRouteErrorView,
   head: () => ({
@@ -95,8 +68,6 @@ export const Route = createRootRoute({
 
 function RootRouteView() {
   const pathname = useLocation({ select: (location) => location.pathname });
-  const { authGateState } = Route.useRouteContext();
-  const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -106,24 +77,6 @@ function RootRouteView() {
       window.cancelAnimationFrame(frame);
     };
   }, [pathname]);
-
-  if (pathname === "/pair" || pathname === "/connect" || pathname.startsWith("/connect/")) {
-    return (
-      <>
-        <DocumentTitleSync />
-        <Outlet />
-      </>
-    );
-  }
-
-  if (authGateState.status !== "authenticated" && authGateState.status !== "hosted-static") {
-    return (
-      <>
-        <DocumentTitleSync />
-        <Outlet />
-      </>
-    );
-  }
 
   const appShell = (
     <CommandPalette>
@@ -141,17 +94,13 @@ function RootRouteView() {
         <EnvironmentThemeSync />
         <GlassAppearanceSync />
         <FontAppearanceSync />
-        {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
-        {primaryEnvironmentAuthenticated ? <DesktopAppActivationCoordinator /> : null}
-        <RelayClientInstallDialog />
-        <ConnectOnboardingDialog />
-        <SshPasswordPromptDialog />
+        <LocalTracingBootstrap />
+        <DesktopAppActivationCoordinator />
         <ConfirmDialogHost />
         <SlowRpcRequestToastCoordinator />
-        <HostedStaticEnvironmentBootstrap />
-        {primaryEnvironmentAuthenticated ? <EventRouter /> : null}
-        {primaryEnvironmentAuthenticated ? <PlanAgentSelectionHeal /> : null}
-        {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
+        <EventRouter />
+        <PlanAgentSelectionHeal />
+        <ProviderUpdateLaunchNotification />
         {appShell}
         {/* Above the router: a theme draft is judged by walking the app, so the
             editor has to survive navigation away from settings. */}
@@ -235,34 +184,6 @@ function DocumentTitleSync() {
   useEffect(() => {
     document.title = title;
   }, [title]);
-
-  return null;
-}
-
-function HostedStaticEnvironmentBootstrap() {
-  const { environments } = useEnvironments();
-  const activeEnvironmentId = useActiveEnvironmentId();
-
-  useEffect(() => {
-    if (
-      environments.some(
-        (environment) => environment.entry.target._tag === "PrimaryConnectionTarget",
-      )
-    ) {
-      return;
-    }
-
-    if (activeEnvironmentId) {
-      return;
-    }
-
-    const firstSavedEnvironment = environments[0];
-    if (!firstSavedEnvironment) {
-      return;
-    }
-
-    setActiveEnvironmentId(firstSavedEnvironment.environmentId);
-  }, [activeEnvironmentId, environments]);
 
   return null;
 }
@@ -373,7 +294,7 @@ function errorReport(error: unknown, pathname: string): string {
   return lines.join("\n");
 }
 
-function AuthenticatedTracingBootstrap() {
+function LocalTracingBootstrap() {
   useEffect(() => {
     void configureClientTracing();
   }, []);

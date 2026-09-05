@@ -6,7 +6,7 @@ import {
 import type { ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { PrimaryEnvironmentRequestError, retryTransientBootstrap } from "./auth";
+import { PrimaryEnvironmentRequestError, retryTransientBootstrap } from "./request";
 import { PrimaryEnvironmentHttpClient } from "./httpClient";
 
 import { runPrimaryHttp } from "../../lib/runtime";

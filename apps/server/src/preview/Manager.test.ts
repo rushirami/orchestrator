@@ -124,14 +124,13 @@ it.layer(PreviewManager.layer)("PreviewManager", (it) => {
     }),
   );
 
-  it.effect("treats bare hosts as https", () =>
+  it.effect("rejects public hosts before creating a preview", () =>
     Effect.gen(function* () {
       const threadId = freshThreadId();
       const manager = yield* PreviewManager.PreviewManager;
-      const snapshot = yield* manager.open({ threadId, url: "example.com" });
-      if (snapshot.navStatus._tag === "Loading") {
-        expect(snapshot.navStatus.url).toBe("https://example.com/");
-      }
+      const error = yield* Effect.flip(manager.open({ threadId, url: "example.com" }));
+      expect(error).toMatchObject({ _tag: "PreviewInvalidUrlError", reason: "remote-host" });
+      expect((yield* manager.list({ threadId })).sessions).toHaveLength(0);
     }),
   );
 

@@ -1,25 +1,24 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeChildProcess from "node:child_process";
 
-import {
-  ProviderDriverKind,
-  ProviderRuntimeEvent,
-  ProviderSession,
-  ProviderInstanceId,
-} from "@t3tools/contracts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it as effectIt } from "@effect/vitest";
 import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   EventId,
   MessageId,
   ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  ProviderRuntimeEvent,
+  ProviderSession,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -30,41 +29,40 @@ import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { it as effectIt } from "@effect/vitest";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import * as CheckpointStore from "../../checkpointing/CheckpointStore.ts";
-import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
-import * as VcsProcess from "../../vcs/VcsProcess.ts";
-import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
-import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
-import { CheckpointReactorLive } from "./CheckpointReactor.ts";
-import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
-import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
-import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
-import * as ThreadBackgroundLiveness from "../ThreadBackgroundLiveness.ts";
-import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
-import { RuntimeReceiptBusTest } from "./RuntimeReceiptBus.ts";
-import * as RuntimeReceiptBus from "../Services/RuntimeReceiptBus.ts";
-import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
+import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
+import { ServerConfig } from "../../config.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
+import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
-import {
-  OrchestrationEngineService,
-  type OrchestrationEngineShape,
-} from "../Services/OrchestrationEngine.ts";
-import { CheckpointReactor } from "../Services/CheckpointReactor.ts";
-import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
+import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
+import { ProviderValidationError } from "../../provider/Errors.ts";
 import {
   ProviderService,
   type ProviderServiceShape,
 } from "../../provider/Services/ProviderService.ts";
-import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
-import { ProviderValidationError } from "../../provider/Errors.ts";
-import { ServerConfig } from "../../config.ts";
+import { PullRequestService } from "../../pullRequest/PullRequestService.ts";
+import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
+import * as VcsProcess from "../../vcs/VcsProcess.ts";
+import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import * as WorkspaceEntries from "../../workspace/WorkspaceEntries.ts";
 import * as WorkspacePaths from "../../workspace/WorkspacePaths.ts";
-import { PullRequestService } from "../../pullRequest/PullRequestService.ts";
+import { CheckpointReactor } from "../Services/CheckpointReactor.ts";
+import {
+  OrchestrationEngineService,
+  type OrchestrationEngineShape,
+} from "../Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
+import * as RuntimeReceiptBus from "../Services/RuntimeReceiptBus.ts";
+import * as ThreadBackgroundLiveness from "../ThreadBackgroundLiveness.ts";
+import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
+import { CheckpointReactorLive } from "./CheckpointReactor.ts";
+import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
+import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
+import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
+import { RuntimeReceiptBusTest } from "./RuntimeReceiptBus.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
@@ -136,7 +134,6 @@ function createProviderServiceHarness(
         },
       }),
     rollbackConversation,
-    uploadFeedback: () => unsupported(),
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
     },

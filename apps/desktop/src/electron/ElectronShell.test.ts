@@ -36,7 +36,7 @@ describe("ElectronShell", () => {
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
-  it.effect("opens remote SSH editor URLs", () =>
+  it.effect("does not open remote SSH editor URLs", () =>
     Effect.gen(function* () {
       openExternalMock.mockResolvedValue(undefined);
 
@@ -45,10 +45,8 @@ describe("ElectronShell", () => {
         "vscode://vscode-remote/ssh-remote+example.com/home/user/project",
       );
 
-      assert.equal(result, true);
-      assert.deepEqual(openExternalMock.mock.calls, [
-        ["vscode://vscode-remote/ssh-remote+example.com/home/user/project"],
-      ]);
+      assert.equal(result, false);
+      assert.deepEqual(openExternalMock.mock.calls, []);
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 

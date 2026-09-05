@@ -1,21 +1,15 @@
-import { expect, it } from "@effect/vitest";
-import { describe, vi } from "vite-plus/test";
 import * as NodeHttpPlatform from "@effect/platform-node/NodeHttpPlatform";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { HttpServerResponse } from "effect/unstable/http";
+import { describe, vi } from "vite-plus/test";
 import { openMediaFile } from "./assets/MediaFile.ts";
 
-import {
-  assetResponseHeaders,
-  assetFileResponse,
-  downloadContentDisposition,
-  isLoopbackHostname,
-  resolveDevRedirectUrl,
-} from "./http.ts";
+import { assetFileResponse, assetResponseHeaders, downloadContentDisposition } from "./http.ts";
 
 const fileResponseLayer = Layer.mergeAll(NodeHttpPlatform.layer, NodeServices.layer);
 
@@ -271,30 +265,6 @@ describe("video asset byte ranges", () => {
   );
 });
 
-describe("http dev routing", () => {
-  it("treats localhost and loopback addresses as local", () => {
-    expect(isLoopbackHostname("127.0.0.1")).toBe(true);
-    expect(isLoopbackHostname("localhost")).toBe(true);
-    expect(isLoopbackHostname("::1")).toBe(true);
-    expect(isLoopbackHostname("[::1]")).toBe(true);
-  });
-
-  it("does not treat LAN addresses as local", () => {
-    expect(isLoopbackHostname("192.168.86.35")).toBe(false);
-    expect(isLoopbackHostname("10.0.0.24")).toBe(false);
-    expect(isLoopbackHostname("example.local")).toBe(false);
-  });
-
-  it("preserves path and query when redirecting to the dev server", () => {
-    const devUrl = new URL("http://127.0.0.1:5173/");
-    const requestUrl = new URL("http://127.0.0.1:3774/pair?token=test-token");
-
-    expect(resolveDevRedirectUrl(devUrl, requestUrl)).toBe(
-      "http://127.0.0.1:5173/pair?token=test-token",
-    );
-  });
-});
-
 describe("assetResponseHeaders", () => {
   it("sandboxes SVG assets", () => {
     expect(assetResponseHeaders("/attachments/user-image.svg")).toMatchObject({
@@ -309,6 +279,7 @@ describe("assetResponseHeaders", () => {
   it("does not apply document policy to raster images", () => {
     expect(assetResponseHeaders("/attachments/user-image.png")).toEqual({
       "Cache-Control": "private, max-age=3600",
+      Vary: "Origin",
       "X-Content-Type-Options": "nosniff",
     });
   });
@@ -320,6 +291,7 @@ describe("assetResponseHeaders", () => {
       }),
     ).toEqual({
       "Cache-Control": "private, max-age=3600",
+      Vary: "Origin",
       "Content-Type": "video/mp4",
       "X-Content-Type-Options": "nosniff",
     });
@@ -334,14 +306,16 @@ describe("assetResponseHeaders", () => {
       assetResponseHeaders("/attachments/upload.bin", { mimeType: "text/html" }),
     ).toMatchObject({
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-modals",
+      "Content-Security-Policy":
+        "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts",
     });
   });
   it("serves HTML assets as utf-8 inside a sandboxed origin", () => {
     for (const path of ["/workspace/page.html", "/workspace/PAGE.HTM", "/tmp/report.html"]) {
       expect(assetResponseHeaders(path)).toMatchObject({
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-modals",
+        "Content-Security-Policy":
+          "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts",
       });
     }
   });

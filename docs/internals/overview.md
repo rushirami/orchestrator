@@ -2,14 +2,14 @@
 
 > For maintainers. Using T3 Code? See [docs/user](../user/).
 
-T3 Code is a server runtime that owns agent sessions, workspaces, and version control, plus clients
-(web, desktop, mobile) that talk to it over one authenticated Effect RPC WebSocket. The server is the
+T3 Code combines an Electron desktop app with a local server that owns agent sessions,
+workspaces, and version control. Its internal renderer connects over a loopback Effect RPC WebSocket. The server is the
 execution boundary: every provider process, terminal, git operation, and filesystem read happens
 there, never in the client.
 
 ```
 ┌────────────────────────────────────────────────┐
-│ Clients: apps/web, apps/desktop, apps/mobile   │
+│ Desktop shell + internal apps/web renderer   │
 │ shared runtime: packages/client-runtime        │
 │  connection supervisor, RPC session, Atom state│
 └──────────────────┬─────────────────────────────┘
@@ -37,26 +37,20 @@ declares `WS_METHODS` and assembles `WsRpcGroup`; each member is either unary or
 be a broadcast push bus: a client subscribes to what it needs and the server pushes only on that
 subscription.
 
-[`ws.ts`][ws] serves the group. `websocketRpcRouteLayer` mounts `GET /ws`, authenticates the upgrade
-through `EnvironmentAuth.authenticateWebSocketUpgrade`, then hands the socket to
-`RpcServer.toHttpEffectWebsocket`. Authorization is per method: `RPC_REQUIRED_SCOPE` maps each method
-to a scope, and `authorizeEffect`/`authorizeStream` enforce it. Holding a valid socket is not
-authorization to call everything on it. See [environment-auth.md](./environment-auth.md).
+[`ws.ts`][ws] serves the group at `/ws`. The shared loopback Host/Origin boundary applies
+before the upgrade, then `RpcServer.toHttpEffectWebsocket` serves the typed methods without
+T3 authentication. See [local transport boundary](./environment-auth.md).
 
 On the client, [`session.ts`][session] opens the socket and builds the typed client.
 `RpcSessionFactory` is the service; a session exposes `client`, `initialConfig`, `ready`, `probe`,
 and `closed`. It performs one attempt and does not retry. Retry, backoff, and offline policy belong
 to the connection supervisor.
 
-## Shared client runtime
+## Client runtime
 
-`packages/client-runtime` holds every non-visual client concern: connection lifecycle,
-authentication, RPC, cached environment data, and domain state as Atom factories. Web and mobile
-compose it the same way (`apps/web/src/connection/runtime.ts` and
-`apps/mobile/src/connection/runtime.ts` mirror each other, differing only in platform-specific
-background-activity layers) and differ beyond that only in the platform layer they supply and the
-UI they build on top. React components never construct transports, retry loops,
-or RPC clients. See [connection-runtime.md](./connection-runtime.md).
+`packages/client-runtime` owns local connection lifetimes, RPC, cached environment data, and
+domain state as Atom factories. The desktop renderer composes it with platform services from
+`apps/web/src/connection/runtime.ts`. See [connection runtime](./connection-runtime.md).
 
 ## Orchestration is event-sourced
 
@@ -149,17 +143,14 @@ provider conversation. The storage contract is `VcsCheckpointOps` in
 
 [`serverRuntimeStartup.ts`][startup] runs a fixed lifecycle: start keybindings, settings, and
 reactors; publish welcome; signal command readiness (logged as `Accepting commands`); wait for the
-HTTP listener via `markHttpListening`; publish ready; fork the heartbeat; then either print headless
-output or open the browser. Command readiness precedes the listener, so a socket that opens can
+HTTP listener via `markHttpListening`; publish ready; fork the heartbeat; then report readiness to the desktop supervisor. Command readiness precedes the listener, so a socket that opens can
 already dispatch.
 
 ## Related
 
 - [Workspace layout](./workspace-layout.md), [Glossary](./glossary.md)
-- [Mobile navigation headers](./mobile-navigation.md)
 - [Remote environments](./remote.md), [Server updates](./server-updates.md)
 - [Resource telemetry](./resource-telemetry.md)
-- [Product analytics](./product-analytics.md)
 - [Scripts](./scripts.md), [CI gates](./ci.md)
 
 [rpc]: ../../packages/contracts/src/rpc.ts

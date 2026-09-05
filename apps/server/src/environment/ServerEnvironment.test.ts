@@ -9,12 +9,7 @@ import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
-import {
-  PUBLISH_AGENT_ACTIVITY_SECRET,
-  RELAY_ENVIRONMENT_CREDENTIAL_SECRET,
-  RELAY_URL_SECRET,
-} from "../cloud/config.ts";
+import * as ServerSecretStore from "../secrets/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "./ServerEnvironment.ts";
 
@@ -50,25 +45,14 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     traceBatchWindowMs: 200,
     traceMaxBytes: 10 * 1024 * 1024,
     traceMaxFiles: 10,
-    otlpTracesUrl: undefined,
-    otlpMetricsUrl: undefined,
-    otlpExportIntervalMs: 10_000,
-    otlpServiceName: "t3-server",
     cwd: process.cwd(),
     baseDir,
     mode: "web",
     autoBootstrapProjectFromCwd: false,
     logWebSocketEvents: false,
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
     port: 0,
     host: undefined,
-    desktopBootstrapToken: undefined,
-    staticDir: undefined,
     devUrl: undefined,
-    devAllowedOrigins: [],
-    noBrowser: false,
-    startupPresentation: "browser",
   } satisfies ServerConfig.ServerConfig["Service"];
 });
 
@@ -168,57 +152,11 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
       expect(second.capabilities.pullRequests).toBe(true);
       expect(second.capabilities.threadTitleRegeneration).toBe(true);
       expect(second.capabilities.threadPullRequestLinking).toBe(true);
-      expect(second.capabilities.agentActivityPublishing).toBe(false);
+      expect(second.capabilities.agentActivityPublishing).toBeUndefined();
     }),
   );
 
-  it.effect("reports agent activity publishing from the current secret state", () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-server-environment-publish-test-",
-      });
-      const testLayer = Layer.mergeAll(
-        ServerEnvironment.layer.pipe(Layer.provide(ServerSecretStore.layer)),
-        ServerSecretStore.layer,
-      ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)));
-
-      yield* Effect.gen(function* () {
-        const secrets = yield* ServerSecretStore.ServerSecretStore;
-        const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
-        const encode = (value: string) => new TextEncoder().encode(value);
-
-        const unlinked = yield* serverEnvironment.getDescriptor;
-        expect(unlinked.capabilities.agentActivityPublishing).toBe(false);
-
-        // The opt-in alone is not enough: without relay link credentials no
-        // publish would leave this environment.
-        yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, encode("true"));
-        const withoutLink = yield* serverEnvironment.getDescriptor;
-        expect(withoutLink.capabilities.agentActivityPublishing).toBe(false);
-
-        // Empty credentials are as unconfigured as missing ones: the
-        // publisher's truthiness gate skips them, so the capability must not
-        // advertise publishing.
-        yield* secrets.set(RELAY_URL_SECRET, encode(""));
-        yield* secrets.set(RELAY_ENVIRONMENT_CREDENTIAL_SECRET, encode("credential"));
-        const emptyUrl = yield* serverEnvironment.getDescriptor;
-        expect(emptyUrl.capabilities.agentActivityPublishing).toBe(false);
-
-        yield* secrets.set(RELAY_URL_SECRET, encode("https://relay.example"));
-        const linked = yield* serverEnvironment.getDescriptor;
-        expect(linked.capabilities.agentActivityPublishing).toBe(true);
-
-        // The toggle changes at runtime, so the same service instance must
-        // reflect a flip without a restart.
-        yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, encode("false"));
-        const disabled = yield* serverEnvironment.getDescriptor;
-        expect(disabled.capabilities.agentActivityPublishing).toBe(false);
-      }).pipe(Effect.provide(testLayer));
-    }),
-  );
-
-  it.effect("advertises desktopAppUpdate only with desktop mode and the control fd", () =>
+  it.effect("does not advertise self-updates in local environments", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
@@ -241,19 +179,19 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
         );
 
       const withFd = yield* describeWith({ mode: "desktop", desktopTelemetryControlFd: 5 });
-      expect(withFd.capabilities.serverSelfUpdate).toBe("desktop-managed");
-      expect(withFd.capabilities.desktopAppUpdate).toBe(true);
-      expect(withFd.capabilities.serverSelfUpdateProgress).toBe(true);
-      expect(withFd.capabilities.serverUpdateThreadContinuation).toBe(true);
+      expect(withFd.capabilities).not.toHaveProperty("serverSelfUpdate");
+      expect(withFd.capabilities).not.toHaveProperty("desktopAppUpdate");
+      expect(withFd.capabilities).not.toHaveProperty("serverSelfUpdateProgress");
+      expect(withFd.capabilities).not.toHaveProperty("serverUpdateThreadContinuation");
 
       const withoutFd = yield* describeWith({ mode: "desktop" });
-      expect(withoutFd.capabilities.serverSelfUpdate).toBe("desktop-managed");
-      expect(withoutFd.capabilities.desktopAppUpdate).toBeUndefined();
-      expect(withoutFd.capabilities.serverSelfUpdateProgress).toBeUndefined();
-      expect(withoutFd.capabilities.serverUpdateThreadContinuation).toBeUndefined();
+      expect(withoutFd.capabilities).not.toHaveProperty("serverSelfUpdate");
+      expect(withoutFd.capabilities).not.toHaveProperty("desktopAppUpdate");
+      expect(withoutFd.capabilities).not.toHaveProperty("serverSelfUpdateProgress");
+      expect(withoutFd.capabilities).not.toHaveProperty("serverUpdateThreadContinuation");
 
       const web = yield* describeWith({ mode: "web", desktopTelemetryControlFd: 5 });
-      expect(web.capabilities.desktopAppUpdate).toBeUndefined();
+      expect(web.capabilities).not.toHaveProperty("desktopAppUpdate");
     }),
   );
 

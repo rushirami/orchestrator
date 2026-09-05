@@ -14,7 +14,6 @@ import * as Path from "effect/Path";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
-import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 
 export interface MakeDesktopEnvironmentInput {
   readonly dirname: string;
@@ -46,7 +45,6 @@ export class DesktopEnvironment extends Context.Service<
     readonly stateDir: string;
     readonly desktopSettingsPath: string;
     readonly clientSettingsPath: string;
-    readonly savedEnvironmentRegistryPath: string;
     readonly serverSettingsPath: string;
     readonly logDir: string;
     readonly browserArtifactsDir: string;
@@ -62,13 +60,9 @@ export class DesktopEnvironment extends Context.Service<
     readonly backendEntryPath: string;
     readonly backendCwd: string;
     readonly preloadPath: string;
-    readonly appUpdateYmlPath: string;
     readonly devServerUrl: Option.Option<URL>;
-    readonly devRemoteT3ServerEntryPath: Option.Option<string>;
     readonly configuredBackendPort: Option.Option<number>;
     readonly commitHashOverride: Option.Option<string>;
-    readonly otlpTracesUrl: Option.Option<string>;
-    readonly otlpExportIntervalMs: number;
     readonly branding: DesktopAppBranding;
     readonly displayName: string;
     readonly appUserModelId: string;
@@ -95,7 +89,7 @@ function resolveDesktopAppStageLabel(input: {
     return "Dev";
   }
 
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Alpha";
+  return /-nightly\.\d{8}\.\d+$/.test(input.appVersion) ? "Nightly" : "Alpha";
 }
 
 function resolveDesktopAppBranding(input: {
@@ -202,7 +196,6 @@ const make = Effect.fn("desktop.environment.make")(function* (
     stateDir,
     desktopSettingsPath: path.join(stateDir, "desktop-settings.json"),
     clientSettingsPath: path.join(stateDir, "client-settings.json"),
-    savedEnvironmentRegistryPath: path.join(stateDir, "saved-environments.json"),
     serverSettingsPath: path.join(stateDir, "settings.json"),
     logDir: path.join(stateDir, "logs"),
     browserArtifactsDir: path.join(stateDir, "browser-artifacts"),
@@ -212,15 +205,9 @@ const make = Effect.fn("desktop.environment.make")(function* (
     backendEntryPath: path.join(serverRoot, "apps/server/dist/bin.mjs"),
     backendCwd: input.isPackaged ? homeDirectory : appRoot,
     preloadPath: path.join(input.dirname, "preload.cjs"),
-    appUpdateYmlPath: input.isPackaged
-      ? path.join(resourcesPath, "app-update.yml")
-      : path.join(input.appPath, "dev-app-update.yml"),
     devServerUrl,
-    devRemoteT3ServerEntryPath: config.devRemoteT3ServerEntryPath,
     configuredBackendPort: config.configuredBackendPort,
     commitHashOverride: config.commitHashOverride,
-    otlpTracesUrl: config.otlpTracesUrl,
-    otlpExportIntervalMs: config.otlpExportIntervalMs,
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>

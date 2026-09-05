@@ -1,10 +1,10 @@
+import { describe, expect, it } from "@effect/vitest";
 import type { ServerConfig } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 import { Atom, AtomRegistry } from "effect/unstable/reactivity";
 
-import { PrimaryConnectionTarget } from "../connection/model.ts";
+import { LocalConnectionTarget } from "../connection/model.ts";
 import type { EnvironmentShellState } from "./shell.ts";
 import { createEnvironmentServerConfigsAtom, createEnvironmentShellSummaryAtom } from "./shell.ts";
 
@@ -13,13 +13,12 @@ const OTHER_ENVIRONMENT_ID = EnvironmentId.make("environment-2");
 
 function environmentEntry(environmentId: EnvironmentId, label: string) {
   return {
-    target: new PrimaryConnectionTarget({
+    target: new LocalConnectionTarget({
       environmentId,
       label,
       httpBaseUrl: `https://${environmentId}.example.test`,
       wsBaseUrl: `wss://${environmentId}.example.test`,
     }),
-    profile: Option.none(),
   };
 }
 

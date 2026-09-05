@@ -10,8 +10,8 @@
  *      most recently updated projects and, per project, the most recent
  *      threads that have fully stopped. Working, settled, and monitored
  *      threads are skipped so the dev server never adopts live work.
- *      Auth sessions, pairing links, command receipts, and provider
- *      runtime rows are dropped — pair a fresh browser against dev.
+ *      Command receipts and provider runtime rows are dropped. Obsolete T3
+ *      credentials are removed by the normal migration sequence.
  *   3. Runs migrations on the result. Because the clone carries the real
  *      `effect_sql_migrations` table, this proves a new migration applies
  *      on top of the real applied set, and the slot check below catches
@@ -312,8 +312,6 @@ const pruneSnapshot = Effect.fn("pruneDevDbSnapshot")(function* (input: RunMigra
             AND stream_id NOT IN (SELECT project_id FROM kept_projects))`;
       yield* sql`DELETE FROM orchestration_command_receipts`;
       yield* sql`DELETE FROM provider_session_runtime`;
-      yield* sql`DELETE FROM auth_sessions`;
-      yield* sql`DELETE FROM auth_pairing_links`;
     }),
   );
 

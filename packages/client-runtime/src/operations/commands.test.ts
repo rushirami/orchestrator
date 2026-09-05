@@ -1,12 +1,12 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
+  type ClientOrchestrationCommand,
   CommandId,
   EnvironmentId,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
   ThreadId,
-  type ClientOrchestrationCommand,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -15,12 +15,12 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import {
   AVAILABLE_CONNECTION_STATE,
-  PrimaryConnectionTarget,
+  LocalConnectionTarget,
   type PreparedConnection,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
+import * as RpcSession from "../rpc/session.ts";
 import {
   archiveThread,
   createProject,
@@ -37,7 +37,7 @@ const TEST_CRYPTO_LAYER = Layer.succeed(
   }),
 );
 
-const TARGET = new PrimaryConnectionTarget({
+const TARGET = new LocalConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test",

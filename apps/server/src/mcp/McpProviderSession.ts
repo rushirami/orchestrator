@@ -6,7 +6,6 @@ export interface McpProviderSessionConfig {
   readonly providerSessionId: string;
   readonly providerInstanceId: ProviderInstanceId;
   readonly endpoint: string;
-  readonly authorizationHeader: string;
 }
 
 const sessionsByThread = new Map<ThreadId, McpProviderSessionConfig>();

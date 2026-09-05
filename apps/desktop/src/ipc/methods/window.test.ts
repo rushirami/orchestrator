@@ -25,12 +25,8 @@ const readyWslConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   extendEnv: false,
   bootstrap: {
     mode: "desktop",
-    noBrowser: true,
     port: 3774,
     host: "0.0.0.0",
-    desktopBootstrapToken: "bootstrap-token",
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
   },
   bootstrapDelivery: "stdin",
   httpBaseUrl: new URL("http://127.0.0.1:3774"),
@@ -67,7 +63,6 @@ describe("getLocalEnvironmentBootstraps", () => {
           runningDistro: "Ubuntu",
           httpBaseUrl: "http://127.0.0.1:3774/",
           wsBaseUrl: "ws://127.0.0.1:3774/",
-          bootstrapToken: "bootstrap-token",
         },
       ]);
     }).pipe(Effect.provide(DesktopBackendPool.layerTest([defaultWslInstance]))),

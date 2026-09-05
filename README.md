@@ -1,6 +1,12 @@
-# T3 Code
+# Orchestrator — built on T3 Code
 
-T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+This fork explores configurable agent workflows on top of T3 Code: start with a task description or ticket URL, run skills in sequence within a worktree, and guide work through planning, approval, implementation, PR creation, and review. Agents use their existing tools and authentication for services such as Jira and GitHub; no separate Orchestrator account is required.
+
+Read the [Orchestrator vision](./vision.md) for the intended direction. These orchestration capabilities are proposed; the upstream T3 Code overview and setup instructions follow below.
+
+## T3 Code
+
+This fork provides an Electron desktop interface for coding agents on your machine. T3 accounts, telemetry exporters, remote connections, mobile, hosted web delivery, and automatic application updates are removed. Provider, Git, pricing, theme, and usage integrations remain available; see [network access](./docs/user/network-access.md).
 
 Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
 
@@ -8,7 +14,7 @@ Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCod
 
 Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+We wanted something performant and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
 
 ## Installation
 

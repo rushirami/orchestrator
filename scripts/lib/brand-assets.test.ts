@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   BRAND_ASSET_PATHS,
-  DEVELOPMENT_ICON_OVERRIDES,
   DEVELOPMENT_PUBLIC_ICON_OVERRIDES,
   resolveWebAssetBrandForChannel,
   resolveWebAssetBrandForPackageVersion,
@@ -10,32 +9,25 @@ import {
 } from "./brand-assets.ts";
 
 describe("brand-assets", () => {
-  it("maps production web assets into the server package", () => {
-    expect(resolveWebIconOverrides("production", "dist/client")).toEqual([
+  it("maps production assets into the renderer bundle", () => {
+    expect(resolveWebIconOverrides("production", "apps/web/dist")).toEqual([
       {
         sourceRelativePath: BRAND_ASSET_PATHS.productionWebFaviconIco,
-        targetRelativePath: "dist/client/favicon.ico",
+        targetRelativePath: "apps/web/dist/favicon.ico",
       },
       {
         sourceRelativePath: BRAND_ASSET_PATHS.productionWebFavicon16Png,
-        targetRelativePath: "dist/client/favicon-16x16.png",
+        targetRelativePath: "apps/web/dist/favicon-16x16.png",
       },
       {
         sourceRelativePath: BRAND_ASSET_PATHS.productionWebFavicon32Png,
-        targetRelativePath: "dist/client/favicon-32x32.png",
+        targetRelativePath: "apps/web/dist/favicon-32x32.png",
       },
       {
         sourceRelativePath: BRAND_ASSET_PATHS.productionWebAppleTouchIconPng,
-        targetRelativePath: "dist/client/apple-touch-icon.png",
+        targetRelativePath: "apps/web/dist/apple-touch-icon.png",
       },
     ]);
-  });
-
-  it("maps server build web assets to development icons", () => {
-    expect(DEVELOPMENT_ICON_OVERRIDES[0]).toEqual({
-      sourceRelativePath: BRAND_ASSET_PATHS.developmentWebFaviconIco,
-      targetRelativePath: "dist/client/favicon.ico",
-    });
   });
 
   it("maps development web assets to the public splash and favicon files", () => {

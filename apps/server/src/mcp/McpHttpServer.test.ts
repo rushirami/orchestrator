@@ -151,7 +151,7 @@ it.effect("terminates HTTP MCP sessions with DELETE", () =>
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
 
-it.effect("registers annotated tools and preserves authenticated request context", () =>
+it.effect("registers annotated tools and preserves provider request context", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const server = yield* McpServer.McpServer;

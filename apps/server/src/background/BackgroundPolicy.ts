@@ -1,19 +1,19 @@
 import {
-  type AuthSessionId,
   type BackgroundPolicySnapshot,
   type BackgroundScope,
   type ClientActivityLease,
   type ClientActivityReportInput,
   type HostPowerSnapshot,
+  type LocalClientId,
   type RpcClientId,
 } from "@t3tools/contracts";
 import {
   getBackgroundActivityPresetSettings,
-  resolveServerBackgroundActivitySettings,
   type ResolvedBackgroundActivitySettings,
+  resolveServerBackgroundActivitySettings,
 } from "@t3tools/shared/backgroundActivitySettings";
-import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
@@ -30,12 +30,12 @@ export class BackgroundPolicy extends Context.Service<
   BackgroundPolicy,
   {
     readonly reportClientActivity: (
-      sessionId: AuthSessionId,
+      sessionId: LocalClientId,
       rpcClientId: RpcClientId,
       input: ClientActivityReportInput,
     ) => Effect.Effect<void>;
     readonly removeRpcClient: (
-      sessionId: AuthSessionId,
+      sessionId: LocalClientId,
       rpcClientId: RpcClientId,
     ) => Effect.Effect<void>;
     readonly reportHostPowerState: (snapshot: HostPowerSnapshot) => Effect.Effect<void>;

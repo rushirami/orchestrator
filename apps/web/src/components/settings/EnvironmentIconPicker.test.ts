@@ -10,32 +10,18 @@ const config = (environmentIcon: boolean | undefined) =>
 
 describe("resolveEnvironmentIconPickerLock", () => {
   it("locks until the environment is connected", () => {
-    expect(
-      resolveEnvironmentIconPickerLock({ serverConfig: null, operateAccess: "granted" }),
-    ).toMatch(/Connect/);
+    expect(resolveEnvironmentIconPickerLock({ serverConfig: null })).toMatch(/Connect/);
   });
 
-  it("locks on servers that predate the setting, before looking at permissions", () => {
+  it("locks on servers that predate the setting, without the icon capability", () => {
     expect(
       resolveEnvironmentIconPickerLock({
         serverConfig: config(undefined),
-        operateAccess: "denied",
       }),
     ).toMatch(/too old/);
   });
 
-  it("locks when the session cannot operate the environment", () => {
-    expect(
-      resolveEnvironmentIconPickerLock({ serverConfig: config(true), operateAccess: "denied" }),
-    ).toMatch(/cannot change/);
-  });
-
-  it("stays open while access is still resolving so a slow session does not flicker", () => {
-    expect(
-      resolveEnvironmentIconPickerLock({ serverConfig: config(true), operateAccess: "pending" }),
-    ).toBeNull();
-    expect(
-      resolveEnvironmentIconPickerLock({ serverConfig: config(true), operateAccess: "granted" }),
-    ).toBeNull();
+  it("allows icon settings on a connected local backend", () => {
+    expect(resolveEnvironmentIconPickerLock({ serverConfig: config(true) })).toBeNull();
   });
 });

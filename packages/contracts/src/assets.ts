@@ -26,7 +26,7 @@ export const AssetResource = Schema.Union([
   Schema.TaggedStruct("attachment", {
     attachmentId: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
     /** Display name and mime from the `ChatAttachment` the caller holds. The
-        server bakes both into the signed URL so downloads carry the real
+        server bakes both into the local resource URL so downloads carry the real
         filename and Content-Type. Absent on older clients, which fall back to
         an octet-stream download without a filename. */
     fileName: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(255))),
@@ -38,7 +38,7 @@ export const AssetResource = Schema.Union([
   Schema.TaggedStruct("project-favicon", {
     cwd: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
     // A cache-key hint only. The server reads the authoritative path from the
-    // project projection before it issues the signed URL.
+    // project projection before it issues the local resource URL.
     path: Schema.optional(ProjectFaviconPath),
   }),
   Schema.TaggedStruct("native-app-icon", {
@@ -100,17 +100,6 @@ export const AttachmentDeleteInput = Schema.Struct({
   attachmentId: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
 });
 export type AttachmentDeleteInput = typeof AttachmentDeleteInput.Type;
-
-export class AttachmentUploadSigningKeyError extends Schema.TaggedErrorClass<AttachmentUploadSigningKeyError>()(
-  "AttachmentUploadSigningKeyError",
-  {
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return "Failed to load the attachment upload signing key.";
-  }
-}
 
 export class AssetWorkspaceContextNotFoundError extends Schema.TaggedErrorClass<AssetWorkspaceContextNotFoundError>()(
   "AssetWorkspaceContextNotFoundError",
@@ -257,18 +246,6 @@ export class AssetProjectFaviconNotFoundError extends Schema.TaggedErrorClass<As
   }
 }
 
-export class AssetSigningKeyLoadError extends Schema.TaggedErrorClass<AssetSigningKeyLoadError>()(
-  "AssetSigningKeyLoadError",
-  {
-    resource: AssetResource,
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return "Failed to load the asset signing key.";
-  }
-}
-
 export const AssetAccessError = Schema.Union([
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
@@ -282,6 +259,5 @@ export const AssetAccessError = Schema.Union([
   AssetProjectFaviconResolutionError,
   AssetProjectFaviconInspectionError,
   AssetProjectFaviconNotFoundError,
-  AssetSigningKeyLoadError,
 ]);
 export type AssetAccessError = typeof AssetAccessError.Type;

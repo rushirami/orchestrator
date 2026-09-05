@@ -4,31 +4,12 @@ import type {
   DesktopPreviewRecordingFrame,
   DesktopPreviewTabState,
 } from "@t3tools/contracts";
-import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer } from "electron";
 
 import * as IpcChannels from "./ipc/channels.ts";
 
-exposeClerkBridge({ passkeys: true });
-
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Electron exposes the client platform in its sandboxed preload process.
 const clientPlatform = process.platform;
-
-function unwrapEnsureSshEnvironmentResult(result: unknown) {
-  if (
-    typeof result === "object" &&
-    result !== null &&
-    "type" in result &&
-    result.type === IpcChannels.SSH_PASSWORD_PROMPT_CANCELLED_RESULT
-  ) {
-    const message =
-      "message" in result && typeof result.message === "string"
-        ? result.message
-        : "SSH authentication cancelled.";
-    throw new Error(message);
-  }
-  return result as Awaited<ReturnType<DesktopBridge["ensureSshEnvironment"]>>;
-}
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getAppBranding: () => {
@@ -50,56 +31,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     }
     return result as ReturnType<DesktopBridge["getLocalEnvironmentBootstraps"]>;
   },
-  getLocalEnvironmentBearerToken: () =>
-    ipcRenderer.invoke(IpcChannels.GET_LOCAL_ENVIRONMENT_BEARER_TOKEN_CHANNEL),
   getClientSettings: () => ipcRenderer.invoke(IpcChannels.GET_CLIENT_SETTINGS_CHANNEL),
   setClientSettings: (settings) =>
     ipcRenderer.invoke(IpcChannels.SET_CLIENT_SETTINGS_CHANNEL, settings),
-  getConnectionCatalog: () => ipcRenderer.invoke(IpcChannels.GET_CONNECTION_CATALOG_CHANNEL),
-  setConnectionCatalog: (catalog) =>
-    ipcRenderer.invoke(IpcChannels.SET_CONNECTION_CATALOG_CHANNEL, catalog),
-  clearConnectionCatalog: () => ipcRenderer.invoke(IpcChannels.CLEAR_CONNECTION_CATALOG_CHANNEL),
-  discoverSshHosts: () => ipcRenderer.invoke(IpcChannels.DISCOVER_SSH_HOSTS_CHANNEL),
-  resolveSshHost: (alias) => ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_HOST_CHANNEL, alias),
-  ensureSshEnvironment: async (target, options) =>
-    unwrapEnsureSshEnvironmentResult(
-      await ipcRenderer.invoke(IpcChannels.ENSURE_SSH_ENVIRONMENT_CHANNEL, {
-        target,
-        ...(options === undefined ? {} : { options }),
-      }),
-    ),
-  disconnectSshEnvironment: (target) =>
-    ipcRenderer.invoke(IpcChannels.DISCONNECT_SSH_ENVIRONMENT_CHANNEL, target),
-  fetchSshEnvironmentDescriptor: (httpBaseUrl) =>
-    ipcRenderer.invoke(IpcChannels.FETCH_SSH_ENVIRONMENT_DESCRIPTOR_CHANNEL, { httpBaseUrl }),
-  bootstrapSshBearerSession: (httpBaseUrl, credential) =>
-    ipcRenderer.invoke(IpcChannels.BOOTSTRAP_SSH_BEARER_SESSION_CHANNEL, {
-      httpBaseUrl,
-      credential,
-    }),
-  fetchSshSessionState: (httpBaseUrl, bearerToken) =>
-    ipcRenderer.invoke(IpcChannels.FETCH_SSH_SESSION_STATE_CHANNEL, { httpBaseUrl, bearerToken }),
-  issueSshWebSocketTicket: (httpBaseUrl, bearerToken) =>
-    ipcRenderer.invoke(IpcChannels.ISSUE_SSH_WEBSOCKET_TOKEN_CHANNEL, { httpBaseUrl, bearerToken }),
-  onSshPasswordPrompt: (listener) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, request: unknown) => {
-      if (typeof request !== "object" || request === null) return;
-      listener(request as Parameters<typeof listener>[0]);
-    };
-
-    ipcRenderer.on(IpcChannels.SSH_PASSWORD_PROMPT_CHANNEL, wrappedListener);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.SSH_PASSWORD_PROMPT_CHANNEL, wrappedListener);
-    };
-  },
-  resolveSshPasswordPrompt: (requestId, password) =>
-    ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_PASSWORD_PROMPT_CHANNEL, { requestId, password }),
-  getServerExposureState: () => ipcRenderer.invoke(IpcChannels.GET_SERVER_EXPOSURE_STATE_CHANNEL),
-  setServerExposureMode: (mode) =>
-    ipcRenderer.invoke(IpcChannels.SET_SERVER_EXPOSURE_MODE_CHANNEL, mode),
-  setTailscaleServeEnabled: (input) =>
-    ipcRenderer.invoke(IpcChannels.SET_TAILSCALE_SERVE_ENABLED_CHANNEL, input),
-  getAdvertisedEndpoints: () => ipcRenderer.invoke(IpcChannels.GET_ADVERTISED_ENDPOINTS_CHANNEL),
   getWslState: () => ipcRenderer.invoke(IpcChannels.GET_WSL_STATE_CHANNEL),
   setWslBackendEnabled: (enabled) =>
     ipcRenderer.invoke(IpcChannels.SET_WSL_BACKEND_ENABLED_CHANNEL, enabled),
@@ -116,7 +50,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ...(position === undefined ? {} : { position }),
     }),
   openExternal: (url: string) => ipcRenderer.invoke(IpcChannels.OPEN_EXTERNAL_CHANNEL, url),
-  probeRemoteEditors: () => ipcRenderer.invoke(IpcChannels.PROBE_REMOTE_EDITORS_CHANNEL, undefined),
   onMenuAction: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, action: unknown) => {
       if (typeof action !== "string") return;
@@ -160,23 +93,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.on(IpcChannels.WINDOW_FULLSCREEN_STATE_CHANNEL, wrappedListener);
     return () => {
       ipcRenderer.removeListener(IpcChannels.WINDOW_FULLSCREEN_STATE_CHANNEL, wrappedListener);
-    };
-  },
-  getUpdateState: () => ipcRenderer.invoke(IpcChannels.UPDATE_GET_STATE_CHANNEL),
-  setUpdateChannel: (channel) =>
-    ipcRenderer.invoke(IpcChannels.UPDATE_SET_CHANNEL_CHANNEL, channel),
-  checkForUpdate: () => ipcRenderer.invoke(IpcChannels.UPDATE_CHECK_CHANNEL),
-  downloadUpdate: () => ipcRenderer.invoke(IpcChannels.UPDATE_DOWNLOAD_CHANNEL),
-  installUpdate: () => ipcRenderer.invoke(IpcChannels.UPDATE_INSTALL_CHANNEL),
-  onUpdateState: (listener) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, state: unknown) => {
-      if (typeof state !== "object" || state === null) return;
-      listener(state as Parameters<typeof listener>[0]);
-    };
-
-    ipcRenderer.on(IpcChannels.UPDATE_STATE_CHANNEL, wrappedListener);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.UPDATE_STATE_CHANNEL, wrappedListener);
     };
   },
   appActivation: {
@@ -223,9 +139,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IpcChannels.PREVIEW_SET_AUDIO_MUTED_CHANNEL, { tabId, audioMuted }),
     openDevTools: (tabId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_OPEN_DEVTOOLS_CHANNEL, { tabId }),
-    listBrowserImportSources: () => ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_SOURCES_CHANNEL),
-    importBrowserCookies: (input) =>
-      ipcRenderer.invoke(IpcChannels.PREVIEW_IMPORT_COOKIES_CHANNEL, input),
     clearCookies: (environmentId, profileId) =>
       ipcRenderer.invoke(IpcChannels.PREVIEW_CLEAR_COOKIES_CHANNEL, { environmentId, profileId }),
     clearCache: (environmentId, profileId) =>

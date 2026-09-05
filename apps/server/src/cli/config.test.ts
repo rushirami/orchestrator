@@ -11,12 +11,12 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   DesktopBackendBootstrap,
   type DesktopBackendBootstrap as DesktopBackendBootstrapValue,
 } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { deriveServerPaths } from "../config.ts";
 import { resolveServerConfig } from "./config.ts";
 
@@ -29,13 +29,9 @@ const makeDesktopBootstrap = (
   overrides: Partial<DesktopBackendBootstrapValue> = {},
 ): DesktopBackendBootstrapValue => ({
   mode: "desktop",
-  noBrowser: true,
   port: 4888,
   t3Home: "/tmp/t3-bootstrap-home",
   host: "127.0.0.1",
-  desktopBootstrapToken: "desktop-bootstrap-token",
-  tailscaleServeEnabled: false,
-  tailscaleServePort: 443,
   ...overrides,
 });
 
@@ -46,11 +42,6 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
     traceBatchWindowMs: 1_000,
     traceMaxBytes: 10 * 1024 * 1024,
     traceMaxFiles: 10,
-    otlpTracesUrl: undefined,
-    otlpMetricsUrl: undefined,
-    otlpExportIntervalMs: 10_000,
-    otlpServiceName: "t3-server",
-    devAllowedOrigins: [],
   } as const;
 
   const openBootstrapFd = Effect.fn(function* (payload: DesktopBackendBootstrapValue) {
@@ -63,6 +54,48 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       (fd) => Effect.sync(() => NodeFS.closeSync(fd)),
     );
   });
+
+  it.effect("rejects remote bind hosts from flags, environment, and desktop bootstrap", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-local-host-test-" });
+      for (const source of ["flag", "environment", "bootstrap"] as const) {
+        const bootstrapFd =
+          source === "bootstrap"
+            ? Option.some(
+                yield* openBootstrapFd(makeDesktopBootstrap({ host: "0.0.0.0", t3Home: baseDir })),
+              )
+            : Option.none<number>();
+        const error = yield* resolveServerConfig(
+          {
+            mode: Option.some("desktop"),
+            port: Option.some(4888),
+            host: source === "flag" ? Option.some("0.0.0.0") : Option.none(),
+            baseDir: Option.some(baseDir),
+            cwd: Option.some(baseDir),
+            devUrl: Option.none(),
+            bootstrapFd,
+            autoBootstrapProjectFromCwd: Option.none(),
+            logWebSocketEvents: Option.none(),
+          },
+          Option.none(),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              NetService.layer,
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({
+                  env: source === "environment" ? { T3CODE_HOST: "192.168.1.2" } : {},
+                }),
+              ),
+            ),
+          ),
+          Effect.flip,
+        );
+        assert.equal(error._tag, "NonLoopbackListenHostError", source);
+      }
+    }),
+  );
 
   it.effect("falls back to effect/config values when flags are omitted", () =>
     Effect.gen(function* () {
@@ -80,12 +113,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           baseDir: Option.none(),
           cwd: Option.none(),
           devUrl: Option.none(),
-          noBrowser: Option.none(),
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
-          tailscaleServeEnabled: Option.none(),
-          tailscaleServePort: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -97,11 +127,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
                   T3CODE_LOG_LEVEL: "Warn",
                   T3CODE_MODE: "desktop",
                   T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
+                  T3CODE_HOST: "localhost",
                   T3CODE_HOME: baseDir,
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
-                  T3CODE_DEV_ALLOWED_ORIGINS:
-                    "https://host.example.ts.net, https://phone.example.ts.net ",
                   T3CODE_NO_BROWSER: "true",
                   T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
                   T3CODE_LOG_WS_EVENTS: "true",
@@ -121,17 +149,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         cwd: process.cwd(),
         baseDir,
         ...derivedPaths,
-        host: "0.0.0.0",
-        staticDir: undefined,
+        host: "127.0.0.1",
         devUrl: new URL("http://127.0.0.1:5173"),
-        devAllowedOrigins: ["https://host.example.ts.net", "https://phone.example.ts.net"],
-        noBrowser: true,
-        startupPresentation: "browser",
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: true,
-        tailscaleServeEnabled: false,
-        tailscaleServePort: 443,
       });
       assert.equal(resolved.stateDir, join(baseDir, "userdata"));
     }),
@@ -153,12 +174,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           baseDir: Option.some(baseDir),
           cwd: Option.none(),
           devUrl: Option.some(new URL("http://127.0.0.1:4173")),
-          noBrowser: Option.some(true),
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.some(true),
           logWebSocketEvents: Option.some(true),
-          tailscaleServeEnabled: Option.some(true),
-          tailscaleServePort: Option.some(8443),
         },
         Option.some("Debug"),
       ).pipe(
@@ -170,7 +188,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
                   T3CODE_LOG_LEVEL: "Warn",
                   T3CODE_MODE: "desktop",
                   T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
+                  T3CODE_HOST: "localhost",
                   T3CODE_HOME: join(NodeOS.tmpdir(), "ignored-base"),
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
                   T3CODE_NO_BROWSER: "false",
@@ -193,15 +211,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         baseDir,
         ...derivedPaths,
         host: "127.0.0.1",
-        staticDir: undefined,
         devUrl: new URL("http://127.0.0.1:4173"),
-        noBrowser: true,
-        startupPresentation: "browser",
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
-        tailscaleServeEnabled: true,
-        tailscaleServePort: 8443,
       });
       assert.equal(resolved.dbPath, join(baseDir, "userdata", "state.sqlite"));
     }),
@@ -211,13 +223,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
       const baseDir = join(NodeOS.tmpdir(), "t3-cli-config-false-flags");
-      const fd = yield* openBootstrapFd(
-        makeDesktopBootstrap({
-          noBrowser: true,
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
-        }),
-      );
+      const fd = yield* openBootstrapFd(makeDesktopBootstrap({}));
       const derivedPaths = yield* deriveExplicitServerPaths(
         baseDir,
         new URL("http://127.0.0.1:4173"),
@@ -231,12 +237,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           baseDir: Option.some(baseDir),
           cwd: Option.none(),
           devUrl: Option.some(new URL("http://127.0.0.1:4173")),
-          noBrowser: Option.some(false),
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.some(false),
           logWebSocketEvents: Option.some(false),
-          tailscaleServeEnabled: Option.none(),
-          tailscaleServePort: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -266,15 +269,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         baseDir,
         ...derivedPaths,
         host: "127.0.0.1",
-        staticDir: undefined,
         devUrl: new URL("http://127.0.0.1:4173"),
-        noBrowser: false,
-        startupPresentation: "browser",
-        desktopBootstrapToken: "desktop-bootstrap-token",
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
-        tailscaleServeEnabled: false,
-        tailscaleServePort: 443,
       });
     }),
   );
@@ -286,16 +283,10 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       const fd = yield* openBootstrapFd(
         makeDesktopBootstrap({
           port: 4888,
-          host: "127.0.0.2",
+          host: "::1",
           t3Home: baseDir,
-          noBrowser: true,
-          desktopBootstrapToken: "desktop-token",
           desktopTelemetryFd: 4,
           desktopTelemetryControlFd: 5,
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
-          otlpTracesUrl: "http://localhost:4318/v1/traces",
-          otlpMetricsUrl: "http://localhost:4318/v1/metrics",
         }),
       );
       const derivedPaths = yield* deriveServerPaths(baseDir, undefined);
@@ -308,12 +299,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           baseDir: Option.none(),
           cwd: Option.none(),
           devUrl: Option.none(),
-          noBrowser: Option.none(),
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
-          tailscaleServeEnabled: Option.none(),
-          tailscaleServePort: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -334,26 +322,18 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       expect(resolved).toEqual({
         logLevel: "Info",
         ...defaultObservabilityConfig,
-        otlpTracesUrl: "http://localhost:4318/v1/traces",
-        otlpMetricsUrl: "http://localhost:4318/v1/metrics",
         mode: "desktop",
         port: 4888,
         cwd: process.cwd(),
         baseDir,
         ...derivedPaths,
-        host: "127.0.0.2",
-        staticDir: resolved.staticDir,
+        host: "::1",
         devUrl: undefined,
-        noBrowser: true,
-        startupPresentation: "browser",
-        desktopBootstrapToken: "desktop-token",
         desktopTelemetryFd: 4,
         desktopTelemetryControlFd: 5,
         resourceMonitorPath: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
-        tailscaleServeEnabled: false,
-        tailscaleServePort: 443,
       });
       assert.equal(join(baseDir, "userdata"), resolved.stateDir);
       assert.equal(resolved.desktopTelemetryFd, 4);
@@ -376,12 +356,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           baseDir: Option.some(baseDir),
           cwd: Option.some(customCwd),
           devUrl: Option.some(new URL("http://127.0.0.1:5173")),
-          noBrowser: Option.none(),
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
-          tailscaleServeEnabled: Option.none(),
-          tailscaleServePort: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -417,12 +394,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       const fd = yield* openBootstrapFd(
         makeDesktopBootstrap({
           port: 4888,
-          host: "127.0.0.2",
+          host: "::1",
           t3Home: "/tmp/t3-bootstrap-home",
-          noBrowser: false,
-          desktopBootstrapToken: "desktop-token",
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
         }),
       );
       const derivedPaths = yield* deriveExplicitServerPaths(
@@ -438,12 +411,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           baseDir: Option.none(),
           cwd: Option.none(),
           devUrl: Option.some(new URL("http://127.0.0.1:4173")),
-          noBrowser: Option.none(),
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
-          tailscaleServeEnabled: Option.none(),
-          tailscaleServePort: Option.none(),
         },
         Option.some("Debug"),
       ).pipe(
@@ -475,20 +445,14 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         baseDir,
         ...derivedPaths,
         host: "127.0.0.1",
-        staticDir: undefined,
         devUrl: new URL("http://127.0.0.1:4173"),
-        noBrowser: true,
-        startupPresentation: "browser",
-        desktopBootstrapToken: "desktop-token",
         autoBootstrapProjectFromCwd: true,
         logWebSocketEvents: true,
-        tailscaleServeEnabled: false,
-        tailscaleServePort: 443,
       });
     }),
   );
 
-  it.effect("falls back to persisted observability settings when env vars are absent", () =>
+  it.effect("ignores obsolete exporter settings on disk", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -500,8 +464,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         // @effect-diagnostics-next-line preferSchemaOverJson:off
         `${JSON.stringify({
           observability: {
-            otlpTracesUrl: "http://localhost:4318/v1/traces",
-            otlpMetricsUrl: "http://localhost:4318/v1/metrics",
+            otlpTracesUrl: "https://collector.example/v1/traces",
+            otlpMetricsUrl: "https://collector.example/v1/metrics",
           },
         })}\n`,
       );
@@ -514,12 +478,9 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           baseDir: Option.some(baseDir),
           cwd: Option.none(),
           devUrl: Option.none(),
-          noBrowser: Option.none(),
           bootstrapFd: Option.none(),
           autoBootstrapProjectFromCwd: Option.none(),
           logWebSocketEvents: Option.none(),
-          tailscaleServeEnabled: Option.none(),
-          tailscaleServePort: Option.none(),
         },
         Option.none(),
       ).pipe(
@@ -530,92 +491,18 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
           ),
         ),
       );
-
-      expect(resolved.otlpTracesUrl).toBe("http://localhost:4318/v1/traces");
-      expect(resolved.otlpMetricsUrl).toBe("http://localhost:4318/v1/metrics");
       expect(resolved).toEqual({
         logLevel: "Info",
         ...defaultObservabilityConfig,
-        otlpTracesUrl: "http://localhost:4318/v1/traces",
-        otlpMetricsUrl: "http://localhost:4318/v1/metrics",
         mode: "desktop",
         port: 4888,
         cwd: process.cwd(),
         baseDir,
         ...derivedPaths,
         host: "127.0.0.1",
-        staticDir: resolved.staticDir,
         devUrl: undefined,
-        noBrowser: true,
-        startupPresentation: "browser",
-        desktopBootstrapToken: undefined,
         autoBootstrapProjectFromCwd: false,
         logWebSocketEvents: false,
-        tailscaleServeEnabled: false,
-        tailscaleServePort: 443,
-      });
-    }),
-  );
-
-  it.effect("forces noBrowser and disables auto-bootstrap for headless startup presentation", () =>
-    Effect.gen(function* () {
-      const { join } = yield* Path.Path;
-      const baseDir = join(NodeOS.tmpdir(), "t3-cli-config-headless-base");
-      const derivedPaths = yield* deriveExplicitServerPaths(baseDir, undefined);
-
-      const resolved = yield* resolveServerConfig(
-        {
-          mode: Option.some("web"),
-          port: Option.some(3773),
-          host: Option.none(),
-          baseDir: Option.some(baseDir),
-          cwd: Option.none(),
-          devUrl: Option.none(),
-          noBrowser: Option.none(),
-          bootstrapFd: Option.none(),
-          autoBootstrapProjectFromCwd: Option.none(),
-          logWebSocketEvents: Option.none(),
-          tailscaleServeEnabled: Option.none(),
-          tailscaleServePort: Option.none(),
-        },
-        Option.none(),
-        {
-          startupPresentation: "headless",
-        },
-      ).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            ConfigProvider.layer(
-              ConfigProvider.fromEnv({
-                env: {
-                  T3CODE_NO_BROWSER: "false",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
-                },
-              }),
-            ),
-            NetService.layer,
-          ),
-        ),
-      );
-
-      expect(resolved).toEqual({
-        logLevel: "Info",
-        ...defaultObservabilityConfig,
-        mode: "web",
-        port: 3773,
-        cwd: process.cwd(),
-        baseDir,
-        ...derivedPaths,
-        host: undefined,
-        staticDir: resolved.staticDir,
-        devUrl: undefined,
-        noBrowser: true,
-        startupPresentation: "headless",
-        desktopBootstrapToken: undefined,
-        autoBootstrapProjectFromCwd: false,
-        logWebSocketEvents: false,
-        tailscaleServeEnabled: false,
-        tailscaleServePort: 443,
       });
     }),
   );
