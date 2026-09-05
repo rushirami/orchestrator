@@ -116,7 +116,7 @@ Orchestrator should borrow the ideas of inspectable workflow definitions, isolat
 
 ## Build on what makes T3 Code useful
 
-The experience should preserve T3 Code's open foundation, provider choice, performance, and support for local and remote environments. Workflow execution should belong to the environment running the agents and continue when a client disconnects. Web, desktop, and mobile clients should be able to inspect progress and handle relevant approvals against that shared state.
+The experience should preserve T3 Code's open foundation, provider choice, and performance within this desktop-only fork. The Electron application uses a local loopback backend, with optional desktop-managed WSL environments. Workflow state belongs to that backend and survives renderer reloads and application restarts. Fully quitting the application may stop agent execution; unfinished tasks must reconcile their state when the application reopens. Mobile, remote access, hosted browser clients, T3 accounts, and external analytics are outside this fork's scope.
 
 The initial scope should prove one complete journey: configure a reusable template of connected stages in the project view, fill its variables and launch a worktree, generate and approve a spec, implement it, create a PR, and start multiple selected review branches. Join their findings before completing or returning to Builder. The user follows the active task through the Workflows sidebar and can open its agent threads when intervention is needed. Concurrent editing in a shared worktree and automatic tracker-based dispatch can wait until real workflows justify them.
 
