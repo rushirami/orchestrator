@@ -30,10 +30,13 @@ Run `vp run dev --home-dir <base-dir>` to launch the desktop development stack. 
 session or spawned PID and read actual ports from `[dev-runner]`; occupied ports can shift them.
 The dev runner starts the backend, the internal Vite renderer, and Electron. There is no `--share`,
 `--browser`, pairing token, or authentication exchange. Do not invent an alternate remote origin.
-Do not set `VITE_HTTP_URL` or `VITE_WS_URL`; development uses the loopback proxy.
+Do not set `VITE_HTTP_URL` or `VITE_WS_URL`; the desktop bridge supplies loopback backend endpoints.
 
 For a production-bundle smoke test, build the desktop pipeline first and launch with an explicit
-isolated `T3CODE_HOME`. Inspect the launcher's environment handling before invoking it; a script
+isolated `T3CODE_HOME`. This isolates backend state, but does not override Electron's `userData`
+or `sessionData` paths. Verify those paths are also redirected into the test-owned directory
+before launch, including any later `app.setPath` calls in the desktop startup code.
+Inspect the launcher's environment handling before invoking it; a script
 without a home override may select installed user data. Inspect the actual Electron renderer with
 the available approved automation surface. A standalone browser tab cannot prove desktop IPC,
 packaged renderer loading, WSL integration, or preview behavior.

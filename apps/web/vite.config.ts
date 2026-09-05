@@ -22,9 +22,8 @@ const sourcemapEnv = process.env.T3CODE_WEB_SOURCEMAP?.trim().toLowerCase();
 
 // Vite 8.1's experimental bundled dev mode: serves rolldown-bundled chunks in
 // dev for much faster startup/reload on large module graphs, with HMR served
-// as hot patches. Opt-in while experimental: T3CODE_BUNDLED_DEV=1 pnpm dev:web
-// The dev runner defaults this on for --share runs (remote browsers pay a
-// round trip per import level in unbundled dev); T3CODE_BUNDLED_DEV=0 opts out.
+// as hot patches. Opt in with T3CODE_BUNDLED_DEV=1 when running the desktop
+// development stack; T3CODE_BUNDLED_DEV=0 opts out.
 const bundledDevEnv = process.env.T3CODE_BUNDLED_DEV?.trim().toLowerCase();
 const bundledDev = bundledDevEnv === "1" || bundledDevEnv === "true";
 
@@ -40,7 +39,7 @@ const unitTestProject = {
   test: {
     name: "unit",
     include: ["src/**/*.test.{ts,tsx}"],
-    // The web runtime suite exercises auth bootstrap, saved environments,
+    // The renderer runtime suite exercises local connection startup
     // and websocket subscription lifecycles. Under the full monorepo test
     // run, those async tests can exceed Vitest's default 5s budget.
     hookTimeout: 15_000,
