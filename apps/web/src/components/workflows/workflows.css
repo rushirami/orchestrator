@@ -1,4 +1,14 @@
 .workflow-workspace {
+  color-scheme: light;
+  --foreground: #202124;
+  --muted-foreground: #62656b;
+  --background: #fff;
+  --muted: #f7f8fa;
+  --border: #e5e7eb;
+  --primary: #315bdb;
+  --primary-foreground: #fff;
+  --popover: #fff;
+  --popover-foreground: #202124;
   --wf-ink: #202124;
   --wf-muted: #62656b;
   --wf-line: #e5e7eb;
@@ -550,7 +560,8 @@
   border-radius: 7px;
   font-size: 12px;
 }
-.workflow-result {
+.workflow-workspace .workflow-result {
+  color: var(--wf-ink);
   white-space: pre-wrap;
   line-height: 1.7;
   margin: 12px 0;
