@@ -43,3 +43,5 @@ Saved templates and unfinished tasks live in the local environment's database an
 Quitting the desktop stops its local backend. Work does not continue while the app or machine is off. On restart, uncertain agent operations pause for inspection instead of being silently repeated. This matters for actions such as creating a pull request, whose external outcome may already exist.
 
 Deleting a project is blocked while it owns unfinished or still-running workflow work. Finish or cancel those tasks first. Separate desktop-managed environments keep separate workflow data.
+
+Workflow screens follow your Appearance settings, including light, dark, system, and custom themes. The canvas, stage details, reports, and launch dialog update with the rest of the app.

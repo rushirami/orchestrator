@@ -104,9 +104,9 @@ Opening an active task should reveal its execution progress, associated agent th
 
 There is no saved archive of past workflow runs and no template version history in the initial product. The workflow sidebar focuses on current tasks, including those waiting for user input. Ordinary T3 Code thread history and files produced in the worktree remain useful independently; omitting a workflow-run archive does not mean deleting those conversations or artifacts.
 
-The designs use a white theme throughout, with T3 Code's sidebar, project breadcrumbs, compact controls, and top-right action placement. Superset informs the launch form's grouping, not the overall app shell or theme. Avoid introducing an unrelated dashboard layout.
+Workflow screens follow the app's selected light, dark, system, or custom theme, with T3 Code's sidebar, project breadcrumbs, compact controls, and top-right action placement. Superset informs the launch form's grouping, not the overall app shell or theme. Avoid introducing an unrelated dashboard layout.
 
-The [Paper designs](https://app.paper.design/file/01M1PYQ1380EBK0T3YNH8WQ3S2/1-0) establish the white, T3-style direction. The implementation uses one inline template-settings surface and **Validate** to check a graph and provider capabilities without starting work. Approvals show the exact artifact being approved; failures pause for inspection and explicit retry. Completed tasks stay visible until dismissed, which removes workflow-only state while preserving their ordinary threads and files. Launch and active-task views derive their rows and branches from the configured graph.
+The [Paper designs](https://app.paper.design/file/01M1PYQ1380EBK0T3YNH8WQ3S2/1-0) establish the T3-style layout; implementation colors follow the active app theme. The implementation uses one inline template-settings surface and **Validate** to check a graph and provider capabilities without starting work. Approvals show the exact artifact being approved; failures pause for inspection and explicit retry. Completed tasks stay visible until dismissed, which removes workflow-only state while preserving their ordinary threads and files. Launch and active-task views derive their rows and branches from the configured graph.
 
 ## Direction from OpenAI Symphony
 
