@@ -6,7 +6,7 @@ Read the [Orchestrator vision](./vision.md) for the intended direction. These or
 
 ## T3 Code
 
-This fork provides an Electron desktop interface for coding agents on your machine. The mobile app and public marketing website are not included.
+This fork provides an Electron desktop interface for coding agents on your machine. T3 accounts, telemetry exporters, remote connections, mobile, hosted web delivery, and automatic application updates are removed. Provider, Git, pricing, theme, and usage integrations remain available; see [network access](./docs/user/network-access.md).
 
 Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
 
@@ -14,7 +14,7 @@ Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCod
 
 Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+We wanted something performant and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
 
 ## Installation
 

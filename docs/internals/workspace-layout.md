@@ -1,72 +1,24 @@
 # Workspace layout
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+The pnpm workspace uses Vite+ (`vp`) and Node 24.
 
-A pnpm workspace driven by [vite-plus](https://vite.plus) (`vp`). See [scripts.md](./scripts.md) for
-the task commands.
+- `apps/desktop`: Electron shell, local backend supervision, WSL integration, local previews,
+  OS integration, and packaging.
+- `apps/web`: Electron's React/Vite renderer. It is packaged into the desktop application and
+  loaded through the `t3code://` protocol. Its loopback Vite server is a development tool.
+- `apps/server`: local HTTP/WebSocket backend, orchestration, provider adapters, checkpoints,
+  projects, terminals, local diagnostics, and the retained provider/Git integrations.
+- `packages/contracts`: shared schemas for RPC, events, settings, providers, and desktop IPC.
+- `packages/client-runtime`: connection lifecycle, RPC sessions, and domain state for the renderer.
+- `packages/shared`: utilities exposed through explicit subpath exports.
+- `packages/effect-acp` and `packages/effect-codex-app-server`: provider protocol clients.
+- `native/resource-monitor`: local resource sampling; no telemetry exporter.
+- `scripts`: development, artifact packaging, and repository maintenance tools.
+- `.repos`: read-only dependency references.
 
-## apps
+Mobile, marketing, hosted web delivery, SSH, T3 accounts, and relay infrastructure have been
+removed. The backend does not serve a standalone browser UI. Provider and source-control
+credentials remain local to their respective integrations.
 
-- `apps/server` (`t3`): the execution runtime and the published CLI. Owns orchestration, provider
-  drivers, checkpointing, VCS, terminals, filesystem access, auth, and the HTTP + WebSocket surface.
-- `apps/web` (`@t3tools/web`): React + Vite UI. Consumes the shared client runtime and adds routing,
-  components, and web-specific platform layers.
-- `apps/desktop` (`@t3tools/desktop`): Electron shell. Supervises a desktop-scoped `t3` backend,
-  loads the web bundle over the `t3code://` protocol, and owns SSH-managed remote environments.
-
-## packages
-
-- `packages/contracts` (`@t3tools/contracts`): shared Effect Schema definitions. RPC group,
-  orchestration commands/events/read model, auth scopes, environment descriptors, settings.
-- `packages/shared` (`@t3tools/shared`): framework-agnostic utilities used by server and clients
-  (`DrainableWorker`, git and source-control helpers, relay auth and signing, DPoP, semver, logging,
-  observability, and more).
-- `packages/client-runtime` (`@t3tools/client-runtime`): connection lifecycle, authorization, RPC
-  session, environment registry, and Atom-based domain state shared by web and mobile. See its
-  [README](../../packages/client-runtime/README.md).
-- `packages/effect-acp` (`effect-acp`): Effect client and agent implementation of the Agent Client
-  Protocol, used by ACP-speaking provider drivers.
-- `packages/effect-codex-app-server` (`effect-codex-app-server`): Effect client for the
-  `codex app-server` JSON-RPC protocol.
-
-## infra
-
-- `infra/relay` (`t3code-relay`): the hosted T3 Connect relay, deployed with Alchemy. Handles
-  environment discovery, cloud-side records, and mobile notifications. It is not in the hot path;
-  after connect, client traffic goes directly to the environment. See
-  [t3-connect.md](./t3-connect.md).
-
-## Other top-level directories
-
-- `scripts/`: workspace tooling run through `vp run`. Dev runner, desktop artifact builds, release
-  helpers, mobile static checks and showcase capture, update-manifest merging.
-- `assets/`: brand and app icon sources per channel (`dev`, `nightly`, `prod`).
-- `patches/`: pnpm patches for pinned upstream dependencies.
-- `oxlint-plugin-t3code/`: repo-specific lint rules.
-- `experiments/`: throwaway prototypes. Not part of the shipped build.
-- `docs/`: this documentation tree.
-
-## Import conventions
-
-`@t3tools/shared` and `@t3tools/client-runtime` use explicit subpath exports with no barrel index and
-no root export. Import the narrow path (`@t3tools/shared/DrainableWorker`,
-`@t3tools/client-runtime/state/threads`) rather than the package root. Files that are not exported
-are implementation details. `@t3tools/contracts` does export a root alongside `./settings` and
-`./relay`.
-
-## Desktop renderer packaging
-
-`apps/web` contains Electron's React interface. The desktop artifact stages its
-build under `apps/web/dist` inside the application archive, including on Windows
-where the backend is in a separate archive. Electron serves these local files
-through `t3code://app` and uses the internal Vite origin during development.
-API requests go to the local backend. The backend does not serve the application
-HTML, expose static renderer files, or redirect to Vite. Its build has no renderer
-bundle dependency; the desktop build depends on both packages.
-
-Backend ingress checks the actual listener port and accepts only loopback Host
-headers. Browser requests must come from `t3code://app`, `t3code-dev://app`, or the
-configured loopback Vite origin. Other local preview origins and remote origins
-are rejected before API handling or WebSocket upgrade, including CORS preflights.
-Native local clients may omit browser headers. Forwarded host headers never grant
-access, and there is no additional remote-origin allowlist.
+Use narrow package subpaths. Contracts expose the root and `./settings`; the removed relay
+protocol is no longer exported. See [scripts](./scripts.md) and [network access](../user/network-access.md).

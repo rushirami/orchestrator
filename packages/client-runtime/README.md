@@ -1,37 +1,18 @@
-# Client Runtime
+# Client runtime
 
-Shared client behavior for web and mobile. Public APIs are organized by package
-subpath. The package intentionally has no root export.
+Connection management and domain state for the Electron renderer. This package has no root
+export; import the narrowest relevant subpath.
 
-## Public subpaths
+- `connection`: local desktop targets, registry, supervision, and reconnects.
+- `environment`: identities, descriptors, endpoints, and scoped keys.
+- `errors`: error inspection.
+- `operations` and `operations/projects`: application workflows.
+- `platform`: desktop capabilities, topology, and local cache contracts.
+- `rpc`: typed protocol sessions and subscriptions.
+- `state/<domain>`: focused state and Atom constructors.
+- `voice-input`: recording lifecycle and provider transcription contracts.
 
-| Subpath               | Responsibility                                                    |
-| --------------------- | ----------------------------------------------------------------- |
-| `authorization`       | Bearer and DPoP authorization plus token persistence contracts    |
-| `connection`          | Targets, catalog, supervision, retries, registry, and onboarding  |
-| `environment`         | Environment identity, descriptors, endpoints, and scoped keys     |
-| `errors`              | Shared client error inspection                                    |
-| `operations`          | Multi-step application workflows                                  |
-| `operations/projects` | Multi-step project creation workflows                             |
-| `platform`            | Platform capability and persistence service contracts             |
-| `relay`               | Managed relay API and environment discovery                       |
-| `rpc`                 | HTTP/RPC clients, protocol, sessions, and subscriptions           |
-| `state/<domain>`      | Focused shared state, retention, reducers, and Atom constructors  |
-| `voice-input`         | Recording lifecycle, transcription contracts, and draft insertion |
-
-## Dependency direction
-
-Platform applications provide `platform` services. `connection` composes those
-capabilities with `authorization`, `relay`, and `rpc` to supervise environment
-sessions. Independent `state` modules consume the connection registry and expose
-focused state or Atom constructors to application-owned runtimes.
-
-The `voice-input` controller accepts capture callbacks and a selected `VoiceTranscriber`.
-Preparation binds transcription to its implementation and resolved locale; one cancellation
-signal covers both operations. Applications provide recorder events, permissions, native
-transcription implementations, and presentation.
-
-Applications should import the narrowest relevant subpath. There is no broad
-`state` export: use domain paths such as `state/shell`, `state/threads`,
-`state/terminal`, or `state/vcs`. Subpath indices and explicitly exported domain
-files are public API boundaries; all other files remain implementation details.
+The platform supplies local backend registrations and cache storage. Connection services compose
+those capabilities with RPC; domain state consumes the registry. No authorization broker, token
+store, remote profile catalog, or relay API remains. Voice transcription uses the selected
+provider integration.

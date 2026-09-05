@@ -18,3 +18,12 @@ rely on a CDN need local copies of those assets. Remote browser-history entries 
 Location permission is disabled for previews.
 
 Provider diagnostics uploads are removed, including the former Codex `/feedback` command.
+
+The app has no T3 login, pairing, or access-token flow. Local files and built-in tools use the
+same local boundary. Browser-account importing and the upstream support-issue helper are removed.
+Local diagnostics are available for inspection without an upload action.
+
+The retained integrations cover five categories: model providers (including transcription and
+provider maintenance), Git hosting, pricing, theme downloads, and usage limits. Their endpoints
+can vary with your configuration. Running code or tools through a provider can itself make
+network requests. Loopback binding and preview HTTP filtering are not an OS-level network sandbox.
