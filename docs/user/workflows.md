@@ -34,7 +34,7 @@ The Workflows sidebar groups tasks by project and expands to their conversations
 - **Cancel task** prevents further work and requests interruption of active turns. It preserves files and conversations.
 - **Dismiss task** removes a completed or fully stopped workflow from the sidebar. Its ordinary threads, worktree, and files remain available.
 
-Agent stages must return a structured result and produce their required files. A completed conversation alone does not count as success. Missing artifacts or an invalid result pause the task with an explanation. Automatic retries are off.
+Agent stages must return a structured result and produce their required files. A completed conversation alone does not count as success. Missing artifacts, an invalid result, or an unreadable agent-turn record pause the affected task with an explanation. Other workflows can continue. Automatic retries are off.
 
 ## Persistence and restarts
 

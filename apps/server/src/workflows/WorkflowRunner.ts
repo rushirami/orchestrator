@@ -371,7 +371,7 @@ export const makeWorkflowRunner = Effect.gen(function* () {
       const state = value.nodes.find((state) => state.nodeId === node.id)!;
       if (
         !state.operationId ||
-        state.operationId !== event.operationId ||
+        (event.type !== "lookup-failed" && state.operationId !== event.operationId) ||
         (state.turnId !== null && event.turnId !== null && state.turnId !== event.turnId)
       )
         continue;
@@ -383,7 +383,7 @@ export const makeWorkflowRunner = Effect.gen(function* () {
           operationId: state.operationId,
           turnId: event.turnId,
         });
-      else if (event.type === "failed")
+      else if (event.type === "failed" || event.type === "lookup-failed")
         task = yield* transition(value, {
           type: "failed",
           nodeId: node.id,
