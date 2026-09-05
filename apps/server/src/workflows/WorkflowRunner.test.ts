@@ -91,11 +91,17 @@ it.effect(
           yield* fs.writeFileString(`${worktree}/${artifact}`, `Evidence for ${expectedNode}`);
         const threadId = next.task.threadIds[next.node.threadId]!;
         const turnId = next.operationId;
-        yield* Queue.offer(events, { type: "started", threadId, turnId });
+        yield* Queue.offer(events, {
+          type: "started",
+          threadId,
+          turnId,
+          operationId: next.operationId,
+        });
         yield* Queue.offer(events, {
           type: "result",
           threadId,
           turnId,
+          operationId: next.operationId,
           result: { outcome: "complete", summary: `${expectedNode} completed`, artifacts: paths },
         });
         return next;
@@ -138,6 +144,7 @@ it.effect(
       yield* Queue.offer(events, {
         type: "result",
         threadId: reviewA.task.threadIds[reviewA.node.threadId]!,
+        operationId: reviewA.operationId,
         turnId: reviewA.operationId,
         result: { outcome: "complete", summary: "First review", artifacts: [] },
       });
@@ -150,6 +157,7 @@ it.effect(
       yield* Queue.offer(events, {
         type: "result",
         threadId: reviewB.task.threadIds[reviewB.node.threadId]!,
+        operationId: reviewB.operationId,
         turnId: reviewB.operationId,
         result: { outcome: "complete", summary: "Second review", artifacts: [] },
       });
@@ -261,12 +269,31 @@ it.effect("recovers uncertain dispatches without resending and reconciles cancel
     assert.equal(cancelled.status, "cancelled");
     assert.equal(interrupted, 1);
     const threadId = Object.values(task.threadIds)[0]!;
-    yield* Queue.offer(events, { type: "started", threadId, turnId: "late-start" });
+    yield* Queue.offer(events, {
+      type: "started",
+      threadId,
+      turnId: "old-turn",
+      operationId: "uncertain-operation",
+    });
+    yield* Queue.offer(events, {
+      type: "result",
+      threadId,
+      turnId: "old-turn",
+      operationId: "uncertain-operation",
+      result: { outcome: "complete", summary: "Late result from before restart", artifacts: [] },
+    });
+    yield* Queue.offer(events, {
+      type: "started",
+      threadId,
+      turnId: "late-start",
+      operationId: running.nodes[0]!.operationId!,
+    });
     yield* awaitTask((value) => value.nodes[0]?.turnId === "late-start");
     yield* Queue.offer(events, {
       type: "failed",
       threadId,
       turnId: "late-start",
+      operationId: running.nodes[0]!.operationId!,
       error: "Interrupted",
     });
     const settled = yield* awaitTask((value) => value.nodes[0]?.status === "failed");

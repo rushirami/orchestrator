@@ -23,14 +23,16 @@ import { ServerConfig } from "../config.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ProviderService } from "../provider/Services/ProviderService.ts";
+import { ProjectionTurnRepository } from "../persistence/Services/ProjectionTurns.ts";
 import { GitVcsDriver } from "../vcs/GitVcsDriver.ts";
 import { captureWorkflowReviewRevision } from "./reviewRevision.ts";
 import { parseWorkflowResult } from "./artifacts.ts";
 
-export type WorkflowRuntimeEvent =
+export type WorkflowRuntimeEvent = { operationId: string } & (
   | { type: "started"; threadId: ThreadId; turnId: string }
   | { type: "result"; threadId: ThreadId; turnId: string; result: WorkflowStageResult }
-  | { type: "failed"; threadId: ThreadId; turnId: string | null; error: string };
+  | { type: "failed"; threadId: ThreadId; turnId: string | null; error: string }
+);
 
 export interface WorkflowRuntimeShape {
   readonly watch: (task: WorkflowTask) => Effect.Effect<void>;
@@ -61,6 +63,7 @@ const make = Effect.gen(function* () {
     });
   const engine = yield* OrchestrationEngineService;
   const queries = yield* ProjectionSnapshotQuery;
+  const turns = yield* ProjectionTurnRepository;
   const providers = yield* ProviderService;
   const git = yield* GitVcsDriver;
   const config = yield* ServerConfig;
@@ -262,32 +265,66 @@ const make = Effect.gen(function* () {
       Effect.fn(function* (event): Effect.fn.Return<WorkflowRuntimeEvent | null, WorkflowError> {
         if (event.type === "thread.session-set") {
           const session = event.payload.session;
-          if (session?.activeTurnId)
-            return {
-              type: "started",
-              threadId: event.payload.threadId,
-              turnId: session.activeTurnId,
-            };
-          if (session?.status === "error")
-            return {
-              type: "failed",
-              threadId: event.payload.threadId,
-              turnId: null,
-              error: session.lastError ?? "The provider session failed.",
-            };
+          if (session.activeTurnId) {
+            const turn = yield* turns
+              .getByTurnId({ threadId: event.payload.threadId, turnId: session.activeTurnId })
+              .pipe(Effect.mapError(runtimeError));
+            if (Option.isSome(turn) && turn.value.pendingMessageId)
+              return session.status === "error"
+                ? {
+                    type: "failed",
+                    threadId: event.payload.threadId,
+                    turnId: session.activeTurnId,
+                    operationId: turn.value.pendingMessageId,
+                    error: session.lastError ?? "The provider session failed.",
+                  }
+                : {
+                    type: "started",
+                    threadId: event.payload.threadId,
+                    turnId: session.activeTurnId,
+                    operationId: turn.value.pendingMessageId,
+                  };
+          }
+          if (session.status === "error") {
+            const pending = yield* turns
+              .getPendingTurnStartByThreadId({ threadId: event.payload.threadId })
+              .pipe(Effect.mapError(runtimeError));
+            if (Option.isSome(pending))
+              return {
+                type: "failed",
+                threadId: event.payload.threadId,
+                turnId: null,
+                operationId: pending.value.messageId,
+                error: session.lastError ?? "The provider session failed.",
+              };
+          }
         }
         if (
           event.type === "thread.activity-appended" &&
           event.payload.activity.kind === "provider.turn.start.failed"
-        )
-          return {
-            type: "failed",
-            threadId: event.payload.threadId,
-            turnId: null,
-            error: event.payload.activity.summary,
-          };
+        ) {
+          const payload = event.payload.activity.payload;
+          if (
+            payload &&
+            typeof payload === "object" &&
+            "requestId" in payload &&
+            typeof payload.requestId === "string"
+          )
+            return {
+              type: "failed",
+              threadId: event.payload.threadId,
+              turnId: null,
+              operationId: payload.requestId,
+              error: event.payload.activity.summary,
+            };
+        }
         if (event.type !== "thread.turn-diff-completed") return null;
         const { threadId, turnId } = event.payload;
+        const turn = yield* turns
+          .getByTurnId({ threadId, turnId })
+          .pipe(Effect.mapError(runtimeError));
+        if (Option.isNone(turn) || !turn.value.pendingMessageId) return null;
+        const operationId = turn.value.pendingMessageId;
         return yield* Effect.gen(function* () {
           const detail = yield* queries.getThreadDetailById(threadId);
           if (Option.isNone(detail))
@@ -308,10 +345,16 @@ const make = Effect.gen(function* () {
               (item) => item.turnId === turnId && item.role === "assistant" && !item.streaming,
             );
           const result = yield* parseWorkflowResult(message?.text ?? "");
-          return { type: "result" as const, threadId, turnId, result };
+          return { type: "result" as const, threadId, turnId, operationId, result };
         }).pipe(
           Effect.catch((error) =>
-            Effect.succeed({ type: "failed" as const, threadId, turnId, error: error.message }),
+            Effect.succeed({
+              type: "failed" as const,
+              threadId,
+              turnId,
+              operationId,
+              error: error.message,
+            }),
           ),
         );
       }),

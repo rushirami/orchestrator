@@ -349,6 +349,7 @@ export const makeWorkflowRunner = Effect.gen(function* () {
       const state = value.nodes.find((state) => state.nodeId === node.id)!;
       if (
         !state.operationId ||
+        state.operationId !== event.operationId ||
         (state.turnId !== null && event.turnId !== null && state.turnId !== event.turnId)
       )
         continue;
