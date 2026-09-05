@@ -198,6 +198,7 @@ import {
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, SidebarMenuButton, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { WorkflowSidebar } from "./workflows/WorkflowSidebar";
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import {
@@ -1852,6 +1853,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 });
 
 export default function Sidebar() {
+  const [sidebarMode, setSidebarMode] = useState<"threads" | "workflows">("threads");
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
@@ -3599,8 +3601,21 @@ export default function Sidebar() {
   return (
     <>
       <SidebarChromeHeader isElectron={isElectron} />
+      <div className="workflow-sidebar-switch" role="group" aria-label="Sidebar view">
+        <span className={sidebarMode === "workflows" ? "is-workflows" : ""} aria-hidden="true" />
+        <button aria-pressed={sidebarMode === "threads"} onClick={() => setSidebarMode("threads")}>
+          Threads
+        </button>
+        <button
+          aria-pressed={sidebarMode === "workflows"}
+          onClick={() => setSidebarMode("workflows")}
+        >
+          Workflows
+        </button>
+      </div>
+      {sidebarMode === "workflows" && <WorkflowSidebar />}
       <SidebarContent
-        className="gap-0"
+        className={sidebarMode === "workflows" ? "hidden" : "gap-0"}
         fixedHeader={
           // Lifted above the stage backdrop, whose fade bleeds below the
           // header and would otherwise paint across the search row's outline.
