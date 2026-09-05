@@ -134,6 +134,38 @@ export const WorkflowTask = Schema.Struct({
 });
 export type WorkflowTask = typeof WorkflowTask.Type;
 
+export const WORKFLOW_METHODS = {
+  snapshot: "workflows.snapshot",
+  saveTemplate: "workflows.saveTemplate",
+  remove: "workflows.remove",
+  changes: "workflows.changes",
+} as const;
+
+export const WorkflowSnapshot = Schema.Struct({
+  templates: Schema.Array(WorkflowTemplate),
+  tasks: Schema.Array(WorkflowTask),
+});
+export type WorkflowSnapshot = typeof WorkflowSnapshot.Type;
+
+export const WorkflowSaveTemplateInput = Schema.Struct({
+  id: WorkflowId,
+  projectId: ProjectId,
+  expectedRevision: NonNegativeInt,
+  definition: WorkflowDefinition,
+});
+export type WorkflowSaveTemplateInput = typeof WorkflowSaveTemplateInput.Type;
+
+export const WorkflowRemoveInput = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  projectId: ProjectId,
+  expectedRevision: PositiveInt,
+});
+export type WorkflowRemoveInput = typeof WorkflowRemoveInput.Type;
+
+export class WorkflowError extends Schema.TaggedErrorClass<WorkflowError>()("WorkflowError", {
+  message: Schema.String,
+}) {}
+
 /** Variables are replaced literally in a single pass, never evaluated as expressions. */
 export function workflowVariables(prompt: string): string[] {
   return [

@@ -1,4 +1,5 @@
 import { EnvironmentHttpApi, ProviderDriverKind } from "@t3tools/contracts";
+import { WorkflowService } from "./workflows/WorkflowService.ts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -398,6 +399,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(AntigravityInstallationRefreshLive),
   Layer.provideMerge(ProviderAuthServiceLive),
   // Core Services
+  Layer.provideMerge(WorkflowService.layer),
   Layer.provideMerge(ServerSettingsLayerLive),
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(
