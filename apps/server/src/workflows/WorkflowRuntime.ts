@@ -38,6 +38,10 @@ export type WorkflowRuntimeEvent =
 
 export interface WorkflowRuntimeShape {
   readonly watch: (task: WorkflowTask) => Effect.Effect<void>;
+  readonly readResult: (
+    threadId: ThreadId,
+    turnId: TurnId,
+  ) => Effect.Effect<WorkflowRuntimeEvent | null, WorkflowError>;
   readonly reviewRevision: (task: WorkflowTask) => Effect.Effect<string, WorkflowError>;
   readonly validate: (definition: WorkflowDefinition) => Effect.Effect<void, WorkflowError>;
   readonly plan: (task: WorkflowTask) => Effect.Effect<WorkflowTask, WorkflowError>;
@@ -252,6 +256,44 @@ const make = Effect.gen(function* () {
       ...(turnId ? { turnId: TurnId.make(turnId) } : {}),
     });
   }, Effect.mapError(runtimeError));
+  const readResult = Effect.fn(function* (threadId: ThreadId, turnId: TurnId) {
+    const turn = yield* turns.getByTurnId({ threadId, turnId }).pipe(Effect.mapError(runtimeError));
+    if (Option.isNone(turn) || !turn.value.pendingMessageId) return null;
+    const operationId = turn.value.pendingMessageId;
+    // Diff checkpoints can arrive while the provider is still working.
+    if (turn.value.state === "pending" || turn.value.state === "running") return null;
+    return yield* Effect.gen(function* () {
+      if (turn.value.state !== "completed")
+        return yield* new WorkflowError({
+          message: `The provider turn ${turn.value.state === "interrupted" ? "was interrupted" : "failed"}.`,
+        });
+      if (turn.value.checkpointStatus === "error")
+        return yield* new WorkflowError({
+          message: "The provider turn completed, but its checkpoint failed.",
+        });
+      if (turn.value.checkpointStatus !== "ready") return null;
+      const detail = yield* queries.getThreadDetailById(threadId);
+      if (Option.isNone(detail))
+        return yield* new WorkflowError({
+          message: "The completed workflow thread is unavailable.",
+        });
+      const message = detail.value.messages.findLast(
+        (item) => item.turnId === turnId && item.role === "assistant" && !item.streaming,
+      );
+      const result = yield* parseWorkflowResult(message?.text ?? "");
+      return { type: "result" as const, threadId, turnId, operationId, result };
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed({
+          type: "failed" as const,
+          threadId,
+          turnId,
+          operationId,
+          error: error.message,
+        }),
+      ),
+    );
+  });
   const domainEvents = yield* engine.subscribeDomainEvents;
   const events = domainEvents.pipe(
     Stream.filter(
@@ -269,6 +311,12 @@ const make = Effect.gen(function* () {
           if (event.type === "thread.session-set") {
             const session = event.payload.session;
             if (session.activeTurnId) {
+              if (
+                session.status === "ready" ||
+                session.status === "interrupted" ||
+                session.status === "stopped"
+              )
+                return yield* readResult(event.payload.threadId, session.activeTurnId);
               const turn = yield* turns
                 .getByTurnId({ threadId: event.payload.threadId, turnId: session.activeTurnId })
                 .pipe(Effect.mapError(runtimeError));
@@ -301,6 +349,50 @@ const make = Effect.gen(function* () {
                   error: session.lastError ?? "The provider session failed.",
                 };
             }
+            if (
+              !session.activeTurnId &&
+              (session.status === "ready" ||
+                session.status === "error" ||
+                session.status === "interrupted" ||
+                session.status === "stopped")
+            ) {
+              const shell = yield* queries
+                .getThreadShellById(event.payload.threadId)
+                .pipe(Effect.mapError(runtimeError));
+              if (Option.isSome(shell) && shell.value.latestTurn)
+                return yield* readResult(event.payload.threadId, shell.value.latestTurn.turnId);
+            }
+          }
+          if (
+            event.type === "thread.activity-appended" &&
+            event.payload.activity.kind === "checkpoint.capture.failed"
+          ) {
+            const { threadId, activity } = event.payload;
+            const payload =
+              activity.payload && typeof activity.payload === "object" ? activity.payload : {};
+            if (
+              !activity.turnId ||
+              ("checkpointCaptured" in payload && payload.checkpointCaptured === true)
+            )
+              return null;
+            const turn = yield* turns
+              .getByTurnId({ threadId, turnId: activity.turnId })
+              .pipe(Effect.mapError(runtimeError));
+            if (
+              Option.isNone(turn) ||
+              !turn.value.pendingMessageId ||
+              turn.value.checkpointStatus === "ready"
+            )
+              return null;
+            const detail = "detail" in payload ? payload.detail : undefined;
+            return {
+              type: "failed",
+              threadId,
+              turnId: activity.turnId,
+              operationId: turn.value.pendingMessageId,
+              error:
+                typeof detail === "string" ? `${activity.summary}: ${detail}` : activity.summary,
+            };
           }
           if (
             event.type === "thread.activity-appended" &&
@@ -323,43 +415,7 @@ const make = Effect.gen(function* () {
           }
           if (event.type !== "thread.turn-diff-completed") return null;
           const { threadId, turnId } = event.payload;
-          const turn = yield* turns
-            .getByTurnId({ threadId, turnId })
-            .pipe(Effect.mapError(runtimeError));
-          if (Option.isNone(turn) || !turn.value.pendingMessageId) return null;
-          const operationId = turn.value.pendingMessageId;
-          return yield* Effect.gen(function* () {
-            const detail = yield* queries.getThreadDetailById(threadId);
-            if (Option.isNone(detail))
-              return yield* new WorkflowError({
-                message: "The completed workflow thread is unavailable.",
-              });
-            if (
-              event.payload.status !== "ready" ||
-              (detail.value.latestTurn?.turnId === turnId &&
-                detail.value.latestTurn.state !== "completed")
-            )
-              return yield* new WorkflowError({
-                message: "The provider turn did not complete successfully.",
-              });
-            const message =
-              detail.value.messages.find((item) => item.id === event.payload.assistantMessageId) ??
-              detail.value.messages.findLast(
-                (item) => item.turnId === turnId && item.role === "assistant" && !item.streaming,
-              );
-            const result = yield* parseWorkflowResult(message?.text ?? "");
-            return { type: "result" as const, threadId, turnId, operationId, result };
-          }).pipe(
-            Effect.catch((error) =>
-              Effect.succeed({
-                type: "failed" as const,
-                threadId,
-                turnId,
-                operationId,
-                error: error.message,
-              }),
-            ),
-          );
+          return yield* readResult(threadId, turnId);
         },
         (effect, event) =>
           effect.pipe(
@@ -378,7 +434,7 @@ const make = Effect.gen(function* () {
                       ? event.payload.session.activeTurnId
                       : event.type === "thread.turn-diff-completed"
                         ? event.payload.turnId
-                        : null,
+                        : event.payload.activity.turnId,
                   error: `Could not read workflow turn state. Inspect the agent thread before retrying. ${error.message}`,
                 };
               }),
@@ -390,6 +446,7 @@ const make = Effect.gen(function* () {
   );
   return {
     watch,
+    readResult,
     validate,
     plan,
     prepare,

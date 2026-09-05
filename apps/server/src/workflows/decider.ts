@@ -8,6 +8,7 @@ export type WorkflowAction =
   | { type: "start"; nodeId: string; operationId: string; artifactRevision?: string }
   | { type: "started"; nodeId: string; operationId: string; turnId: string }
   | { type: "result"; nodeId: string; operationId: string; result: WorkflowStageResult }
+  | { type: "reconcile"; nodeId: string; operationId: string; result: WorkflowStageResult }
   | { type: "failed"; nodeId: string; operationId: string; error: string }
   | { type: "approve" | "revise"; nodeId: string; artifactRevision: string }
   | { type: "retry"; nodeId: string }
@@ -109,10 +110,17 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
         throw new Error("Capture the approval artifact before requesting a decision.");
       next = { ...state, status: "awaiting-approval", artifactRevision: action.artifactRevision };
     } else next = { ...state, status: "complete" };
-  } else if (action.type === "started" || action.type === "result" || action.type === "failed") {
+  } else if (
+    action.type === "started" ||
+    action.type === "result" ||
+    action.type === "failed" ||
+    action.type === "reconcile"
+  ) {
+    if (action.type === "reconcile" && (task.status !== "paused" || state.status !== "failed"))
+      throw new Error("Only failed stages in a paused task can be reconciled.");
     if (
       action.operationId !== state.operationId ||
-      (state.status !== "dispatching" && state.status !== "running")
+      (action.type !== "reconcile" && state.status !== "dispatching" && state.status !== "running")
     )
       return task;
     if (action.type === "started") next = { ...state, status: "running", turnId: action.turnId };
@@ -121,7 +129,7 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
       if (status !== "cancelled") status = "paused";
       error = action.error;
     }
-    if (action.type === "result") {
+    if (action.type === "result" || action.type === "reconcile") {
       if (node.kind !== "agent") throw new Error("Only agent stages accept skill results.");
       const skill = node.skills[state.skillIndex];
       if (!skill || skill.outputPaths.some((path) => !action.result.artifacts.includes(path))) {
@@ -136,11 +144,13 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
         skillIndex: lastSkill ? state.skillIndex : state.skillIndex + 1,
         turnId: null,
         operationId: null,
+        error: null,
         result: {
           ...action.result,
           artifacts: [...new Set([...(state.result?.artifacts ?? []), ...action.result.artifacts])],
         },
       };
+      if (action.type === "reconcile") error = null;
       if (action.result.outcome === "changes-requested" && status !== "cancelled") {
         const rework = task.definition.rework;
         if (!rework || rework.from !== node.id)

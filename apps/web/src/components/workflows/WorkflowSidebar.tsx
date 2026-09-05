@@ -94,7 +94,18 @@ function EnvironmentWorkflows({
       <section key={project.id} className="workflow-sidebar-project">
         <div className="workflow-sidebar-label">
           <Folder size={15} />
-          <strong>{project.title}</strong>
+          <Link to="/workflows" search={{ project: project.id, environment: environmentId }}>
+            <strong>{project.title}</strong>
+          </Link>
+          <Link
+            className="workflow-sidebar-new"
+            to="/workflows"
+            search={{ project: project.id, environment: environmentId, view: "new" }}
+            aria-label={`New workflow in ${project.title}`}
+            title={`New workflow in ${project.title}`}
+          >
+            <Plus size={15} />
+          </Link>
         </div>
         {tasks.length === 0 && <p className="workflow-help">No active workflows</p>}
         {tasks.map((task) => (
@@ -109,6 +120,7 @@ function EnvironmentWorkflows({
               <GitBranch size={14} />
               <Link
                 to="/workflows"
+                onClick={(event) => event.stopPropagation()}
                 search={{ task: task.id, project: project.id, environment: environmentId }}
               >
                 {task.workspaceName}

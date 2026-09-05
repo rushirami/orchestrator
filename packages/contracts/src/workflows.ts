@@ -183,7 +183,7 @@ export type WorkflowLaunchInput = typeof WorkflowLaunchInput.Type;
 export const WorkflowControlInput = Schema.Struct({
   taskId: WorkflowTaskId,
   expectedRevision: PositiveInt,
-  action: Schema.Literals(["pause", "resume", "cancel", "retry", "approve", "revise"]),
+  action: Schema.Literals(["pause", "resume", "cancel", "retry", "reconcile", "approve", "revise"]),
   nodeId: Schema.optional(TrimmedNonEmptyString),
   artifactRevision: Schema.optional(TrimmedNonEmptyString),
 });

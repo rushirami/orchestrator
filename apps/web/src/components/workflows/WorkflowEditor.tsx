@@ -13,7 +13,7 @@ import {
   type WorkflowTemplate,
 } from "@t3tools/contracts";
 import { validateWorkflowGraph } from "@t3tools/shared/workflowGraph";
-import { ArrowLeft, Check, Folder, Plus, Settings2, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Plus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useProjects, useServerConfigs } from "../../state/entities";
 import { workflowEnvironment } from "../../state/workflows";
@@ -23,57 +23,55 @@ import { WorkflowInspector } from "./WorkflowInspector";
 import { WorkflowSettings } from "./WorkflowSettings";
 import { WorkflowLaunch } from "./WorkflowLaunch";
 import { WorkflowTaskDetail } from "./WorkflowTaskDetail";
+import { WorkflowBreadcrumb } from "./WorkflowBreadcrumb";
+import { WorkflowNew } from "./WorkflowNew";
 import { createLocalWorkflow } from "./presets";
 import "./workflows.css";
 
 export function WorkflowEditor() {
   const projects = useProjects();
   const search = useSearch({ from: "/_chat/workflows" });
-  const navigate = useNavigate();
   const project =
     projects.find(
       (item) => item.id === search.project && item.environmentId === search.environment,
-    ) ?? projects[0];
+    ) ?? (!search.project && !search.environment ? projects[0] : undefined);
   return (
     <div className="workflow-workspace">
-      <header className="workflow-header">
-        <Folder size={17} />
-        <select
-          aria-label="Workflow project"
-          value={project ? `${project.environmentId}:${project.id}` : ""}
-          onChange={(event) => {
-            const next = projects.find(
-              (item) => `${item.environmentId}:${item.id}` === event.target.value,
-            );
-            if (next)
-              void navigate({
-                to: "/workflows",
-                search: { project: next.id, environment: next.environmentId },
-              });
-          }}
-        >
-          {projects.map((item) => (
-            <option
-              key={`${item.environmentId}:${item.id}`}
-              value={`${item.environmentId}:${item.id}`}
-            >
-              {item.title}
-            </option>
-          ))}
-        </select>
-        <span className="workflow-help">/</span>
-        <strong>Workflows</strong>
-      </header>
       {project ? (
         <ProjectWorkflows key={`${project.environmentId}:${project.id}`} project={project} />
       ) : (
-        <div className="workflow-empty">Add a project to configure its workflows.</div>
+        <div className="workflow-empty">
+          {projects.length
+            ? "This project is unavailable. Choose a project in the sidebar."
+            : "Add a project to configure its workflows."}
+        </div>
       )}
     </div>
   );
 }
 
 function ProjectWorkflows({ project }: { project: EnvironmentProject }) {
+  const search = useSearch({ from: "/_chat/workflows" });
+  const snapshot = useAtomValue(
+    workflowEnvironment.snapshot({ environmentId: project.environmentId, input: {} }),
+  );
+  const task =
+    snapshot._tag === "Success"
+      ? snapshot.value.tasks.find(
+          (item) => item.id === search.task && item.projectId === project.id,
+        )
+      : undefined;
+  return (
+    <>
+      <header className="workflow-header">
+        <WorkflowBreadcrumb project={project} task={task} />
+      </header>
+      <ProjectWorkflowContent key={search.task ?? search.view ?? "templates"} project={project} />
+    </>
+  );
+}
+
+function ProjectWorkflowContent({ project }: { project: EnvironmentProject }) {
   const search = useSearch({ from: "/_chat/workflows" });
   const navigate = useNavigate();
   const snapshot = useAtomValue(
@@ -132,6 +130,7 @@ function ProjectWorkflows({ project }: { project: EnvironmentProject }) {
   const templates = snapshot.value.templates.filter(
     (template) => template.projectId === project.id,
   );
+  if (search.view === "new") return <WorkflowNew project={project} templates={templates} />;
   const template =
     selectedId === undefined ? templates[0] : templates.find((item) => item.id === selectedId);
   return (

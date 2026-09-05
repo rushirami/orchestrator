@@ -24,17 +24,20 @@ The editor detects `TASK_ID` and previews example values. Examples are not saved
 
 ## Start and supervise work
 
-Save the template, then choose **Start workflow**. Review the workspace name, base branch, new worktree branch, variable values, and one provider/model assignment per thread. The resolved prompt is shown before launch. Launch overrides apply only to that task.
+Use the **+** beside a project in the Workflows sidebar to start a new workflow from one of its saved templates. You can also choose **New project workflow** in the command palette. If there are no templates yet, choose **Configure templates** to create and save one. From the template editor, choose **Start workflow**. Review the workspace name, base branch, new worktree branch, variable values, and one provider/model assignment per thread. The resolved prompt is shown before launch. Launch overrides apply only to that task.
 
-The Workflows sidebar groups tasks by project and expands to their conversations. Select a task to see stage status, inspect results and files, open agent threads, or review an approval. Switch back to Threads to use the familiar conversation list.
+The Workflows sidebar groups tasks by project and expands to their conversations. Click a workflow name to open its overview: the graph shows every stage, its status, and a count of completed stages. Running stages and stages needing attention are highlighted without continuous animation. Click an agent stage to open its thread. Use **Stage details** or a status chip to inspect results, files, and retry controls; approval nodes open their review panel.
+
+The breadcrumb follows **Project / Workflows / Workflow name / Agent name**. Click the workflow name to return to the overview or **Workflows** to return to its project templates. The project selector switches projects. These breadcrumbs also appear when you open a workflow conversation from Threads or search, and disappear after its workflow is dismissed. Switch back to Threads to use the familiar conversation list.
 
 - **Pause after current stages** lets current turns finish and prevents new stages from starting.
-- **Resume** continues eligible work. Failed stages must first be prepared for retry.
+- **Resume** continues eligible work. Failed stages must first be recovered or prepared for retry.
+- **Recheck completed turn** recovers a failed stage when its recorded provider turn completed successfully and its checkpoint and required files are available. It uses the saved result without running the agent again and keeps the workflow paused until you resume. A result saying `complete` alone does not override a provider failure or interruption.
 - **Prepare skill retry** creates a fresh attempt for the failed skill while keeping the task paused. Inspect the original thread and any side effects before resuming.
 - **Cancel task** prevents further work and requests interruption of active turns. It preserves files and conversations.
 - **Dismiss task** removes a completed or fully stopped workflow from the sidebar. Its ordinary threads, worktree, and files remain available.
 
-Agent stages must return a structured result and produce their required files. A completed conversation alone does not count as success. Missing artifacts, an invalid result, or an unreadable agent-turn record pause the affected task with an explanation. Other workflows can continue. Automatic retries are off.
+Agent stages must return a structured result and produce their required files. A completed conversation alone does not count as success. Missing artifacts, an invalid result, a failed checkpoint capture, or an unreadable agent-turn record pause the affected task with an explanation. A missing diff summary does not fail a stage if its checkpoint was saved successfully. Other workflows can continue. Automatic retries are off.
 
 ## Persistence and restarts
 
