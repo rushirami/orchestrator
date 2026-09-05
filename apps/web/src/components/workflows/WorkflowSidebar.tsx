@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { Link } from "@tanstack/react-router";
@@ -7,30 +7,84 @@ import { useProjects } from "../../state/entities";
 import { workflowEnvironment } from "../../state/workflows";
 import "./workflows.css";
 
-export function WorkflowSidebar() {
-  const projects = useProjects();
-  const environments = [...new Set(projects.map((project) => project.environmentId))];
+interface WorkflowSidebarContentProps {
+  collapsed: ReadonlySet<string>;
+  onToggle: (key: string, open: boolean) => void;
+  onContentReady: () => void;
+}
+
+export function WorkflowSidebar({ active }: { active: boolean }) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const scrollTop = useRef(0);
+  const scroller = useRef<HTMLDivElement>(null);
+  const restoreScroll = useCallback(() => {
+    if (scroller.current) scroller.current.scrollTop = scrollTop.current;
+  }, []);
+  const onToggle = useCallback((key: string, open: boolean) => {
+    setCollapsed((previous) => {
+      if (previous.has(key) === !open) return previous;
+      const next = new Set(previous);
+      if (open) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  useLayoutEffect(() => {
+    if (active) restoreScroll();
+  }, [active, restoreScroll]);
+
+  // Keep only view state while hidden; subscriptions belong to the mounted content.
+  if (!active) return null;
   return (
-    <div className="workflow-sidebar" aria-label="Workflow tasks">
+    <div
+      className="workflow-sidebar"
+      aria-label="Workflow tasks"
+      ref={scroller}
+      onScroll={(event) => {
+        scrollTop.current = event.currentTarget.scrollTop;
+      }}
+    >
       <Link className="workflow-sidebar-action" to="/workflows">
         <Plus size={15} />
         Configure workflows
       </Link>
-      {environments.map((environmentId) => (
-        <EnvironmentWorkflows
-          key={environmentId}
-          projects={projects.filter((project) => project.environmentId === environmentId)}
-        />
-      ))}
-      {projects.length === 0 && <p className="workflow-help">Add a project to create workflows.</p>}
+      <WorkflowSidebarProjects
+        collapsed={collapsed}
+        onToggle={onToggle}
+        onContentReady={restoreScroll}
+      />
     </div>
   );
 }
 
-function EnvironmentWorkflows({ projects }: { projects: readonly EnvironmentProject[] }) {
+function WorkflowSidebarProjects(props: WorkflowSidebarContentProps) {
+  const projects = useProjects();
+  const environments = [...new Set(projects.map((project) => project.environmentId))];
+  return (
+    <>
+      {environments.map((environmentId) => (
+        <EnvironmentWorkflows
+          key={environmentId}
+          projects={projects.filter((project) => project.environmentId === environmentId)}
+          {...props}
+        />
+      ))}
+      {projects.length === 0 && <p className="workflow-help">Add a project to create workflows.</p>}
+    </>
+  );
+}
+
+function EnvironmentWorkflows({
+  projects,
+  collapsed,
+  onToggle,
+  onContentReady,
+}: WorkflowSidebarContentProps & { projects: readonly EnvironmentProject[] }) {
   const environmentId = projects[0]!.environmentId;
   const result = useAtomValue(workflowEnvironment.snapshot({ environmentId, input: {} }));
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  useLayoutEffect(() => {
+    if (result._tag === "Success") onContentReady();
+  }, [result, onContentReady]);
   if (result._tag === "Failure")
     return <p className="workflow-help">Workflow tasks are unavailable for this environment.</p>;
   if (result._tag !== "Success") return <p className="workflow-help">Loading workflow tasks…</p>;
@@ -47,17 +101,8 @@ function EnvironmentWorkflows({ projects }: { projects: readonly EnvironmentProj
           <details
             className="workflow-sidebar-task"
             key={task.id}
-            open={!collapsed.has(task.id)}
-            onToggle={(event) => {
-              const open = event.currentTarget.open;
-              setCollapsed((previous) => {
-                if (previous.has(task.id) === !open) return previous;
-                const next = new Set(previous);
-                if (open) next.delete(task.id);
-                else next.add(task.id);
-                return next;
-              });
-            }}
+            open={!collapsed.has(`${environmentId}:${task.id}`)}
+            onToggle={(event) => onToggle(`${environmentId}:${task.id}`, event.currentTarget.open)}
           >
             <summary>
               <ChevronDown size={13} />

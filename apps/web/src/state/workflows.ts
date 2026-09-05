@@ -9,6 +9,7 @@ import { connectionAtomRuntime } from "../connection/runtime";
 const changes = createEnvironmentRpcSubscriptionAtomFamily(connectionAtomRuntime, {
   label: "workflows:changes",
   tag: WORKFLOW_METHODS.changes,
+  idleTtlMs: 0,
 });
 
 export const workflowEnvironment = {
@@ -31,6 +32,7 @@ export const workflowEnvironment = {
   snapshot: createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
     label: "workflows:snapshot",
     tag: WORKFLOW_METHODS.snapshot,
+    idleTtlMs: 0,
     refreshTrigger: ({ environmentId }) => changes({ environmentId, input: {} }),
   }),
   saveTemplate: createEnvironmentRpcCommand(connectionAtomRuntime, {

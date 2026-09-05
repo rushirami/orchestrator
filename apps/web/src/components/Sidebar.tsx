@@ -3618,7 +3618,7 @@ export default function Sidebar() {
         </button>
       </div>
       <div className={sidebarMode === "workflows" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
-        <WorkflowSidebar />
+        <WorkflowSidebar active={sidebarMode === "workflows"} />
       </div>
       <div className={sidebarMode === "threads" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
         <SidebarContent
