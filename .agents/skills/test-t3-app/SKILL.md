@@ -34,7 +34,9 @@ Do not set `VITE_HTTP_URL` or `VITE_WS_URL`; the desktop bridge supplies loopbac
 
 For a production-bundle smoke test, build the desktop pipeline first and launch with an explicit
 isolated `T3CODE_HOME`. This isolates backend state, but does not override Electron's `userData`
-or `sessionData` paths. Verify those paths are also redirected into the test-owned directory
+or `sessionData` paths. Set `T3CODE_DESKTOP_USER_DATA_DIR` to a directory inside the test base
+to isolate both Electron paths in development or production. Create that directory before launch.
+Verify those paths are also redirected into the test-owned directory
 before launch, including any later `app.setPath` calls in the desktop startup code.
 Inspect the launcher's environment handling before invoking it; a script
 without a home override may select installed user data. Inspect the actual Electron renderer with
