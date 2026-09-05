@@ -27,3 +27,9 @@ The retained integrations cover five categories: model providers (including tran
 provider maintenance), Git hosting, pricing, theme downloads, and usage limits. Their endpoints
 can vary with your configuration. Running code or tools through a provider can itself make
 network requests. Loopback binding and preview HTTP filtering are not an OS-level network sandbox.
+
+WSL backends require working localhost forwarding. If a WSL backend remains unreachable
+after three one-minute startup attempts, the app stops that backend and reports the error.
+WSL-only mode uses the Windows backend for that launch without changing your saved WSL
+preference. In dual mode, the Windows backend keeps running and the WSL error appears in
+Settings. Check WSL localhost forwarding and restart WSL before retrying.

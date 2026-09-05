@@ -760,6 +760,7 @@ describe("DesktopBackendManager", () => {
             ...baseConfig,
             desktopTelemetryStream: Stream.empty,
             readinessTimeout: Duration.millis(50),
+            runningDistro: "Ubuntu",
             onReady: () =>
               Effect.sync(() => {
                 readyCount += 1;
@@ -796,6 +797,95 @@ describe("DesktopBackendManager", () => {
         }).pipe(Effect.provide(TestClock.layer())),
       ),
   );
+
+  for (const fallbackToWindows of [false, true]) {
+    it.effect(
+      fallbackToWindows
+        ? "closes unreachable WSL before switching to the Windows backend"
+        : "surfaces unreachable WSL once and stops until explicitly retried",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            let useWindows = false;
+            let spawnCount = 0;
+            let closeCount = 0;
+            let failureCount = 0;
+            const firstProbe = yield* Deferred.make<void>();
+            const ready = yield* Deferred.make<void>();
+            const finalized = yield* Queue.unbounded<void>();
+            const spawnerLayer = Layer.succeed(
+              ChildProcessSpawner.ChildProcessSpawner,
+              ChildProcessSpawner.make(() =>
+                Effect.gen(function* () {
+                  spawnCount += 1;
+                  yield* Scope.addFinalizer(
+                    yield* Scope.Scope,
+                    Effect.sync(() => {
+                      closeCount += 1;
+                    }),
+                  );
+                  return makeProcess({ exitCode: Effect.never });
+                }),
+              ),
+            );
+            const instance = yield* makeTestInstance({
+              spawnerLayer,
+              configResolve: Effect.sync(() =>
+                useWindows ? baseConfig : { ...baseConfig, runningDistro: "Ubuntu" },
+              ),
+              httpClientLayer: httpClientLayer((request) =>
+                Deferred.succeed(firstProbe, void 0).pipe(
+                  Effect.as(responseForRequest(request, useWindows ? 200 : 503)),
+                ),
+              ),
+              onReady: Deferred.succeed(ready, void 0).pipe(Effect.asVoid),
+              onPreflightFailed: (failure) =>
+                Effect.sync(() => {
+                  failureCount += 1;
+                  assert.equal(closeCount, 1);
+                  assert.isFalse(failure.fatal);
+                  assert.include(failure.reason, "localhost forwarding");
+                  assert.include(failure.reason, "Ubuntu");
+                  useWindows = fallbackToWindows;
+                  return fallbackToWindows;
+                }),
+              backendOutputLog: {
+                discardSession: Queue.offer(finalized, void 0).pipe(Effect.asVoid),
+              },
+            });
+
+            yield* instance.start;
+            yield* Deferred.await(firstProbe);
+            yield* TestClock.adjust(Duration.minutes(2));
+            assert.equal(failureCount, 0);
+            assert.equal(closeCount, 0);
+            yield* TestClock.adjust(Duration.minutes(1));
+            yield* Queue.take(finalized);
+            assert.equal(failureCount, 1);
+            assert.equal(closeCount, 1);
+            assert.equal(spawnCount, 1);
+            const failedSnapshot = yield* instance.snapshot;
+            assert.isFalse(failedSnapshot.ready);
+            assert.isTrue(Option.isNone(failedSnapshot.activePid));
+            assert.equal(failedSnapshot.desiredRunning, fallbackToWindows);
+
+            if (fallbackToWindows) {
+              yield* TestClock.adjust(Duration.millis(500));
+            } else {
+              yield* TestClock.adjust(Duration.minutes(5));
+              assert.equal(spawnCount, 1);
+              assert.equal(failureCount, 1);
+              useWindows = true;
+              yield* instance.start;
+            }
+            yield* Deferred.await(ready);
+            assert.equal(spawnCount, 2);
+            assert.isTrue((yield* instance.snapshot).ready);
+            assert.equal(failureCount, 1);
+          }).pipe(Effect.provide(TestClock.layer())),
+        ),
+    );
+  }
 
   it.effect("starts the configured backend and closes the scoped process on stop", () =>
     Effect.scoped(

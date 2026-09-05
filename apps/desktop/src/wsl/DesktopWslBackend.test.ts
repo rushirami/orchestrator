@@ -125,6 +125,14 @@ describe("DesktopWslBackend", () => {
       assert.isFalse(yield* recordFailure({ reason: "Node.js not found", fatal: true }));
       assert.deepEqual(yield* backend.lastPreflightError, Option.some("Node.js not found"));
 
+      assert.isFalse(
+        yield* recordFailure({ reason: "Check WSL localhost forwarding", fatal: false }),
+      );
+      assert.deepEqual(
+        yield* backend.lastPreflightError,
+        Option.some("Check WSL localhost forwarding"),
+      );
+
       yield* clearFailure(new URL("http://127.0.0.1:41773"));
       assert.deepEqual(yield* backend.lastPreflightError, Option.none());
     }).pipe(

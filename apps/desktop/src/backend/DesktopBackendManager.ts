@@ -62,6 +62,7 @@ const MAX_RESTART_DELAY = Duration.seconds(10);
 // self-heal for a while but must not leave the app connecting forever.
 const MAX_PREFLIGHT_FAILURE_ATTEMPTS = 5;
 const DEFAULT_BACKEND_READINESS_TIMEOUT = Duration.minutes(1);
+const MAX_WSL_READINESS_ATTEMPTS = 3;
 const DEFAULT_BACKEND_READINESS_INTERVAL = Duration.millis(100);
 const DEFAULT_BACKEND_READINESS_REQUEST_TIMEOUT = Duration.seconds(1);
 const DEFAULT_BACKEND_TERMINATE_GRACE = Duration.seconds(2);
@@ -214,6 +215,7 @@ export class BackendProcessExitStatusError extends Schema.TaggedErrorClass<Backe
 }
 
 export const BackendProcessError = Schema.Union([
+  BackendReadinessTimeoutError,
   BackendProcessBootstrapEncodeError,
   BackendProcessSpawnError,
   BackendProcessExitStatusError,
@@ -284,19 +286,16 @@ export interface DesktopBackendInstance {
 export interface BackendInstanceSpec {
   readonly id: BackendInstanceId;
   readonly label: Effect.Effect<string>;
-  // configResolve can now fail with PlatformError because the
-  // bootstrap-token closure inside DesktopBackendConfiguration uses
-  // crypto.randomBytes (Effect 4 beta.73 migration).
   readonly configResolve: Effect.Effect<DesktopBackendStartConfig, PlatformError.PlatformError>;
   // Receives the *resolved* httpBaseUrl of the run that just became
   // ready. The window service uses this to decide what URL to load
-  // (the WSL backend reports its distro IP, the Windows backend reports
-  // 127.0.0.1). Splitting this off from configResolve avoids races
+  // (both native and WSL backends report loopback). Splitting this off
+  // from configResolve avoids races
   // between "fired onReady" and "currentConfig already advanced".
   readonly onReady?: (httpBaseUrl: URL) => Effect.Effect<void>;
   readonly onShutdown?: () => Effect.Effect<void>;
-  // Fired once when a fatal or bounded preflight failure has exhausted its
-  // retries. Returns true when the callback changed configuration and the
+  // Fired when a fatal/bounded preflight or WSL readiness failure exhausts
+  // its retries. Returns true when the callback changed configuration and the
   // manager should resolve once more; false stops the failed instance.
   readonly onPreflightFailed?: (failure: PreflightFailure) => Effect.Effect<boolean>;
 }
@@ -568,14 +567,10 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
       ).pipe(Effect.forkScoped),
     );
   }
-  // Probe readiness in a loop while the backend process is still alive
-  // instead of giving up after the first budget. A slow cold boot (the
-  // WSL bundle loading across /mnt/c, or a first launch right after an
-  // update) can exceed the initial readiness budget while the backend is
-  // about to come up moments later; a one-shot probe left the app stuck
-  // on "Connecting to WSL…" forever even though the backend kept running
-  // and became healthy. Each round gets a fresh budget, and the forked
-  // loop is torn down with the run scope once the child exits.
+  // Allow slow cold boots to use multiple readiness budgets. WSL must
+  // eventually surface broken localhost forwarding instead of leaving the
+  // desktop on its connecting splash indefinitely.
+  let readinessAttempts = 0;
   const probeReadiness = Effect.fn("desktop.backendProcess.probeReadiness")(() =>
     waitForHttpReady({
       executablePath: options.executablePath,
@@ -587,13 +582,20 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
       Effect.flatMap(() => options.onReady?.() ?? Effect.void),
       Effect.as(true),
       Effect.catchTags({
-        BackendReadinessTimeoutError: (error) =>
-          (options.onReadinessFailure?.(error) ?? Effect.void).pipe(Effect.as(false)),
+        BackendReadinessTimeoutError: Effect.fn(function* (error) {
+          yield* options.onReadinessFailure?.(error) ?? Effect.void;
+          readinessAttempts += 1;
+          if (
+            options.runningDistro !== undefined &&
+            readinessAttempts >= MAX_WSL_READINESS_ATTEMPTS
+          ) {
+            return yield* error;
+          }
+          return false;
+        }),
       }),
     ),
   );
-
-  yield* probeReadiness().pipe(Effect.repeat({ while: (ready) => !ready }), Effect.forkScoped);
 
   const exit = yield* handle.exitCode.pipe(
     Effect.mapError(
@@ -607,9 +609,18 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
           cause,
         }),
     ),
+    Effect.tap(() => options.onExitObserved?.() ?? Effect.void),
+    Effect.raceFirst(
+      probeReadiness().pipe(
+        Effect.repeat({ while: (ready) => !ready }),
+        Effect.andThen(Effect.never),
+      ),
+    ),
     Effect.exit,
   );
-  yield* options.onExitObserved?.() ?? Effect.void;
+  if (Exit.isFailure(exit)) {
+    return yield* Effect.failCause(exit.cause);
+  }
   yield* Effect.forEach(outputFibers, Fiber.await, {
     concurrency: "unbounded",
     discard: true,
@@ -617,9 +628,6 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
     Effect.timeout(options.outputDrainTimeout ?? DEFAULT_BACKEND_OUTPUT_DRAIN_TIMEOUT),
     Effect.ignore,
   );
-  if (Exit.isFailure(exit)) {
-    return yield* Effect.failCause(exit.cause);
-  }
   const exitCode = exit.value;
   return {
     code: Option.some(exitCode),
@@ -970,7 +978,30 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
           Effect.provideService(HttpClient.HttpClient, httpClient),
           Scope.provide(runScope),
           Effect.matchEffect({
-            onFailure: (error) => finalizeRun(error.message),
+            onFailure: Effect.fn(function* (error) {
+              if (error._tag === "BackendReadinessTimeoutError") {
+                // Close this owned WSL process before resolving a replacement.
+                yield* Scope.close(runScope, Exit.void);
+                const current = yield* Ref.get(state);
+                if (current.desiredRunning && Option.getOrUndefined(current.active)?.id === runId) {
+                  const shouldRestart = yield* (
+                    spec.onPreflightFailed?.({
+                      fatal: false,
+                      reason:
+                        `The WSL backend (${config.value.runningDistro}) did not become reachable ` +
+                        `at ${config.value.httpBaseUrl.href} after ${MAX_WSL_READINESS_ATTEMPTS} readiness attempts. ` +
+                        "Check that WSL localhost forwarding is enabled and restart WSL before retrying.",
+                    }) ?? Effect.succeed(false)
+                  );
+                  yield* Ref.update(state, (latest) =>
+                    Option.getOrUndefined(latest.active)?.id === runId
+                      ? { ...latest, desiredRunning: latest.desiredRunning && shouldRestart }
+                      : latest,
+                  );
+                }
+              }
+              yield* finalizeRun(error.message);
+            }),
             onSuccess: (exit) => finalizeRun(exit.reason),
           }),
           Effect.ensuring(Scope.close(runScope, Exit.void).pipe(Effect.ignore)),
