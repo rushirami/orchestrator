@@ -2,7 +2,6 @@ export * from "./assets.ts";
 export * from "./assistantCitations.ts";
 export * from "./background.ts";
 export * from "./baseSchemas.ts";
-export * from "./browserImport.ts";
 export * from "./browserProfile.ts";
 export * from "./desktopAppActivation.ts";
 export * from "./desktopBootstrap.ts";
