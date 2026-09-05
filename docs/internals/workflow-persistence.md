@@ -10,4 +10,22 @@ The workflow retention boundary is independent of the permanent project/thread e
 
 The pure decider in `apps/server/src/workflows/decider.ts` handles stage reservation, skill results, revision-bound approval, parallel joins, pause/resume, cancellation, retry, and bounded review rework. Each dispatched skill has an operation identity. Results from old or superseded operations cannot change current state. Rework resets the target and descendants, preserving its findings as handoff context. The caller must persist the new state before performing the corresponding side effect.
 
-Interrupted dispatches are uncertain outcomes, not proof of failure or success. Recovery must reconcile them against provider state and persisted outputs; if that cannot establish the result, the task pauses for inspection. It must not silently repeat an external action. Runtime and UI integration build on these contracts; this persistence layer alone does not launch providers.
+Interrupted dispatches are uncertain outcomes, not proof of failure or success. Recovery must reconcile them against provider state and persisted outputs; if that cannot establish the result, the task pauses for inspection. It must not silently repeat an external action. The runner performs that reconciliation and exposes the paused state in the task detail.
+
+## Runtime integration
+
+`WorkflowRunner` serializes decisions with a semaphore, persists each reservation before dispatch, and subscribes to the existing engine's domain events. The semaphore protects mutations; it is not a limit on simultaneously running tasks. `WorkflowRuntime` uses the existing Git worktree driver, engine thread/turn commands, provider lifecycle, and completed checkpoint events. Builder stages reuse a stable T3 thread ID; reviewer assignments receive different IDs in the same worktree.
+
+Launch commands have a stable fingerprint and operation ID. Worktree paths derive from task IDs, and preparation reconciles the branch and repository before reusing a directory. Startup completes known local provisioning but pauses uncertain agent dispatches. A readiness gate prevents recovery from racing a newly submitted launch. Cancellation also handles a start acknowledgement that arrives after the cancellation request.
+
+The final assistant response must decode as `WorkflowStageResult`, optionally inside one JSON fence. Required result artifacts must exist, stay inside the worktree after symlink resolution, and be regular files below 1 MiB. Approval is bound to a SHA-256 digest of the bytes the user reviewed. Code-review digests cover HEAD, tracked changes, and nonignored untracked files, including symlink targets as link text. A changed digest invalidates a review or its downstream handoff. Ignored build caches are outside that review basis.
+
+Providers advertise `supportsReadOnlyWorkflow`. Codex requests native read-only sandboxing with approvals disabled at thread start/resume and every turn. Claude permits file-read/search tools and installs a pre-tool hook denying other tools, including shell, writes, subagents, and MCP calls. Cursor, Grok, OpenCode, and Antigravity are not advertised as enforced read-only reviewers. Their ordinary writing-stage behavior remains available. Provider sandboxes govern the agent runtime; the application does not claim an OS-wide network sandbox.
+
+Normal client commands cannot delete or stop an active workflow-owned thread, change its runtime mode, revert its checkpoint, or launch a competing turn. Manual follow-up is allowed once the workflow is paused and all active stages have settled. Project deletion rejects unfinished work and removes terminal workflow/template records only after the ordinary project command succeeds.
+
+## Renderer and verification
+
+The renderer uses environment-scoped snapshots with a server change subscription, without polling conversation histories. The project editor, launch dialog, task graph, and sidebar call typed workflow RPC methods. Sidebar mode is a local UI preference; authoritative workflow state stays in SQLite. Motion consists of finite selection, panel, layout, and status transitions with reduced-motion overrides.
+
+Focused tests cover literal variable substitution, graph safety, command deduplication, disk reopen, stale edits, retention, approval digests, artifact paths, skill sequencing, parallel joins, changed review bases, restart reconciliation, cancellation, and provider sandbox arguments. The desktop local-provider fixture is documented in the local pipeline runbook. It exercises native adapter wiring without remote inference or a remote pull request; it is not a substitute for testing a live provider's reasoning quality.

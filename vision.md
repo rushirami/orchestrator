@@ -106,7 +106,7 @@ There is no saved archive of past workflow runs and no template version history 
 
 The designs use a white theme throughout, with T3 Code's sidebar, project breadcrumbs, compact controls, and top-right action placement. Superset informs the launch form's grouping, not the overall app shell or theme. Avoid introducing an unrelated dashboard layout.
 
-The current [Paper designs](https://app.paper.design/file/01M1PYQ1380EBK0T3YNH8WQ3S2/1-0) cover stage editing, adding a stage, prompt variables, launch, active execution, and worktree/thread/failure settings. Navigation between settings sections after removing the secondary sidebar, the exact behavior of **Test workflow**, and detailed approval, failure, and completion interactions still need design refinement. These mockups establish the direction without settling those interactions.
+The [Paper designs](https://app.paper.design/file/01M1PYQ1380EBK0T3YNH8WQ3S2/1-0) establish the white, T3-style direction. The implementation uses one inline template-settings surface and **Validate** to check a graph and provider capabilities without starting work. Approvals show the exact artifact being approved; failures pause for inspection and explicit retry. Completed tasks stay visible until dismissed, which removes workflow-only state while preserving their ordinary threads and files. Launch and active-task views derive their rows and branches from the configured graph.
 
 ## Direction from OpenAI Symphony
 
