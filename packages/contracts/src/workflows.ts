@@ -222,8 +222,7 @@ export function resolveWorkflowPrompt(
   );
   if (missing.length) throw new Error(`Provide values for: ${missing.join(", ")}`);
   const remainder = prompt.replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, "");
-  if (remainder.includes("{{") || remainder.includes("}}"))
-    throw new Error("Use {{ VARIABLE_NAME }} for prompt variables.");
+  if (remainder.includes("{{")) throw new Error("Use {{ VARIABLE_NAME }} for prompt variables.");
   return prompt.replace(
     /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g,
     (_, key: string) => values[key]!,

@@ -19,6 +19,13 @@ describe("workflow prompt variables", () => {
     expect(() => resolveWorkflowPrompt("{{ a.b }}", {})).toThrow("VARIABLE_NAME");
     expect(() => resolveWorkflowPrompt("{{ TASK", {})).toThrow("VARIABLE_NAME");
   });
+  it("preserves nested JSON and closing braces around substituted variables", () => {
+    const prompt = 'Build {{ TASK }} using {"spec": {"done": true}} and {"name": "{{ TASK }}"}';
+    expect(resolveWorkflowPrompt(prompt, { TASK: "a greeting" })).toBe(
+      'Build a greeting using {"spec": {"done": true}} and {"name": "a greeting"}',
+    );
+    expect(resolveWorkflowPrompt('{"spec": {"done": true}}', {})).toBe('{"spec": {"done": true}}');
+  });
   it("accepts a reusable prompt without variables", () => {
     expect(resolveWorkflowPrompt("Inspect this project", {})).toBe("Inspect this project");
   });

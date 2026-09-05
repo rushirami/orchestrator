@@ -20,7 +20,7 @@ Read-only stages return findings in their result summary. They cannot write revi
 Start brainstorming on {{ TASK_ID }}
 ```
 
-The editor detects `TASK_ID` and previews example values. Examples are not saved as launch defaults. Variables are replaced literally, without evaluating expressions. **Validate** checks the graph and provider capabilities without launching agents or creating a worktree. **Save template** replaces the saved settings; there are no version or run-history tabs.
+The editor detects `TASK_ID` and previews example values. Examples are not saved as launch defaults. Variables are replaced literally, without evaluating expressions. Prompts can include ordinary JSON examples such as `{"spec": {"done": true}}`. **Validate** checks the graph and provider capabilities without launching agents or creating a worktree. **Save template** replaces the saved settings; there are no version or run-history tabs.
 
 ## Start and supervise work
 
