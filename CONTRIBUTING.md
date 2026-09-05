@@ -2,7 +2,7 @@
 
 ## Developer Setup
 
-See the [maintainer scripts guide](docs/internals/scripts.md#first-checkout) for the initial checkout,
+See the [maintainer scripts guide](docs/internals/scripts.md) for the initial checkout,
 development commands, tests, and platform-specific desktop packaging prerequisites.
 
 ## Read This First
