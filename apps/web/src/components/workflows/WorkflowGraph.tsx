@@ -45,12 +45,14 @@ export function WorkflowGraph({
   onSelect,
   onChange,
   states = EMPTY_STATES,
+  fitToView = false,
 }: {
   definition: WorkflowDefinition;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onChange?: (definition: WorkflowDefinition) => void;
   states?: readonly WorkflowNodeState[];
+  fitToView?: boolean;
 }) {
   const [zoom, setZoom] = useState(1);
   const [dragged, setDragged] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -81,6 +83,14 @@ export function WorkflowGraph({
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const width = Math.max(640, ...nodes.map((node) => node.position.x + NODE_WIDTH + 40));
   const height = Math.max(500, ...nodes.map((node) => node.position.y + NODE_HEIGHT + 50));
+  useEffect(() => {
+    if (!fitToView) return;
+    const bounds = viewport.current?.getBoundingClientRect();
+    if (bounds)
+      setZoom(
+        Math.max(0.35, Math.min(1, (bounds.width - 30) / width, (bounds.height - 82) / height)),
+      );
+  }, [fitToView, width, height]);
   const moveNode = (id: string, x: number, y: number) =>
     onChange?.({
       ...definition,

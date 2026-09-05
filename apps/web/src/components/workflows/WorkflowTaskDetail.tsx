@@ -1,5 +1,5 @@
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import type {
   EnvironmentId,
   WorkflowTask,
@@ -32,6 +32,7 @@ export function WorkflowTaskDetail({
   onDismissed: () => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [artifact, setArtifact] = useState<
     (typeof WorkflowArtifact.Type & { nodeId: string }) | null
   >(null);
@@ -83,6 +84,23 @@ export function WorkflowTaskDetail({
           <ArrowLeft size={14} />
           Templates
         </Link>
+        <select
+          className="workflow-button workflow-stage-picker"
+          aria-label="Stage details"
+          value={selectedId ?? ""}
+          onChange={(event) => {
+            setSelectedId(event.target.value || null);
+            setArtifact(null);
+          }}
+        >
+          <option value="">Stage details</option>
+          {task.definition.nodes.map((node) => (
+            <option key={node.id} value={node.id}>
+              {node.name} ·{" "}
+              {task.nodes.find((state) => state.nodeId === node.id)?.status ?? "pending"}
+            </option>
+          ))}
+        </select>
         <div className="workflow-spacer" />
         {task.status === "running" && (
           <button className="workflow-button" disabled={busy} onClick={() => void act("pause")}>
@@ -129,6 +147,29 @@ export function WorkflowTaskDetail({
           </button>
         )}
       </header>
+      <div className="workflow-run-summary" aria-label="Workflow progress">
+        <span>
+          {task.nodes.filter((node) => node.status === "complete").length} /{" "}
+          {task.definition.nodes.length} stages complete
+        </span>
+        {task.nodes
+          .filter((node) =>
+            ["running", "dispatching", "awaiting-approval", "failed"].includes(node.status),
+          )
+          .map((node) => (
+            <button
+              key={node.nodeId}
+              data-status={node.status}
+              onClick={() => {
+                setSelectedId(node.nodeId);
+                setArtifact(null);
+              }}
+            >
+              {task.definition.nodes.find((item) => item.id === node.nodeId)?.name} ·{" "}
+              {node.status.replaceAll("-", " ")}
+            </button>
+          ))}
+      </div>
       {(error || task.error) && (
         <div className="workflow-error" role="alert">
           {error ?? task.error}
@@ -157,10 +198,20 @@ export function WorkflowTaskDetail({
       )}
       <div className="workflow-body">
         <WorkflowGraph
+          fitToView
           definition={task.definition}
           states={task.nodes}
           selectedId={selectedId}
           onSelect={(id) => {
+            const node = task.definition.nodes.find((item) => item.id === id);
+            const threadId = node?.kind === "agent" ? task.threadIds[node.threadId] : undefined;
+            if (threadId) {
+              void navigate({
+                to: "/$environmentId/$threadId",
+                params: { environmentId, threadId },
+              });
+              return;
+            }
             setSelectedId(id);
             setArtifact(null);
           }}

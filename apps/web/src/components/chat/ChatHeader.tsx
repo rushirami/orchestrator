@@ -1,3 +1,7 @@
+import { useAtomValue } from "@effect/atom-react";
+import { workflowEnvironment } from "../../state/workflows";
+import { useProjects } from "../../state/entities";
+import { WorkflowBreadcrumbItems } from "../workflows/WorkflowBreadcrumb";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
@@ -156,6 +160,24 @@ export const ChatHeader = memo(function ChatHeader({
     });
   }, [panelAnimationDurationMs, panelAnimationsActive]);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const workflowSnapshot = useAtomValue(
+    workflowEnvironment.snapshot({ environmentId: activeThreadEnvironmentId, input: {} }),
+  );
+  const workflowTask =
+    workflowSnapshot._tag === "Success"
+      ? workflowSnapshot.value.tasks.find((task) =>
+          Object.values(task.threadIds).includes(activeThreadId),
+        )
+      : undefined;
+  const workflowThread = workflowTask?.definition.threads.find(
+    (thread) => workflowTask.threadIds[thread.id] === activeThreadId,
+  );
+  const projects = useProjects();
+  const workflowProject = projects.find(
+    (project) =>
+      project.environmentId === activeThreadEnvironmentId && project.id === workflowTask?.projectId,
+  );
+  const breadcrumbTitle = workflowThread?.name ?? activeThreadTitle;
   const fileScripts = useT3ProjectFileScripts(
     activeThreadEnvironmentId,
     activeProjectScripts ? activeProjectCwd : null,
@@ -320,7 +342,9 @@ export const ChatHeader = memo(function ChatHeader({
         {/* The project always leads the header: knowing which project a
             thread lives in is priority zero, and the thread title alone
             doesn't answer it. */}
-        {activeProjectName ? (
+        {workflowTask && workflowProject ? (
+          <WorkflowBreadcrumbItems project={workflowProject} task={workflowTask} hasThread />
+        ) : activeProjectName ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
@@ -380,7 +404,7 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 }
               >
-                <h2 className="min-w-0 truncate">{activeThreadTitle}</h2>
+                <h2 className="min-w-0 truncate">{breadcrumbTitle}</h2>
                 <ChevronDownIcon
                   aria-hidden
                   data-thread-title-chevron

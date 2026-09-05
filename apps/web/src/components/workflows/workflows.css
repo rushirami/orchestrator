@@ -591,3 +591,96 @@
     padding: 20px;
   }
 }
+
+.workflow-sidebar-label > a:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workflow-sidebar-new {
+  display: inline-flex;
+  padding: 6px;
+  border-radius: 5px;
+}
+.workflow-sidebar-new:hover {
+  background: var(--sidebar-row-hover);
+}
+.workflow-sidebar-task:not([open]) summary > svg:first-child {
+  transform: rotate(-90deg);
+}
+.workflow-sidebar-task summary > a {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workflow-template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 24px 24px;
+  overflow: auto;
+  max-width: 760px;
+}
+.workflow-template-choice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--wf-line);
+  border-radius: 8px;
+  text-align: left;
+}
+.workflow-template-choice:hover {
+  background: var(--wf-surface);
+}
+.workflow-template-choice > span {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.workflow-template-choice small {
+  color: var(--wf-muted);
+}
+.workflow-stage-picker {
+  min-width: 0;
+  max-width: 240px;
+}
+.workflow-run-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 24px;
+  color: var(--wf-muted);
+  border-bottom: 1px solid var(--wf-line);
+}
+.workflow-run-summary button {
+  border-radius: 5px;
+  padding: 4px 8px;
+  color: var(--primary);
+  background: var(--wf-surface);
+}
+.workflow-run-summary button[data-status="failed"] {
+  color: var(--error-foreground);
+  background: var(--error-surface);
+}
+.workflow-node[data-status="running"],
+.workflow-node[data-status="dispatching"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.workflow-node[data-status="awaiting-approval"] {
+  border-color: var(--primary);
+}
+.workflow-node[data-status="running"] .workflow-node-status,
+.workflow-node[data-status="dispatching"] .workflow-node-status,
+.workflow-node[data-status="awaiting-approval"] .workflow-node-status {
+  color: var(--primary);
+  font-weight: 600;
+}
