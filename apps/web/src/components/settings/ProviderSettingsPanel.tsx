@@ -793,6 +793,7 @@ export function EnvironmentProviderSettings({
         setup={
           mode === "editor" && row.driver === "antigravity" ? (
             <ProviderSetupSection
+              readOnly={false}
               environmentId={environmentId}
               environmentLabel={environmentLabel}
               instanceId={row.instanceId}
@@ -948,6 +949,7 @@ export function EnvironmentProviderSettings({
       </SettingsSection>
 
       <UsageProviderSettings
+        readOnly={false}
         key={environmentId}
         environmentId={environmentId}
         environmentLabel={environmentLabel}
