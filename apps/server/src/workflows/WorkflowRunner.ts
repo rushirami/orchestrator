@@ -532,10 +532,27 @@ export const makeWorkflowRunner = Effect.gen(function* () {
       }
       const result = yield* effect;
       if (command.type === "project.delete") {
-        const remaining = yield* store.list(command.projectId);
-        for (const value of remaining)
-          yield* store.remove(value.id, value.projectId, value.revision);
-        yield* service.changed;
+        yield* Effect.gen(function* () {
+          const remaining = yield* store.list(command.projectId);
+          for (const value of remaining)
+            yield* store.remove(value.id, value.projectId, value.revision).pipe(
+              Effect.catch((error) =>
+                Effect.logError("Deleted project workflow cleanup failed", {
+                  projectId: command.projectId,
+                  workflowId: value.id,
+                  message: error.message,
+                }),
+              ),
+            );
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.logError("Deleted project workflow cleanup failed", {
+              projectId: command.projectId,
+              message: error.message,
+            }),
+          ),
+          Effect.ensuring(service.changed),
+        );
       }
       return result;
     }).pipe(whenReady);
