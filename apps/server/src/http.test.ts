@@ -279,6 +279,7 @@ describe("assetResponseHeaders", () => {
   it("does not apply document policy to raster images", () => {
     expect(assetResponseHeaders("/attachments/user-image.png")).toEqual({
       "Cache-Control": "private, max-age=3600",
+      Vary: "Origin",
       "X-Content-Type-Options": "nosniff",
     });
   });
@@ -290,6 +291,7 @@ describe("assetResponseHeaders", () => {
       }),
     ).toEqual({
       "Cache-Control": "private, max-age=3600",
+      Vary: "Origin",
       "Content-Type": "video/mp4",
       "X-Content-Type-Options": "nosniff",
     });
@@ -304,14 +306,16 @@ describe("assetResponseHeaders", () => {
       assetResponseHeaders("/attachments/upload.bin", { mimeType: "text/html" }),
     ).toMatchObject({
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-modals",
+      "Content-Security-Policy":
+        "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts",
     });
   });
   it("serves HTML assets as utf-8 inside a sandboxed origin", () => {
     for (const path of ["/workspace/page.html", "/workspace/PAGE.HTM", "/tmp/report.html"]) {
       expect(assetResponseHeaders(path)).toMatchObject({
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-modals",
+        "Content-Security-Policy":
+          "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts",
       });
     }
   });

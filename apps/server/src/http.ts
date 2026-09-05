@@ -32,7 +32,18 @@ const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inlin
 // HTML previews are agent output, not the app. The sandbox gives the document an
 // opaque origin: scripts run, but same-origin cookies, storage, and API calls are
 // out of reach. Relative sibling assets still load through their local resource URLs.
-const HTML_CONTENT_SECURITY_POLICY = "sandbox allow-scripts allow-forms allow-popups allow-modals";
+const HTML_CONTENT_SECURITY_POLICY = [
+  "default-src 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "sandbox allow-scripts",
+].join("; ");
 
 // Types a browser may render as a document if a proxy strips the disposition
 // header. Downloads of these fall back to octet-stream.
@@ -75,6 +86,9 @@ export function assetResponseHeaders(
   const inlineMimeType = options?.mimeType?.split(";", 1)[0]?.trim();
   return {
     "Cache-Control": "private, max-age=3600",
+    // A document navigation has no Origin; a sandboxed script fetch has Origin: null.
+    // Keep their CORS responses separate even when the first request has no origin.
+    Vary: "Origin",
     "X-Content-Type-Options": "nosniff",
     ...(options?.download
       ? {

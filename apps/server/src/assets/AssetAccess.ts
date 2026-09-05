@@ -1,3 +1,5 @@
+import * as NodeCrypto from "node:crypto";
+import * as Context from "effect/Context";
 import type { AssetResource } from "@t3tools/contracts";
 import {
   AssetAttachmentNotFoundError,
@@ -46,7 +48,7 @@ const PROJECT_FAVICON_CACHE_BUCKET_MS = 30 * 60 * 1000;
 const PROJECT_FAVICON_VERSION_PREFIX = "v";
 const INLINE_VIDEO_MIME_TYPE_PATTERN = /^video\/[\w!#$&^.+-]+$/i;
 // Extensions a document viewer may request inline. The extension comes from
-// the attachment id the server aslocal, never from the client's mime type.
+// the attachment id the server assigned, never from the client's mime type.
 const INLINE_DOCUMENT_EXTENSIONS = new Set(["pdf", "html", "htm"]);
 const INLINE_DOCUMENT_MIME_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -136,15 +138,38 @@ export type ResolvedAsset = {
   readonly file?: OpenMediaFile;
 };
 
-function decodeAddress(encodedPayload: string): AssetAddress | null {
-  try {
-    return Option.getOrNull(
-      decodeAssetAddress(Result.getOrThrow(Encoding.decodeBase64UrlString(encodedPayload))),
-    );
-  } catch {
+// File previews have opaque browser origins. Their read-only addresses carry
+// a per-process integrity seal so they cannot manufacture arbitrary file paths.
+class AssetAddressKey extends Context.Reference<Uint8Array>("t3/assets/AssetAddressKey", {
+  defaultValue: () => NodeCrypto.randomBytes(32),
+}) {}
+
+function sealAddress(payload: string, key: Uint8Array): string {
+  return NodeCrypto.createHmac("sha256", key).update(payload).digest("base64url");
+}
+
+const decodeAddress = Effect.fn("AssetAccess.decodeAddress")(function* (address: string) {
+  const [payload, seal, extra] = address.split(".");
+  if (!payload || !seal || extra !== undefined || !/^[A-Za-z0-9_-]{43}$/.test(seal)) return null;
+  const key = yield* AssetAddressKey;
+  if (!NodeCrypto.timingSafeEqual(Buffer.from(seal), Buffer.from(sealAddress(payload, key)))) {
     return null;
   }
-}
+  const decoded = Encoding.decodeBase64UrlString(payload);
+  if (Result.isFailure(decoded)) return null;
+  const claims = Option.getOrNull(decodeAssetAddress(decoded.success));
+  return claims && claims.expiresAt > (yield* Clock.currentTimeMillis) ? claims : null;
+});
+
+/** Only an issued asset address can cross the browser-origin boundary. */
+export const isIssuedAssetPath = Effect.fn("AssetAccess.isIssuedAssetPath")(function* (
+  pathname: string,
+) {
+  if (!pathname.startsWith(`${ASSET_ROUTE_PREFIX}/`)) return false;
+  const suffix = pathname.slice(ASSET_ROUTE_PREFIX.length + 1);
+  const separator = suffix.indexOf("/");
+  return separator > 0 && (yield* decodeAddress(suffix.slice(0, separator))) !== null;
+});
 
 function decodeRelativePath(value: string): string | null {
   try {
@@ -525,7 +550,8 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
       PROJECT_FAVICON_CACHE_BUCKET_MS;
     claims = { ...claims, expiresAt };
   }
-  const address = Encoding.encodeBase64Url(new TextEncoder().encode(encodeAssetAddress(claims)));
+  const payload = Encoding.encodeBase64Url(new TextEncoder().encode(encodeAssetAddress(claims)));
+  const address = `${payload}.${sealAddress(payload, yield* AssetAddressKey)}`;
   return {
     relativeUrl: `${ASSET_ROUTE_PREFIX}/${address}/${encodeURIComponent(fileName)}`,
     expiresAt,
@@ -537,8 +563,8 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   address: string,
   relativePath: string,
 ) {
-  const claims = decodeAddress(address);
-  if (!claims || claims.expiresAt <= (yield* Clock.currentTimeMillis)) return null;
+  const claims = yield* decodeAddress(address);
+  if (!claims) return null;
 
   if (claims.kind === "attachment") {
     const config = yield* ServerConfig.ServerConfig;

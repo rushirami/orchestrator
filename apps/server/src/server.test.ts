@@ -1,3 +1,4 @@
+import { issueAssetUrl } from "./assets/AssetAccess.ts";
 import { registerActiveMcpContext } from "./mcp/McpSessionRegistry.ts";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -1303,6 +1304,100 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.isUndefined(preflight.headers["access-control-allow-credentials"]);
       assert.notInclude(preflight.headers["access-control-allow-headers"] ?? "", "authorization");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect(
+    "serves issued preview assets to opaque frames without exposing control APIs or uploads",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* buildAppUnderTest();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-preview-boundary-" });
+        yield* fs.writeFileString(path.join(root, "index.html"), '<img src="sibling.svg">');
+        yield* fs.writeFileString(
+          path.join(root, "sibling.svg"),
+          '<svg xmlns="http://www.w3.org/2000/svg"/>',
+        );
+        yield* fs.writeFileString(path.join(root, ".env"), "private");
+        const issued = yield* issueAssetUrl({
+          resource: {
+            _tag: "workspace-file",
+            threadId: ThreadId.make("preview-thread"),
+            path: "index.html",
+          },
+          workspaceRoot: root,
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              WorkspacePaths.layer,
+              ProjectFaviconResolver.layer.pipe(
+                Layer.provide(WorkspacePaths.layer),
+                Layer.provide(T3ProjectFileLoader.layer),
+              ),
+              NativeAppIconResolver.layer,
+            ),
+          ),
+          Effect.provideService(ServerConfig.ServerConfig, config),
+        );
+        const documentUrl = yield* getHttpServerUrl(issued.relativeUrl);
+        const navigation = yield* fetchEffect(documentUrl, {
+          headers: { "sec-fetch-site": "cross-site" },
+        });
+        assert.equal(navigation.status, 200);
+        assert.include(navigation.headers.vary!, "Origin");
+        assert.isUndefined(navigation.headers["access-control-allow-origin"]);
+        const headers = { origin: "null", referer: documentUrl, "sec-fetch-site": "cross-site" };
+        const document = yield* fetchEffect(documentUrl, { headers });
+        assert.equal(document.status, 200);
+        assert.equal(document.headers["access-control-allow-origin"], "null");
+        assert.include(document.headers.vary!, "Origin");
+        assert.include(document.headers["content-security-policy"]!, "sandbox allow-scripts");
+        const sibling = yield* fetchEffect(new URL("sibling.svg", documentUrl).href, {
+          headers: { referer: documentUrl, "sec-fetch-site": "cross-site" },
+        });
+        assert.equal(sibling.status, 200);
+        const head = yield* fetchEffect(documentUrl, { method: "HEAD", headers });
+        assert.equal(head.status, 200);
+        const privateFile = yield* fetchEffect(new URL(".env", documentUrl).href, { headers });
+        assert.equal(privateFile.status, 404);
+        const control = yield* fetchEffect(yield* getHttpServerUrl("/.well-known/t3/environment"), {
+          headers,
+        });
+        assert.equal(control.status, 403);
+        const write = yield* fetchEffect(documentUrl, { method: "POST", headers });
+        assert.equal(write.status, 403);
+        const suffix = issued.relativeUrl.slice("/api/assets/".length);
+        const [address, name] = suffix.split("/");
+        const [payload, seal] = address!.split(".");
+        const forged = Buffer.from(
+          Buffer.from(payload!, "base64url").toString().replace(root, "/tmp"),
+        ).toString("base64url");
+        for (const value of [payload, `${forged}.${seal}`, `${payload}.${"A".repeat(43)}`]) {
+          const response = yield* fetchEffect(
+            yield* getHttpServerUrl(`/api/assets/${value}/${name}`),
+            { headers },
+          );
+          assert.equal(response.status, 403);
+        }
+        yield* Effect.scoped(
+          withWsRpcClient(yield* getWsServerUrl("/ws"), (client) =>
+            Effect.gen(function* () {
+              const upload = yield* client[WS_METHODS.attachmentsCreateUploadUrl]({
+                name: "x.png",
+                mimeType: "image/png",
+                sizeBytes: 1,
+              });
+              const response = yield* fetchEffect(yield* getHttpServerUrl(upload.relativeUrl), {
+                method: "POST",
+                headers,
+                body: new Uint8Array([1]),
+              });
+              assert.equal(response.status, 403);
+            }),
+          ),
+        );
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("rejects WebSocket upgrades from unrelated websites", () =>

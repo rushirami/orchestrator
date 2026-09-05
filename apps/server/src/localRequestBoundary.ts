@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { isIssuedAssetPath } from "./assets/AssetAccess.ts";
 import {
   HttpMiddleware,
   HttpRouter,
@@ -22,14 +24,21 @@ export function localClientOrigins(devUrl?: URL): ReadonlyArray<string> {
     : DESKTOP_ORIGINS;
 }
 
+export function hasLocalRequestHost(
+  headers: Readonly<Record<string, string | undefined>>,
+  port: number,
+): boolean {
+  const authority = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::([0-9]+))?$/i.exec(headers.host ?? "");
+  return authority !== null && Number(authority[1] || 80) === port;
+}
+
 /** An origin check keeps project previews and unrelated websites out of the local control API. */
 export function isTrustedLocalRequest(
   headers: Readonly<Record<string, string | undefined>>,
   port: number,
   allowedOrigins: ReadonlyArray<string>,
 ): boolean {
-  const authority = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::([0-9]+))?$/i.exec(headers.host ?? "");
-  if (!authority || Number(authority[1] || 80) !== port) return false;
+  if (!hasLocalRequestHost(headers, port)) return false;
 
   const origin = headers.origin;
   if (origin !== undefined) return allowedOrigins.includes(origin);
@@ -60,19 +69,37 @@ export const localRequestBoundaryLayer = Layer.unwrap(
       allowedHeaders: browserApiCorsAllowedHeaders,
       maxAge: 600,
     });
+    const assetCors = HttpMiddleware.cors({
+      allowedOrigins: [...allowedOrigins, "null"],
+      credentials: false,
+      allowedMethods: ["GET", "HEAD"],
+    });
     return HttpRouter.middleware(
       (httpEffect) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
           if (
             server.address._tag !== "TcpAddress" ||
-            !isTrustedLocalRequest(request.headers, server.address.port, allowedOrigins)
+            !hasLocalRequestHost(request.headers, server.address.port)
           ) {
             return HttpServerResponse.text("Only local desktop requests are accepted.", {
               status: 403,
             });
           }
-          return yield* cors(httpEffect);
+          if (isTrustedLocalRequest(request.headers, server.address.port, allowedOrigins)) {
+            return yield* cors(httpEffect);
+          }
+          const url = HttpServerRequest.toURL(request);
+          if (
+            (request.method === "GET" || request.method === "HEAD") &&
+            Option.isSome(url) &&
+            (yield* isIssuedAssetPath(url.value.pathname))
+          ) {
+            return yield* assetCors(httpEffect);
+          }
+          return HttpServerResponse.text("Only local desktop requests are accepted.", {
+            status: 403,
+          });
         }),
       { global: true },
     );

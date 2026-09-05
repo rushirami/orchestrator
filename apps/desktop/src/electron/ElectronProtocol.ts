@@ -76,12 +76,12 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     `connect-src ${connectSources.join(" ")}`,
-    `img-src 'self' ${input.scheme}: blob: data: https://open-vsx.org http://127.0.0.1:* http://localhost:* http://[::1]:*`,
-    `media-src 'self' ${input.scheme}: blob: http://127.0.0.1:* http://localhost:* http://[::1]:*`,
+    `img-src 'self' ${input.scheme}: blob: data: https://open-vsx.org http://127.0.0.1:* http://localhost:*`,
+    `media-src 'self' ${input.scheme}: blob: http://127.0.0.1:* http://localhost:*`,
     "style-src 'self' 'unsafe-inline'",
     `font-src 'self' ${input.scheme}: data:`,
     "worker-src 'self' blob:",
-    "frame-src 'self'",
+    "frame-src 'self' http://127.0.0.1:* http://localhost:*",
     "form-action 'self'",
   ].join("; ");
 }
@@ -172,7 +172,10 @@ async function proxyRequest(
     request.method === "GET" || request.method === "HEAD"
       ? await fetchWithTransientRetry(targetUrl.toString(), init)
       : await Electron.net.fetch(targetUrl.toString(), init);
-  return withContentSecurityPolicy(response, contentSecurityPolicy);
+  // Backend documents keep their own sandbox and resource policy.
+  return preserveBrowserContext
+    ? response
+    : withContentSecurityPolicy(response, contentSecurityPolicy);
 }
 
 /** Packaged renderer files are read by Electron, independently of the backend. */

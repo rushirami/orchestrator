@@ -17,6 +17,11 @@ redirects, and HTTP/WebSocket subresources, including external fonts and scripts
 rely on a CDN need local copies of those assets. Remote browser-history entries are discarded.
 Location permission is disabled for previews.
 
+Local HTML file previews can run scripts and load sibling images, styles, and scripts.
+External resources are blocked, and preview scripts cannot access the application's control
+API. File-preview links expire after one hour or when the backend restarts; reopen the preview
+to get a new link.
+
 Provider diagnostics uploads are removed, including the former Codex `/feedback` command.
 
 The app has no T3 login, pairing, or access-token flow. Local files and built-in tools use the

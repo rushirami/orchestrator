@@ -109,7 +109,11 @@ describe("ElectronProtocol", () => {
       handleMock.mockImplementation((_scheme, nextHandler) => {
         handler = nextHandler;
       });
-      netFetchMock.mockResolvedValue(new Response("ok"));
+      netFetchMock.mockResolvedValue(
+        new Response("ok", {
+          headers: { "Content-Security-Policy": "default-src 'none'; sandbox allow-scripts" },
+        }),
+      );
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -134,21 +138,9 @@ describe("ElectronProtocol", () => {
             ),
           );
           assert.equal(yield* Effect.promise(() => response.text()), "ok");
-          assert.include(
-            response.headers.get("content-security-policy") ?? "",
-            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
-          );
-          assert.include(
-            response.headers.get("content-security-policy") ?? "",
-            "connect-src 'self' http: https: ws: wss:",
-          );
-          assert.include(
-            response.headers.get("content-security-policy") ?? "",
-            "img-src 'self' t3code-dev: blob: data: https://open-vsx.org http://127.0.0.1:* http://localhost:* http://[::1]:*",
-          );
-          assert.include(
-            response.headers.get("content-security-policy") ?? "",
-            "font-src 'self' t3code-dev: data:",
+          assert.equal(
+            response.headers.get("content-security-policy"),
+            "default-src 'none'; sandbox allow-scripts",
           );
         }),
       );
@@ -293,7 +285,6 @@ describe("ElectronProtocol", () => {
       "https://open-vsx.org",
       "http://127.0.0.1:*",
       "http://localhost:*",
-      "http://[::1]:*",
     ]);
     assert.deepEqual(directives["media-src"], [
       "'self'",
@@ -301,7 +292,11 @@ describe("ElectronProtocol", () => {
       "blob:",
       "http://127.0.0.1:*",
       "http://localhost:*",
-      "http://[::1]:*",
+    ]);
+    assert.deepEqual(directives["frame-src"], [
+      "'self'",
+      "http://127.0.0.1:*",
+      "http://localhost:*",
     ]);
     assert.deepEqual(directives["font-src"], ["'self'", "t3code:", "data:"]);
   });
