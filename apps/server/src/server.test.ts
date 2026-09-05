@@ -130,6 +130,7 @@ import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import { HTTP_ROUTER_CONFIG, makeRoutesLayer } from "./server.ts";
 import { WorkflowService } from "./workflows/WorkflowService.ts";
+import { WorkflowRunner } from "./workflows/WorkflowRunner.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
@@ -687,6 +688,7 @@ const buildAppUnderTest = (options?: {
             streamChanges: Stream.empty,
             ...options?.layers?.keybindings,
           }),
+          Layer.mock(WorkflowRunner)({ runClientCommand: (_command, effect) => effect }),
           Layer.mock(WorkflowService)({
             snapshot: () => Effect.succeed({ templates: [], tasks: [] }),
             changes: Stream.empty,

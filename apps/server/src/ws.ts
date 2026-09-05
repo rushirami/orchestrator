@@ -57,6 +57,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { WORKFLOW_METHODS } from "@t3tools/contracts";
 import { WorkflowService } from "./workflows/WorkflowService.ts";
+import { WorkflowRunner } from "./workflows/WorkflowRunner.ts";
 import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { localClientIdentity } from "./localClientIdentity.ts";
@@ -355,6 +356,7 @@ const makeWsRpcLayer = (
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
       const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
       const workflows = yield* WorkflowService;
+      const workflowRunner = yield* WorkflowRunner;
       const threadDeletionReactor = yield* ThreadDeletionReactor;
       // Every command dispatched on this connection carries the connecting
       // client's origin, including server-generated bootstrap sub-commands:
@@ -1095,9 +1097,13 @@ const makeWsRpcLayer = (
                     ),
                   )
                 : false;
-              const result = yield* dispatchNormalizedCommand(normalizedCommand).pipe(
-                Effect.tapError(() => cleanupFailedUploadedAttachments(command, normalizedCommand)),
-              );
+              const result = yield* workflowRunner
+                .runClientCommand(normalizedCommand, dispatchNormalizedCommand(normalizedCommand))
+                .pipe(
+                  Effect.tapError(() =>
+                    cleanupFailedUploadedAttachments(command, normalizedCommand),
+                  ),
+                );
               if (archiveCommand) {
                 if (shouldStopSessionAfterCommand) {
                   yield* Effect.gen(function* () {
@@ -1146,6 +1152,10 @@ const makeWsRpcLayer = (
             { "rpc.aggregate": "orchestration" },
           ),
         [WORKFLOW_METHODS.snapshot]: () => workflows.snapshot(),
+        [WORKFLOW_METHODS.launch]: (input) => workflowRunner.launch(input),
+        [WORKFLOW_METHODS.control]: (input) => workflowRunner.control(input),
+        [WORKFLOW_METHODS.artifact]: (input) => workflowRunner.artifact(input),
+        [WORKFLOW_METHODS.validate]: (input) => workflowRunner.validate(input),
         [WORKFLOW_METHODS.saveTemplate]: (input) => workflows.saveTemplate(input),
         [WORKFLOW_METHODS.remove]: (input) => workflows.remove(input),
         [WORKFLOW_METHODS.changes]: () => workflows.changes,

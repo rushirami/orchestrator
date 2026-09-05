@@ -7,6 +7,12 @@ import {
   WorkflowSnapshot,
   WorkflowSaveTemplateInput,
   WorkflowRemoveInput,
+  WorkflowTask,
+  WorkflowDefinition,
+  WorkflowLaunchInput,
+  WorkflowControlInput,
+  WorkflowArtifactInput,
+  WorkflowArtifact,
 } from "./workflows.ts";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
@@ -1020,6 +1026,26 @@ export const WsWorkflowChangesRpc = Rpc.make(WORKFLOW_METHODS.changes, {
   error: Schema.Never,
   stream: true,
 });
+export const WsWorkflowLaunchRpc = Rpc.make(WORKFLOW_METHODS.launch, {
+  payload: WorkflowLaunchInput,
+  success: WorkflowTask,
+  error: WorkflowError,
+});
+export const WsWorkflowControlRpc = Rpc.make(WORKFLOW_METHODS.control, {
+  payload: WorkflowControlInput,
+  success: WorkflowTask,
+  error: WorkflowError,
+});
+export const WsWorkflowArtifactRpc = Rpc.make(WORKFLOW_METHODS.artifact, {
+  payload: WorkflowArtifactInput,
+  success: WorkflowArtifact,
+  error: WorkflowError,
+});
+export const WsWorkflowValidateRpc = Rpc.make(WORKFLOW_METHODS.validate, {
+  payload: WorkflowDefinition,
+  success: Schema.Void,
+  error: WorkflowError,
+});
 
 export const WsOrchestrationGetTurnDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getTurnDiff, {
   payload: OrchestrationGetTurnDiffInput,
@@ -1231,6 +1257,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsWorkflowSaveTemplateRpc,
   WsWorkflowRemoveRpc,
   WsWorkflowChangesRpc,
+  WsWorkflowLaunchRpc,
+  WsWorkflowControlRpc,
+  WsWorkflowArtifactRpc,
+  WsWorkflowValidateRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationSearchThreadsRpc,

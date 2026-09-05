@@ -913,7 +913,6 @@ const make = Effect.gen(function* () {
     readonly branch: string | null;
     readonly worktreePath: string | null;
     readonly messageText: string;
-    readonly workflowReadOnly?: boolean;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
   }) {
     if (!input.branch || !input.worktreePath) {
@@ -973,7 +972,6 @@ const make = Effect.gen(function* () {
       readonly threadId: ThreadId;
       readonly cwd: string;
       readonly messageText: string;
-      readonly workflowReadOnly?: boolean;
       readonly attachments?: ReadonlyArray<ChatAttachment>;
       readonly titleSeed?: string;
     }) {

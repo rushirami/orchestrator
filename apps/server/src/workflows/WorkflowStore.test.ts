@@ -1,8 +1,13 @@
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import * as FileSystem from "effect/FileSystem";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import {
+  SqlitePersistenceMemory,
+  makeSqlitePersistenceLive,
+} from "../persistence/Layers/Sqlite.ts";
 import { WorkflowStore } from "./WorkflowStore.ts";
 import { templateFixture, taskFixture } from "./testFixtures.ts";
 
@@ -55,4 +60,36 @@ it.effect("deduplicates launch commands and removes dismissed workflow payloads"
     assert.equal((yield* sql`SELECT * FROM workflow_records`).length, 0);
     assert.equal((yield* sql`SELECT * FROM workflow_command_keys`).length, 1);
   }).pipe(Effect.provide(layer)),
+);
+
+it.effect("restores isolated templates and frozen tasks from a reopened disk database", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped();
+    const diskLayer = () =>
+      WorkflowStore.layer.pipe(
+        Layer.provideMerge(makeSqlitePersistenceLive(`${directory}/state.sqlite`)),
+      );
+    const first = templateFixture();
+    const task = taskFixture();
+    yield* Effect.gen(function* () {
+      yield* seed;
+      const store = yield* WorkflowStore;
+      yield* store.save(first, 0, "template.saved");
+      yield* store.save(templateFixture("project-b", "workflow-b"), 0, "template.saved");
+      yield* store.save(task, 0, "task.launched");
+    }).pipe(Effect.provide(diskLayer()), Effect.scoped);
+    yield* Effect.gen(function* () {
+      const store = yield* WorkflowStore;
+      assert.deepEqual(yield* store.get(task.id), task);
+      assert.equal((yield* store.list("project-b")).length, 1);
+      yield* store.remove(first.id, first.projectId, first.revision);
+      assert.deepEqual(yield* store.get(task.id), task);
+    }).pipe(Effect.provide(diskLayer()), Effect.scoped);
+    yield* Effect.gen(function* () {
+      const store = yield* WorkflowStore;
+      assert.isNull(yield* store.get(first.id));
+      assert.deepEqual(yield* store.get(task.id), task);
+    }).pipe(Effect.provide(diskLayer()), Effect.scoped);
+  }).pipe(Effect.scoped, Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );

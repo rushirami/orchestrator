@@ -12,7 +12,8 @@ export class WorkflowStoreError extends Schema.TaggedErrorClass<WorkflowStoreErr
   },
 ) {}
 
-const StoredValue = Schema.Union([WorkflowTemplate, WorkflowTask]);
+// Tasks also contain every template field; decode the more specific shape first.
+const StoredValue = Schema.Union([WorkflowTask, WorkflowTemplate]);
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(StoredValue));
 const encode = Schema.encodeEffect(Schema.fromJsonString(StoredValue));
 type StoredValue = typeof StoredValue.Type;
@@ -116,7 +117,21 @@ const makeWorkflowStore = Effect.gen(function* () {
     Effect.mapError((error) => (isStoreError(error) ? error : fail(String(error)))),
   );
 
-  return { list, get, save, remove };
+  const replay = Effect.fn(
+    function* (command: { id: string; fingerprint: string }) {
+      const rows = yield* sql<{
+        fingerprint: string;
+        record_id: string;
+      }>`SELECT fingerprint, record_id FROM workflow_command_keys WHERE command_id = ${command.id}`;
+      if (!rows[0]) return { matched: false as const, value: null };
+      if (rows[0].fingerprint !== command.fingerprint)
+        return yield* fail("This command ID was already used for a different request.");
+      return { matched: true as const, value: yield* get(rows[0].record_id) };
+    },
+    Effect.mapError((error) => (isStoreError(error) ? error : fail(String(error)))),
+  );
+
+  return { list, get, save, remove, replay };
 });
 
 export class WorkflowStore extends Context.Service<

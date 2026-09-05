@@ -107,6 +107,7 @@ export const WorkflowNodeState = Schema.Struct({
   result: Schema.NullOr(WorkflowStageResult),
   error: Schema.NullOr(Schema.String),
   artifactRevision: Schema.NullOr(TrimmedNonEmptyString),
+  reviewRevision: Schema.optional(TrimmedNonEmptyString),
 });
 export type WorkflowNodeState = typeof WorkflowNodeState.Type;
 
@@ -139,6 +140,10 @@ export const WORKFLOW_METHODS = {
   saveTemplate: "workflows.saveTemplate",
   remove: "workflows.remove",
   changes: "workflows.changes",
+  launch: "workflows.launch",
+  control: "workflows.control",
+  artifact: "workflows.artifact",
+  validate: "workflows.validate",
 } as const;
 
 export const WorkflowSnapshot = Schema.Struct({
@@ -161,6 +166,39 @@ export const WorkflowRemoveInput = Schema.Struct({
   expectedRevision: PositiveInt,
 });
 export type WorkflowRemoveInput = typeof WorkflowRemoveInput.Type;
+
+export const WorkflowLaunchInput = Schema.Struct({
+  taskId: WorkflowTaskId,
+  templateId: WorkflowId,
+  projectId: ProjectId,
+  templateRevision: PositiveInt,
+  workspaceName: TrimmedNonEmptyString,
+  baseBranch: TrimmedNonEmptyString,
+  branch: TrimmedNonEmptyString,
+  variables: Schema.Record(Schema.String, Schema.String),
+  threads: Schema.Array(WorkflowThread),
+});
+export type WorkflowLaunchInput = typeof WorkflowLaunchInput.Type;
+
+export const WorkflowControlInput = Schema.Struct({
+  taskId: WorkflowTaskId,
+  expectedRevision: PositiveInt,
+  action: Schema.Literals(["pause", "resume", "cancel", "retry", "approve", "revise"]),
+  nodeId: Schema.optional(TrimmedNonEmptyString),
+  artifactRevision: Schema.optional(TrimmedNonEmptyString),
+});
+export type WorkflowControlInput = typeof WorkflowControlInput.Type;
+
+export const WorkflowArtifactInput = Schema.Struct({
+  taskId: WorkflowTaskId,
+  nodeId: TrimmedNonEmptyString,
+  path: Schema.optional(TrimmedNonEmptyString),
+});
+export const WorkflowArtifact = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  content: Schema.String,
+  revision: TrimmedNonEmptyString,
+});
 
 export class WorkflowError extends Schema.TaggedErrorClass<WorkflowError>()("WorkflowError", {
   message: Schema.String,

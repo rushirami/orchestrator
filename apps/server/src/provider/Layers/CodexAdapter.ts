@@ -2226,7 +2226,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
-          readOnly: input.sandboxMode === "read-only",
+          ...(input.sandboxMode === "read-only" ? { readOnly: true } : {}),
           ...(input.modelSelection?.instanceId === boundInstanceId
             ? { model: input.modelSelection.model }
             : {}),
