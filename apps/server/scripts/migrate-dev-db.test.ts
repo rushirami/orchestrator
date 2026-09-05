@@ -18,6 +18,7 @@ const withDatabase = <A, E>(
  * `stopped-thread` qualifies for the clone. */
 const createFixtureSource = Effect.fn("createMigrateDevDbFixtureSource")(function* (
   baseDir: string,
+  legacyAuth = false,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -28,7 +29,7 @@ const createFixtureSource = Effect.fn("createMigrateDevDbFixtureSource")(functio
     databasePath,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations();
+      yield* runMigrations(legacyAuth ? { toMigrationInclusive: 47 } : {});
       // The real shared db carries this column from a branch build without a
       // matching migration; reproduce that drift so the filter is exercised.
       yield* sql`ALTER TABLE projection_threads ADD COLUMN monitor_json TEXT`;
@@ -56,7 +57,8 @@ const createFixtureSource = Effect.fn("createMigrateDevDbFixtureSource")(functio
           (event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at, actor_kind, payload_json, metadata_json)
           VALUES (${`event-${threadId}`}, 'thread', ${threadId}, 0, 'thread.created', '2026-08-01', 'user', '{}', '{}')`;
       }
-      yield* sql`INSERT INTO auth_sessions (session_id, subject, scopes, method, issued_at, expires_at)
+      if (legacyAuth)
+        yield* sql`INSERT INTO auth_sessions (session_id, subject, scopes, method, issued_at, expires_at)
         VALUES ('session-1', 'user', '[]', 'pairing', '2026-08-01', '2027-08-01')`;
     }),
   );
@@ -64,43 +66,45 @@ const createFixtureSource = Effect.fn("createMigrateDevDbFixtureSource")(functio
 });
 
 it.layer(NodeServices.layer)("migrate-dev-db", (it) => {
-  it.effect("keeps only stopped threads from live projects and clears auth state", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const sourceDir = yield* fs.makeTempDirectoryScoped({ prefix: "migrate-dev-db-src-" });
-      const destDir = yield* fs.makeTempDirectoryScoped({ prefix: "migrate-dev-db-dest-" });
-      const source = yield* createFixtureSource(sourceDir);
+  it.effect.each([false, true])(
+    "keeps stopped threads and removes obsolete credentials (legacy=%s)",
+    (legacyAuth) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const sourceDir = yield* fs.makeTempDirectoryScoped({ prefix: "migrate-dev-db-src-" });
+        const destDir = yield* fs.makeTempDirectoryScoped({ prefix: "migrate-dev-db-dest-" });
+        const source = yield* createFixtureSource(sourceDir, legacyAuth);
 
-      const result = yield* runMigrateDevDb(
-        { baseDir: destDir, source, projects: 5, threadsPerProject: 10 },
-        { sharedHome: sourceDir },
-      );
+        const result = yield* runMigrateDevDb(
+          { baseDir: destDir, source, projects: 5, threadsPerProject: 10 },
+          { sharedHome: sourceDir },
+        );
 
-      assert.equal(result.databasePath, path.join(destDir, "userdata", "state.sqlite"));
-      const kept = yield* withDatabase(
-        result.databasePath,
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          const threads = yield* sql<{ thread_id: string }>`
+        assert.equal(result.databasePath, path.join(destDir, "userdata", "state.sqlite"));
+        const kept = yield* withDatabase(
+          result.databasePath,
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            const threads = yield* sql<{ thread_id: string }>`
             SELECT thread_id FROM projection_threads ORDER BY thread_id`;
-          const events = yield* sql<{ stream_id: string }>`
+            const events = yield* sql<{ stream_id: string }>`
             SELECT stream_id FROM orchestration_events`;
-          const [auth] = yield* sql<{ count: number }>`
-            SELECT COUNT(*) AS count FROM auth_sessions`;
-          return { threads, events, authCount: auth?.count ?? 0 };
-        }),
-      );
-      assert.deepStrictEqual(
-        kept.threads.map((row) => row.thread_id),
-        ["stopped-thread"],
-      );
-      assert.deepStrictEqual(
-        kept.events.map((row) => row.stream_id),
-        ["stopped-thread"],
-      );
-      assert.equal(kept.authCount, 0);
-    }),
+            const [auth] = yield* sql<{ count: number }>`
+            SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('auth_sessions', 'auth_pairing_links')`;
+            return { threads, events, authCount: auth?.count ?? 0 };
+          }),
+        );
+        assert.deepStrictEqual(
+          kept.threads.map((row) => row.thread_id),
+          ["stopped-thread"],
+        );
+        assert.deepStrictEqual(
+          kept.events.map((row) => row.stream_id),
+          ["stopped-thread"],
+        );
+        assert.equal(kept.authCount, 0);
+      }),
   );
 
   it.effect("fails loudly on a migration slot collision", () =>
