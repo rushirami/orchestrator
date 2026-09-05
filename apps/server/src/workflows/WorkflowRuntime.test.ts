@@ -1,6 +1,12 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { OrchestrationEvent, ThreadId } from "@t3tools/contracts";
+import {
+  OrchestrationEvent,
+  OrchestrationThread,
+  OrchestrationThreadShell,
+  WorkflowStageResult,
+  ThreadId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -21,6 +27,9 @@ import { taskFixture } from "./testFixtures.ts";
 
 const decodeEvent = Schema.decodeUnknownSync(OrchestrationEvent);
 const decodeTurn = Schema.decodeUnknownSync(ProjectionTurnById);
+const decodeThread = Schema.decodeUnknownEffect(OrchestrationThread);
+const decodeShell = Schema.decodeUnknownEffect(OrchestrationThreadShell);
+const encodeStageResult = Schema.encodeEffect(Schema.fromJsonString(WorkflowStageResult));
 const now = "2026-09-05T00:00:00.000Z";
 const event = (type: string, payload: unknown) =>
   decodeEvent({
@@ -132,5 +141,213 @@ for (const [name, failedEvent] of [
       ),
       Effect.scoped,
     ),
+  );
+}
+
+const checkpointEvent = (status = "ready") =>
+  event("thread.turn-diff-completed", {
+    threadId: "affected",
+    turnId: "affected-turn",
+    checkpointTurnCount: 1,
+    checkpointRef: "refs/checkpoints/test",
+    status,
+    files: [],
+    assistantMessageId: "placeholder",
+    completedAt: now,
+  });
+const result: WorkflowStageResult = {
+  outcome: "complete",
+  summary: "Created specification",
+  artifacts: ["spec.md"],
+};
+const baseTurn = decodeTurn({
+  threadId: "affected",
+  turnId: "affected-turn",
+  pendingMessageId: "operation",
+  state: "running",
+  sourceProposedPlanThreadId: null,
+  sourceProposedPlanId: null,
+  assistantMessageId: "placeholder",
+  requestedAt: now,
+  startedAt: now,
+  completedAt: null,
+  checkpointTurnCount: 1,
+  checkpointRef: "refs/checkpoints/test",
+  checkpointStatus: "missing",
+  checkpointFiles: [],
+});
+
+type Step = {
+  event: OrchestrationEvent;
+  state: ProjectionTurnById["state"];
+  checkpoint: ProjectionTurnById["checkpointStatus"];
+};
+for (const [name, steps, expected] of [
+  [
+    "waits through an intermediate diff and checkpoint for provider completion",
+    [
+      { event: checkpointEvent("missing"), state: "running", checkpoint: "missing" },
+      { event: checkpointEvent(), state: "running", checkpoint: "ready" },
+      { event: sessionEvent("affected", null, "ready"), state: "completed", checkpoint: "ready" },
+    ],
+    "result",
+  ],
+  [
+    "waits for the checkpoint when the provider completes first",
+    [
+      { event: sessionEvent("affected", null, "ready"), state: "completed", checkpoint: "missing" },
+      { event: checkpointEvent(), state: "completed", checkpoint: "ready" },
+    ],
+    "result",
+  ],
+  [
+    "settles an interrupted session that retains its active turn ID",
+    [
+      {
+        event: sessionEvent("affected", "affected-turn", "interrupted"),
+        state: "interrupted",
+        checkpoint: "ready",
+      },
+    ],
+    "failed",
+  ],
+  [
+    "rejects an interrupted turn even with a complete result and ready checkpoint",
+    [
+      {
+        event: sessionEvent("affected", null, "interrupted"),
+        state: "interrupted",
+        checkpoint: "ready",
+      },
+    ],
+    "failed",
+  ],
+  [
+    "rejects a failed turn even with a complete result and ready checkpoint",
+    [{ event: checkpointEvent(), state: "error", checkpoint: "ready" }],
+    "failed",
+  ],
+  [
+    "reports checkpoint failure after the provider completes",
+    [{ event: checkpointEvent("error"), state: "completed", checkpoint: "error" }],
+    "failed",
+  ],
+] satisfies [string, Step[], string][]) {
+  it.effect(name, () =>
+    Effect.gen(function* () {
+      let current = baseTurn;
+      const detail = yield* decodeThread({
+        id: "affected",
+        projectId: "project-a",
+        title: "Builder",
+        modelSelection: { instanceId: "codex", model: "default" },
+        runtimeMode: "full-access",
+        branch: null,
+        worktreePath: null,
+        latestTurn: null,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        activities: [],
+        checkpoints: [],
+        session: null,
+        messages: [
+          {
+            id: "final",
+            turnId: "affected-turn",
+            role: "assistant",
+            streaming: false,
+            text: yield* encodeStageResult(result),
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "placeholder",
+            turnId: "affected-turn",
+            role: "assistant",
+            streaming: true,
+            text: "Partial output",
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "user",
+            turnId: "affected-turn",
+            role: "user",
+            streaming: false,
+            text: "Not a result",
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "other",
+            turnId: "other-turn",
+            role: "assistant",
+            streaming: false,
+            text: "Unrelated turn",
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+      });
+      const shell = yield* decodeShell({
+        ...detail,
+        latestTurn: { ...baseTurn, state: "completed" },
+        latestUserMessageAt: null,
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+        hasActionableProposedPlan: false,
+      });
+      const runtime = yield* WorkflowRuntime.pipe(
+        Effect.provide(
+          WorkflowRuntime.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                ServerConfig.layerTest(process.cwd(), { prefix: "workflow-completion-" }),
+                Layer.mock(OrchestrationEngineService)({
+                  subscribeDomainEvents: Effect.succeed(
+                    Stream.fromIterable<Step>(steps).pipe(
+                      Stream.flatMap((step) =>
+                        Stream.fromEffect(
+                          Effect.sync(() => {
+                            current = {
+                              ...baseTurn,
+                              state: step.state,
+                              checkpointStatus: step.checkpoint,
+                            };
+                            return step.event;
+                          }),
+                        ),
+                      ),
+                    ),
+                  ),
+                }),
+                Layer.mock(ProjectionTurnRepository)({
+                  getByTurnId: () => Effect.sync(() => Option.some(current)),
+                }),
+                Layer.mock(ProjectionSnapshotQuery)({
+                  getThreadDetailById: () => Effect.succeed(Option.some(detail)),
+                  getThreadShellById: () => Effect.succeed(Option.some(shell)),
+                }),
+                Layer.mock(ProviderService)({}),
+                Layer.mock(GitVcsDriver)({}),
+              ).pipe(Layer.provideMerge(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+            ),
+          ),
+        ),
+      );
+      yield* runtime.watch({ ...taskFixture(), threadIds: { builder: ThreadId.make("affected") } });
+      const received = yield* Stream.runCollect(runtime.events);
+      assert.equal(received.length, 1);
+      assert.equal(received[0]?.type, expected);
+      if (expected === "result")
+        assert.deepEqual(received[0], {
+          type: "result",
+          threadId: ThreadId.make("affected"),
+          turnId: "affected-turn",
+          operationId: "operation",
+          result,
+        });
+    }).pipe(Effect.scoped),
   );
 }

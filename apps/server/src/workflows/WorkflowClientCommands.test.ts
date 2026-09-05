@@ -22,6 +22,7 @@ const layer = Layer.mergeAll(WorkflowService.layer, WorkflowStore.layer).pipe(
 
 const idleRuntime = WorkflowRuntime.of({
   watch: () => Effect.void,
+  readResult: () => Effect.succeed(null),
   reviewRevision: () => Effect.succeed("revision"),
   validate: () => Effect.void,
   plan: Effect.succeed,

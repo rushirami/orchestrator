@@ -1,12 +1,16 @@
 import * as NodeCrypto from "node:crypto";
 import {
   ThreadId,
+  TurnId,
   WorkflowError,
   WorkflowLaunchInput,
   resolveWorkflowPrompt,
   type WorkflowControlInput,
   type WorkflowTask,
   type OrchestrationCommand,
+  type WorkflowNode,
+  type WorkflowNodeState,
+  type WorkflowStageResult,
 } from "@t3tools/contracts";
 import {
   readyWorkflowNodes,
@@ -279,6 +283,27 @@ export const makeWorkflowRunner = Effect.gen(function* () {
     Effect.mapError(fail),
   );
 
+  const validateResult = Effect.fn(function* (
+    task: WorkflowTask,
+    node: Extract<WorkflowNode, { kind: "agent" }>,
+    state: WorkflowNodeState,
+    result: WorkflowStageResult,
+  ) {
+    if (
+      node.access === "read-only" &&
+      state.reviewRevision !== (yield* runtime.reviewRevision(task))
+    )
+      return yield* new WorkflowError({
+        message:
+          "The worktree changed during review. Inspect the changes and retry this review against the current code.",
+      });
+    return yield* validateWorkflowArtifacts(
+      task.worktreePath!,
+      node.skills[state.skillIndex]!.outputPaths,
+      result,
+    );
+  });
+
   const control = Effect.fn(
     function* (input: WorkflowControlInput) {
       let task = yield* taskById(input.taskId);
@@ -311,6 +336,42 @@ export const makeWorkflowRunner = Effect.gen(function* () {
           },
           { type: input.action, nodeId: node.id, artifactRevision: input.artifactRevision },
         );
+      } else if (input.action === "reconcile") {
+        const state = task.nodes.find((item) => item.nodeId === input.nodeId);
+        const threadId = node?.kind === "agent" ? task.threadIds[node.threadId] : undefined;
+        if (
+          task.status !== "paused" ||
+          node?.kind !== "agent" ||
+          state?.status !== "failed" ||
+          !state.operationId ||
+          !state.turnId ||
+          !threadId ||
+          !task.worktreePath
+        )
+          return yield* new WorkflowError({
+            message: "Select a failed stage with a recorded provider turn to recheck.",
+          });
+        const result = yield* runtime.readResult(threadId, TurnId.make(state.turnId));
+        if (
+          !result ||
+          result.type !== "result" ||
+          result.operationId !== state.operationId ||
+          result.turnId !== state.turnId ||
+          result.threadId !== threadId
+        )
+          return yield* new WorkflowError({
+            message:
+              result?.type === "failed"
+                ? result.error
+                : "This stage does not have a completed turn with a ready checkpoint. Inspect the agent thread before retrying.",
+          });
+        const validated = yield* validateResult(task, node, state, result.result);
+        task = yield* transition(task, {
+          type: "reconcile",
+          nodeId: node.id,
+          operationId: state.operationId,
+          result: validated,
+        });
       } else if (input.action === "retry") {
         if (!node)
           return yield* new WorkflowError({ message: "Select the failed stage to retry." });
@@ -391,21 +452,9 @@ export const makeWorkflowRunner = Effect.gen(function* () {
           error: event.error,
         });
       else {
-        const validated = yield* Effect.gen(function* () {
-          if (
-            node.access === "read-only" &&
-            state.reviewRevision !== (yield* runtime.reviewRevision(value))
-          )
-            return yield* new WorkflowError({
-              message:
-                "The worktree changed during review. Inspect the changes and retry this review against the current code.",
-            });
-          return yield* validateWorkflowArtifacts(
-            value.worktreePath!,
-            node.skills[state.skillIndex]!.outputPaths,
-            event.result,
-          );
-        }).pipe(Effect.result);
+        const validated = yield* validateResult(value, node, state, event.result).pipe(
+          Effect.result,
+        );
         task =
           validated._tag === "Failure"
             ? yield* transition(value, {

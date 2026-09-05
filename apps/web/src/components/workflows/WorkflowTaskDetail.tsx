@@ -241,6 +241,19 @@ export function WorkflowTaskDetail({
               </>
             )}
             {state.error && <p className="workflow-error">{state.error}</p>}
+            {state.status === "failed" &&
+              task.status === "paused" &&
+              selected.kind === "agent" &&
+              state.turnId &&
+              state.operationId && (
+                <button
+                  className="workflow-button"
+                  disabled={busy}
+                  onClick={() => void act("reconcile", selected.id)}
+                >
+                  Recheck completed turn
+                </button>
+              )}
             {state.status === "failed" && task.status === "paused" && (
               <button
                 className="workflow-button"

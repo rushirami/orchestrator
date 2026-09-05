@@ -56,6 +56,7 @@ it.effect(
       const runner = yield* makeWorkflowRunner.pipe(
         Effect.provideService(WorkflowRuntime, {
           watch: () => Effect.void,
+          readResult: () => Effect.succeed(null),
           reviewRevision: () => Effect.succeed(reviewBasis),
           validate: () => Effect.void,
           plan: (task) => Effect.succeed({ ...task, worktreePath: worktree, baseCommit: "abc123" }),
@@ -232,6 +233,7 @@ it.effect("recovers uncertain dispatches without resending and reconciles cancel
     const runner = yield* makeWorkflowRunner.pipe(
       Effect.provideService(WorkflowRuntime, {
         watch: () => Effect.void,
+        readResult: () => Effect.succeed(null),
         reviewRevision: () => Effect.succeed("revision"),
         validate: () => Effect.void,
         plan: Effect.succeed,
@@ -392,6 +394,7 @@ for (const scenario of [
         const runner = yield* makeWorkflowRunner.pipe(
           Effect.provideService(WorkflowRuntime, {
             watch: () => Effect.void,
+            readResult: () => Effect.succeed(null),
             reviewRevision: () => Effect.succeed(basis),
             validate: () => Effect.void,
             plan: Effect.succeed,
@@ -500,6 +503,7 @@ it.effect("project deletion removes templates saved after its guard snapshot", (
     const runner = yield* makeWorkflowRunner.pipe(
       Effect.provideService(WorkflowRuntime, {
         watch: () => Effect.void,
+        readResult: () => Effect.succeed(null),
         reviewRevision: () => Effect.succeed("revision"),
         validate: () => Effect.void,
         plan: Effect.succeed,
@@ -553,6 +557,7 @@ it.effect("project deletion removes templates saved after its guard snapshot", (
 
 const idleRuntime = WorkflowRuntime.of({
   watch: () => Effect.void,
+  readResult: () => Effect.succeed(null),
   reviewRevision: () => Effect.succeed("revision"),
   validate: () => Effect.void,
   plan: Effect.succeed,
@@ -624,3 +629,120 @@ it.effect("pauses an affected stage on lookup failure without stopping other wor
     assert.include(failed.nodes[0]?.error, "Inspect the agent thread");
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );
+
+for (const scenario of [
+  "completed",
+  "not-completed",
+  "wrong-operation",
+  "missing-artifact",
+  "changed-review",
+] as const) {
+  it.effect(`rechecks a failed stage without dispatching another turn: ${scenario}`, () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO projection_projects(project_id, title, workspace_root, scripts_json, created_at, updated_at) VALUES ('project-a', 'Project', '/tmp/project', '[]', '2026-09-04T00:00:00.000Z', '2026-09-04T00:00:00.000Z')`;
+      const fs = yield* FileSystem.FileSystem;
+      const worktree = yield* fs.makeTempDirectoryScoped();
+      if (scenario !== "missing-artifact")
+        yield* fs.writeFileString(`${worktree}/spec.md`, "# Saved specification\n");
+      const store = yield* WorkflowStore;
+      const fixture = taskFixture();
+      const task: WorkflowTask = {
+        ...fixture,
+        status: "paused",
+        worktreePath: worktree,
+        error: "The provider turn did not complete successfully.",
+        threadIds: { builder: ThreadId.make("builder-thread") },
+        definition: {
+          ...fixture.definition,
+          nodes: fixture.definition.nodes.map((node) =>
+            node.id === "plan" && node.kind === "agent" && scenario === "changed-review"
+              ? { ...node, access: "read-only" }
+              : node,
+          ),
+        },
+        nodes: fixture.nodes.map((node) =>
+          node.nodeId === "plan"
+            ? {
+                ...node,
+                status: "failed",
+                operationId: "original-operation",
+                turnId: "original-turn",
+                error: "The provider turn did not complete successfully.",
+                reviewRevision: "original-code",
+              }
+            : node,
+        ),
+      };
+      yield* store.save(task, 0, "task.seeded");
+      let dispatches = 0;
+      const runner = yield* makeWorkflowRunner.pipe(
+        Effect.provideService(WorkflowRuntime, {
+          ...idleRuntime,
+          dispatch: () =>
+            Effect.sync(() => {
+              dispatches += 1;
+            }),
+          readResult: (threadId, turnId) =>
+            Effect.sync(() => {
+              assert.equal(threadId, "builder-thread");
+              assert.equal(turnId, "original-turn");
+              return scenario === "not-completed"
+                ? null
+                : {
+                    type: "result",
+                    threadId,
+                    turnId,
+                    operationId:
+                      scenario === "wrong-operation" ? "another-operation" : "original-operation",
+                    result: {
+                      outcome: "complete",
+                      summary: "Created specification",
+                      artifacts: ["spec.md"],
+                    },
+                  };
+            }),
+        }),
+      );
+      const checked = yield* runner
+        .control({
+          taskId: task.id,
+          expectedRevision: task.revision,
+          action: "reconcile",
+          nodeId: "plan",
+        })
+        .pipe(Effect.result);
+      assert.equal(dispatches, 0);
+      if (scenario !== "completed") {
+        assert.equal(checked._tag, "Failure");
+        assert.deepEqual(yield* store.get(task.id), task);
+        return;
+      }
+      assert.equal(checked._tag, "Success");
+      if (checked._tag !== "Success") return;
+      const recovered = checked.success;
+      assert.equal(recovered.status, "paused");
+      assert.equal(recovered.error, null);
+      assert.equal(recovered.nodes[0]?.status, "complete");
+      assert.equal(recovered.nodes[0]?.error, null);
+      assert.equal(recovered.nodes[0]?.attempt, task.nodes[0]?.attempt);
+      assert.equal(recovered.nodes[1]?.status, "pending");
+      const stale = yield* runner
+        .control({
+          taskId: task.id,
+          expectedRevision: task.revision,
+          action: "reconcile",
+          nodeId: "plan",
+        })
+        .pipe(Effect.result);
+      assert.equal(stale._tag, "Failure");
+      const resumed = yield* runner.control({
+        taskId: task.id,
+        expectedRevision: recovered.revision,
+        action: "resume",
+      });
+      assert.equal(resumed.nodes[1]?.status, "awaiting-approval");
+      assert.equal(dispatches, 0);
+    }).pipe(Effect.scoped, Effect.provide(layer)),
+  );
+}
