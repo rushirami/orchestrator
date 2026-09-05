@@ -76,7 +76,7 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     `connect-src ${connectSources.join(" ")}`,
-    `img-src 'self' ${input.scheme}: blob: data: http://127.0.0.1:* http://localhost:* http://[::1]:*`,
+    `img-src 'self' ${input.scheme}: blob: data: https://open-vsx.org http://127.0.0.1:* http://localhost:* http://[::1]:*`,
     `media-src 'self' ${input.scheme}: blob: http://127.0.0.1:* http://localhost:* http://[::1]:*`,
     "style-src 'self' 'unsafe-inline'",
     `font-src 'self' ${input.scheme}: data:`,

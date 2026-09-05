@@ -144,7 +144,7 @@ describe("ElectronProtocol", () => {
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
-            "img-src 'self' t3code-dev: blob: data: http://127.0.0.1:* http://localhost:* http://[::1]:*",
+            "img-src 'self' t3code-dev: blob: data: https://open-vsx.org http://127.0.0.1:* http://localhost:* http://[::1]:*",
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
@@ -290,6 +290,7 @@ describe("ElectronProtocol", () => {
       "t3code:",
       "blob:",
       "data:",
+      "https://open-vsx.org",
       "http://127.0.0.1:*",
       "http://localhost:*",
       "http://[::1]:*",
