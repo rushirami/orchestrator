@@ -306,6 +306,49 @@ const RESUME_THREAD_ID = ThreadId.make("thread-claude-resume");
 const SYNTHETIC_SUBAGENT_MODEL = "claude-synthetic-subagent[expanded]";
 
 describe("ClaudeAdapterLive", () => {
+  it.effect("enforces read-only workflow reviews before configured tool permissions", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        runtimeMode: "full-access",
+        sandboxMode: "read-only",
+      });
+      const options = harness.getLastCreateQueryInput()?.options;
+      assert.equal(options?.permissionMode, "dontAsk");
+      assert.deepEqual(options?.tools, ["Read", "Glob", "Grep"]);
+      assert.equal(options?.allowDangerouslySkipPermissions, undefined);
+      const hook = options?.hooks?.PreToolUse?.[0]?.hooks[0];
+      assert.ok(hook);
+      for (const toolName of ["Read", "Write", "Bash", "Agent", "mcp__files__write"]) {
+        const result = yield* Effect.promise(() =>
+          hook(
+            {
+              hook_event_name: "PreToolUse",
+              session_id: "review",
+              transcript_path: "/tmp/transcript",
+              cwd: "/tmp",
+              tool_name: toolName,
+              tool_input: {},
+              tool_use_id: "tool-1",
+            },
+            "tool-1",
+            { signal: new AbortController().signal },
+          ),
+        );
+        assert.ok("hookSpecificOutput" in result);
+        assert.ok(result.hookSpecificOutput && "permissionDecision" in result.hookSpecificOutput);
+        assert.equal(
+          result.hookSpecificOutput.permissionDecision,
+          toolName === "Read" ? "allow" : "deny",
+        );
+      }
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
   it.effect("returns validation error for non-claude provider on startSession", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

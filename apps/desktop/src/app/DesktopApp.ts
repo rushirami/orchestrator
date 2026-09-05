@@ -241,6 +241,8 @@ const startup = Effect.gen(function* () {
   }
   const userDataPath = yield* appIdentity.resolveUserDataPath;
   yield* electronApp.setPath("userData", userDataPath);
+  if (environment.userDataDirectoryOverride !== undefined)
+    yield* electronApp.setPath("sessionData", userDataPath);
   yield* logStartupInfo("runtime logging configured", { logDir: environment.logDir });
   yield* desktopSettings.load;
   yield* removeLegacyConnections(environment.stateDir).pipe(

@@ -20,6 +20,7 @@ import {
   type ModelUsage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
+import { WORKFLOW_REVIEW_TOOLS, workflowReviewToolAllowed } from "../workflowReadOnlyPolicy.ts";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
 import { type ClaudeScopedLimitNames, claudeRateLimitEventToUpdate } from "./claudeUsageLimits.ts";
 import {
@@ -4539,7 +4540,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         auto: "auto",
         "full-access": "bypassPermissions",
       };
-      const permissionMode = runtimeModeToPermission[input.runtimeMode];
+      const permissionMode =
+        input.sandboxMode === "read-only" ? "dontAsk" : runtimeModeToPermission[input.runtimeMode];
       const settings = {
         ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
         ...(fastMode ? { fastMode: true } : {}),
@@ -4558,6 +4560,32 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         serverConfig.attachmentsDir,
       ];
       const queryOptions: ClaudeQueryOptions = {
+        ...(input.sandboxMode === "read-only"
+          ? {
+              tools: [...WORKFLOW_REVIEW_TOOLS],
+              allowedTools: [...WORKFLOW_REVIEW_TOOLS],
+              hooks: {
+                PreToolUse: [
+                  {
+                    hooks: [
+                      async (hookInput) => ({
+                        hookSpecificOutput: {
+                          hookEventName: "PreToolUse" as const,
+                          permissionDecision:
+                            hookInput.hook_event_name === "PreToolUse" &&
+                            workflowReviewToolAllowed(hookInput.tool_name)
+                              ? ("allow" as const)
+                              : ("deny" as const),
+                          permissionDecisionReason:
+                            "This workflow reviewer can only inspect files with Read, Glob, and Grep.",
+                        },
+                      }),
+                    ],
+                  },
+                ],
+              },
+            }
+          : {}),
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(apiModelId ? { model: apiModelId } : {}),
         pathToClaudeCodeExecutable: claudeBinaryPath,
@@ -5011,6 +5039,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   return {
     provider: PROVIDER,
     capabilities: {
+      supportsReadOnlyWorkflow: true,
       sessionModelSwitch: "in-session",
     },
     startSession,

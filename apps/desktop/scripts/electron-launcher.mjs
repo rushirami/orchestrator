@@ -391,11 +391,16 @@ export function resolveElectronPath() {
   return buildMacLauncher(electronBinaryPath);
 }
 
+export function resolveElectronProfileArgs(environment = process.env) {
+  const directory = environment.T3CODE_DESKTOP_USER_DATA_DIR?.trim();
+  return directory ? [`--user-data-dir=${NodePath.resolve(directory)}`] : [];
+}
+
 export function resolveElectronLaunchCommand(args = []) {
   const electronPath = resolveElectronPath();
   return {
     electronPath,
-    args: [...resolveLinuxSandboxArgs(electronPath), ...args],
+    args: [...resolveLinuxSandboxArgs(electronPath), ...resolveElectronProfileArgs(), ...args],
   };
 }
 

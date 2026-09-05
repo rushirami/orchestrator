@@ -104,9 +104,9 @@ Opening an active task should reveal its execution progress, associated agent th
 
 There is no saved archive of past workflow runs and no template version history in the initial product. The workflow sidebar focuses on current tasks, including those waiting for user input. Ordinary T3 Code thread history and files produced in the worktree remain useful independently; omitting a workflow-run archive does not mean deleting those conversations or artifacts.
 
-The designs use a white theme throughout, with T3 Code's sidebar, project breadcrumbs, compact controls, and top-right action placement. Superset informs the launch form's grouping, not the overall app shell or theme. Avoid introducing an unrelated dashboard layout.
+Workflow screens follow the app's selected light, dark, system, or custom theme, with T3 Code's sidebar, project breadcrumbs, compact controls, and top-right action placement. Superset informs the launch form's grouping, not the overall app shell or theme. Avoid introducing an unrelated dashboard layout.
 
-The current [Paper designs](https://app.paper.design/file/01M1PYQ1380EBK0T3YNH8WQ3S2/1-0) cover stage editing, adding a stage, prompt variables, launch, active execution, and worktree/thread/failure settings. Navigation between settings sections after removing the secondary sidebar, the exact behavior of **Test workflow**, and detailed approval, failure, and completion interactions still need design refinement. These mockups establish the direction without settling those interactions.
+The [Paper designs](https://app.paper.design/file/01M1PYQ1380EBK0T3YNH8WQ3S2/1-0) establish the T3-style layout; implementation colors follow the active app theme. The implementation uses one inline template-settings surface and **Validate** to check a graph and provider capabilities without starting work. Approvals show the exact artifact being approved; failures pause for inspection and explicit retry. Completed tasks stay visible until dismissed, which removes workflow-only state while preserving their ordinary threads and files. Launch and active-task views derive their rows and branches from the configured graph.
 
 ## Direction from OpenAI Symphony
 
@@ -116,7 +116,7 @@ Orchestrator should borrow the ideas of inspectable workflow definitions, isolat
 
 ## Build on what makes T3 Code useful
 
-The experience should preserve T3 Code's open foundation, provider choice, performance, and support for local and remote environments. Workflow execution should belong to the environment running the agents and continue when a client disconnects. Web, desktop, and mobile clients should be able to inspect progress and handle relevant approvals against that shared state.
+The experience should preserve T3 Code's open foundation, provider choice, and performance within this desktop-only fork. The Electron application uses a local loopback backend, with optional desktop-managed WSL environments. Workflow state belongs to that backend and survives renderer reloads and application restarts. Fully quitting the application may stop agent execution; unfinished tasks must reconcile their state when the application reopens. Mobile, remote access, hosted browser clients, T3 accounts, and external analytics are outside this fork's scope.
 
 The initial scope should prove one complete journey: configure a reusable template of connected stages in the project view, fill its variables and launch a worktree, generate and approve a spec, implement it, create a PR, and start multiple selected review branches. Join their findings before completing or returning to Builder. The user follows the active task through the Workflows sidebar and can open its agent threads when intervention is needed. Concurrent editing in a shared worktree and automatic tracker-based dispatch can wait until real workflows justify them.
 

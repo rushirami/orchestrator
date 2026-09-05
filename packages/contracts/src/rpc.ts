@@ -1,6 +1,19 @@
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import {
+  WORKFLOW_METHODS,
+  WorkflowError,
+  WorkflowSnapshot,
+  WorkflowSaveTemplateInput,
+  WorkflowRemoveInput,
+  WorkflowTask,
+  WorkflowDefinition,
+  WorkflowLaunchInput,
+  WorkflowControlInput,
+  WorkflowArtifactInput,
+  WorkflowArtifact,
+} from "./workflows.ts";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
   ProviderAuthCancelInput,
@@ -992,6 +1005,48 @@ export const WsOrchestrationGetWorkflowScriptRpc = Rpc.make(
   },
 );
 
+export const WsWorkflowSnapshotRpc = Rpc.make(WORKFLOW_METHODS.snapshot, {
+  payload: Schema.Struct({}),
+  success: WorkflowSnapshot,
+  error: WorkflowError,
+});
+export const WsWorkflowSaveTemplateRpc = Rpc.make(WORKFLOW_METHODS.saveTemplate, {
+  payload: WorkflowSaveTemplateInput,
+  success: WorkflowSnapshot,
+  error: WorkflowError,
+});
+export const WsWorkflowRemoveRpc = Rpc.make(WORKFLOW_METHODS.remove, {
+  payload: WorkflowRemoveInput,
+  success: WorkflowSnapshot,
+  error: WorkflowError,
+});
+export const WsWorkflowChangesRpc = Rpc.make(WORKFLOW_METHODS.changes, {
+  payload: Schema.Struct({}),
+  success: NonNegativeInt,
+  error: Schema.Never,
+  stream: true,
+});
+export const WsWorkflowLaunchRpc = Rpc.make(WORKFLOW_METHODS.launch, {
+  payload: WorkflowLaunchInput,
+  success: WorkflowTask,
+  error: WorkflowError,
+});
+export const WsWorkflowControlRpc = Rpc.make(WORKFLOW_METHODS.control, {
+  payload: WorkflowControlInput,
+  success: WorkflowTask,
+  error: WorkflowError,
+});
+export const WsWorkflowArtifactRpc = Rpc.make(WORKFLOW_METHODS.artifact, {
+  payload: WorkflowArtifactInput,
+  success: WorkflowArtifact,
+  error: WorkflowError,
+});
+export const WsWorkflowValidateRpc = Rpc.make(WORKFLOW_METHODS.validate, {
+  payload: WorkflowDefinition,
+  success: Schema.Void,
+  error: WorkflowError,
+});
+
 export const WsOrchestrationGetTurnDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getTurnDiff, {
   payload: OrchestrationGetTurnDiffInput,
   success: OrchestrationRpcSchemas.getTurnDiff.output,
@@ -1198,6 +1253,14 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeResourceTelemetryRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetWorkflowScriptRpc,
+  WsWorkflowSnapshotRpc,
+  WsWorkflowSaveTemplateRpc,
+  WsWorkflowRemoveRpc,
+  WsWorkflowChangesRpc,
+  WsWorkflowLaunchRpc,
+  WsWorkflowControlRpc,
+  WsWorkflowArtifactRpc,
+  WsWorkflowValidateRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationSearchThreadsRpc,

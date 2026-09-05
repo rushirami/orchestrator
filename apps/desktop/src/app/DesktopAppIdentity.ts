@@ -47,6 +47,8 @@ const normalizeCommitHash = (value: string): Option.Option<string> => {
 
 export const resolveUserDataPath = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
+  if (environment.userDataDirectoryOverride !== undefined)
+    return environment.userDataDirectoryOverride;
   const fileSystem = yield* FileSystem.FileSystem;
   const legacyPath = environment.path.join(
     environment.appDataDirectory,
