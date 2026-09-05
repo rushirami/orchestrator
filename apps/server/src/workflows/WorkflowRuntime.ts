@@ -365,6 +365,37 @@ const make = Effect.gen(function* () {
           }
           if (
             event.type === "thread.activity-appended" &&
+            event.payload.activity.kind === "checkpoint.capture.failed"
+          ) {
+            const { threadId, activity } = event.payload;
+            const payload =
+              activity.payload && typeof activity.payload === "object" ? activity.payload : {};
+            if (
+              !activity.turnId ||
+              ("checkpointCaptured" in payload && payload.checkpointCaptured === true)
+            )
+              return null;
+            const turn = yield* turns
+              .getByTurnId({ threadId, turnId: activity.turnId })
+              .pipe(Effect.mapError(runtimeError));
+            if (
+              Option.isNone(turn) ||
+              !turn.value.pendingMessageId ||
+              turn.value.checkpointStatus === "ready"
+            )
+              return null;
+            const detail = "detail" in payload ? payload.detail : undefined;
+            return {
+              type: "failed",
+              threadId,
+              turnId: activity.turnId,
+              operationId: turn.value.pendingMessageId,
+              error:
+                typeof detail === "string" ? `${activity.summary}: ${detail}` : activity.summary,
+            };
+          }
+          if (
+            event.type === "thread.activity-appended" &&
             event.payload.activity.kind === "provider.turn.start.failed"
           ) {
             const payload = event.payload.activity.payload;
@@ -403,7 +434,7 @@ const make = Effect.gen(function* () {
                       ? event.payload.session.activeTurnId
                       : event.type === "thread.turn-diff-completed"
                         ? event.payload.turnId
-                        : null,
+                        : event.payload.activity.turnId,
                   error: `Could not read workflow turn state. Inspect the agent thread before retrying. ${error.message}`,
                 };
               }),

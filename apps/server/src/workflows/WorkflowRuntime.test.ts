@@ -58,10 +58,27 @@ const sessionEvent = (threadId: string, activeTurnId: string | null, status = "r
       updatedAt: now,
     },
   });
+const checkpointFailureEvent = (
+  turnId: string | null = "affected-turn",
+  checkpointCaptured = false,
+) =>
+  event("thread.activity-appended", {
+    threadId: "affected",
+    activity: {
+      id: "capture-failure",
+      kind: "checkpoint.capture.failed",
+      tone: "error",
+      summary: "Checkpoint capture failed",
+      payload: { detail: "Git could not write the checkpoint.", checkpointCaptured },
+      turnId,
+      createdAt: now,
+    },
+  });
 
 for (const [name, failedEvent] of [
   ["active session turn", sessionEvent("affected", "affected-turn")],
   ["pending failed session", sessionEvent("affected", null, "error")],
+  ["checkpoint capture failure", checkpointFailureEvent()],
   [
     "completed turn",
     event("thread.turn-diff-completed", {
@@ -183,6 +200,52 @@ type Step = {
   checkpoint: ProjectionTurnById["checkpointStatus"];
 };
 for (const [name, steps, expected] of [
+  [
+    "fails a completed turn when its placeholder checkpoint capture fails",
+    [
+      { event: sessionEvent("affected", null, "ready"), state: "completed", checkpoint: "missing" },
+      { event: checkpointFailureEvent(), state: "completed", checkpoint: "missing" },
+    ],
+    "failed",
+  ],
+  [
+    "fails a completed turn when checkpoint capture fails without a placeholder",
+    [{ event: checkpointFailureEvent(), state: "completed", checkpoint: null }],
+    "failed",
+  ],
+  [
+    "surfaces capture failure even before the terminal session is projected",
+    [{ event: checkpointFailureEvent(), state: "running", checkpoint: "missing" }],
+    "failed",
+  ],
+  [
+    "ignores diff summary failure when the checkpoint was captured",
+    [
+      {
+        event: checkpointFailureEvent("affected-turn", true),
+        state: "completed",
+        checkpoint: "missing",
+      },
+      { event: checkpointEvent(), state: "completed", checkpoint: "ready" },
+    ],
+    "result",
+  ],
+  [
+    "ignores a late capture failure after a ready checkpoint",
+    [
+      { event: checkpointFailureEvent(), state: "completed", checkpoint: "ready" },
+      { event: sessionEvent("affected", null, "ready"), state: "completed", checkpoint: "ready" },
+    ],
+    "result",
+  ],
+  [
+    "does not assign an uncorrelated capture failure to the latest turn",
+    [
+      { event: checkpointFailureEvent(null), state: "completed", checkpoint: null },
+      { event: checkpointEvent(), state: "completed", checkpoint: "ready" },
+    ],
+    "result",
+  ],
   [
     "waits through an intermediate diff and checkpoint for provider completion",
     [
@@ -340,6 +403,17 @@ for (const [name, steps, expected] of [
       const received = yield* Stream.runCollect(runtime.events);
       assert.equal(received.length, 1);
       assert.equal(received[0]?.type, expected);
+      if (
+        expected === "failed" &&
+        steps.some((step) => step.event.type === "thread.activity-appended")
+      )
+        assert.deepEqual(received[0], {
+          type: "failed",
+          threadId: ThreadId.make("affected"),
+          turnId: "affected-turn",
+          operationId: "operation",
+          error: "Checkpoint capture failed: Git could not write the checkpoint.",
+        });
       if (expected === "result")
         assert.deepEqual(received[0], {
           type: "result",
