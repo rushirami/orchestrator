@@ -81,7 +81,7 @@ const decodeTransferShellSnapshot = Schema.decodeUnknownEffect(
 
 import * as Data from "effect/Data";
 import * as NativeAppIconResolver from "./assets/NativeAppIconResolver.ts";
-import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as ServerSecretStore from "./secrets/ServerSecretStore.ts";
 import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";

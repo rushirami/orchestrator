@@ -11,7 +11,6 @@ import { sharedServerCommandFlags } from "./cli/config.ts";
 import { projectCommand } from "./cli/project.ts";
 import { runServerCommand, startCommand } from "./cli/server.ts";
 import { themeCommand } from "./cli/theme.ts";
-import { triageCommand } from "./cli/triage.ts";
 import { isEntrypoint } from "./entrypoint.ts";
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
@@ -20,13 +19,7 @@ export const makeCli = () =>
   Command.make("t3", { ...sharedServerCommandFlags }).pipe(
     Command.withDescription("Run the T3 Code server."),
     Command.withHandler((flags) => runServerCommand(flags)),
-    Command.withSubcommands([
-      startCommand,
-      appCommand,
-      projectCommand,
-      themeCommand,
-      triageCommand,
-    ]),
+    Command.withSubcommands([startCommand, appCommand, projectCommand, themeCommand]),
   );
 
 export const cli = makeCli();

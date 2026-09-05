@@ -52,7 +52,7 @@ import {
   applyServerSettingsPatch,
   isModelSelectionProviderEnabled,
 } from "@t3tools/shared/serverSettings";
-import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as ServerSecretStore from "./secrets/ServerSecretStore.ts";
 
 export { resolveSourceControlWriterModelSelection } from "@t3tools/shared/serverSettings";
 

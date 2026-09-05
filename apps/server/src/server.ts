@@ -10,7 +10,7 @@ import { localRequestBoundaryLayer } from "./localRequestBoundary.ts";
 
 import * as NetService from "@t3tools/shared/Net";
 import * as NativeAppIconResolver from "./assets/NativeAppIconResolver.ts";
-import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as ServerSecretStore from "./secrets/ServerSecretStore.ts";
 import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as HostPowerMonitor from "./background/HostPowerMonitor.ts";
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
