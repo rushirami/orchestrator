@@ -1,11 +1,10 @@
-import type { AuthClientPresentationMetadata } from "@t3tools/contracts";
+import type { OrchestrationClientOrigin } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import { type ConnectionCatalogEntry } from "./catalog.ts";
-import { appendClientConnectionParams } from "./clientMetadata.ts";
 import type { LocalConnectionTarget, PreparedConnection } from "./model.ts";
 import { type ConnectionAttemptError, ConnectionBlockedError } from "./model.ts";
 
@@ -21,13 +20,15 @@ export class ConnectionResolver extends Context.Service<
 
 function primarySocketUrl(
   target: LocalConnectionTarget,
-  clientMetadata: AuthClientPresentationMetadata | undefined,
+  clientMetadata: OrchestrationClientOrigin | undefined,
 ): string {
   const url = parseLocalBackendUrl(target.wsBaseUrl, "ws:");
   if (url.pathname === "" || url.pathname === "/") {
     url.pathname = "/ws";
   }
-  appendClientConnectionParams(url, clientMetadata, "direct");
+  if (clientMetadata?.surface) url.searchParams.set("clientSurface", clientMetadata.surface);
+  if (clientMetadata?.appVersion)
+    url.searchParams.set("clientAppVersion", clientMetadata.appVersion);
   return url.toString();
 }
 

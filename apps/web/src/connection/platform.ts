@@ -14,11 +14,7 @@ import {
   PlatformConnectionSource,
 } from "@t3tools/client-runtime/platform";
 import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
-import {
-  AuthStandardClientScopes,
-  type DesktopEnvironmentBootstrap,
-  PRIMARY_LOCAL_ENVIRONMENT_ID,
-} from "@t3tools/contracts";
+import { type DesktopEnvironmentBootstrap, PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
 import { parseLocalBackendUrl } from "@t3tools/shared/localBackendUrl";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -37,7 +33,6 @@ import {
   readPrimaryEnvironmentTarget,
 } from "../environments/primary/target";
 import { acknowledgeRpcRequest, trackRpcRequestSent } from "../rpc/requestLatencyState";
-import { clientPresentationMetadata } from "./clientMetadata";
 import {
   type DesktopSecondaryBootstrapsRead,
   readDesktopSecondaryBootstrapsResult,
@@ -71,24 +66,13 @@ const wakeupsLayer = Wakeups.layer({
   ),
 });
 
-function clientMetadata() {
-  return clientPresentationMetadata({
-    appVersion: APP_VERSION,
-    hosted: false,
-    identity: {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      maxTouchPoints: navigator.maxTouchPoints,
-    },
-    desktopBridge: window.desktopBridge,
-  });
-}
-
 const capabilitiesLayer = Layer.effectContext(
   Effect.sync(() => {
     const presentation = ClientPresentation.of({
-      metadata: clientMetadata(),
-      scopes: AuthStandardClientScopes,
+      metadata: {
+        surface: "desktop",
+        ...(APP_VERSION === "0.0.0" ? {} : { appVersion: APP_VERSION }),
+      },
     });
     return Context.make(ClientPresentation, presentation);
   }),

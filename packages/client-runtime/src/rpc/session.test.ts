@@ -26,7 +26,6 @@ import * as Socket from "effect/unstable/socket/Socket";
 
 import {
   AVAILABLE_CONNECTION_STATE,
-  ConnectionBlockedError,
   ConnectionTransientError,
   LocalConnectionTarget,
   type PreparedConnection,
@@ -761,9 +760,9 @@ describe("RpcSessionFactory", () => {
                       {
                         _tag: "Fail",
                         error: {
-                          _tag: "EnvironmentAuthorizationError",
-                          message: "config subscription rejected",
-                          requiredScope: "orchestration:read",
+                          _tag: "KeybindingsConfigParseError",
+                          configPath: "/test/keybindings.json",
+                          detail: "config subscription rejected",
                         },
                       },
                     ],
@@ -773,8 +772,10 @@ describe("RpcSessionFactory", () => {
           const firstClosedExit = yield* Fiber.join(firstClosed);
           expect(Exit.isFailure(firstClosedExit)).toBe(true);
           if (failure === "typed" && Exit.isFailure(firstClosedExit)) {
-            expect(Cause.squash(firstClosedExit.cause)).toBeInstanceOf(ConnectionBlockedError);
-            expect(Cause.squash(firstClosedExit.cause)).toMatchObject({ reason: "permission" });
+            expect(Cause.squash(firstClosedExit.cause)).toBeInstanceOf(ConnectionTransientError);
+            expect(Cause.squash(firstClosedExit.cause)).toMatchObject({
+              reason: "remote-unavailable",
+            });
           }
           yield* SubscriptionRef.set(activeSession, Option.none());
 

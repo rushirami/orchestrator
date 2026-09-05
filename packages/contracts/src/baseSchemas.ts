@@ -22,15 +22,6 @@ export const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximu
  * Safe categories for a failed DPoP proof. These describe the class of failure
  * without exposing proof contents or server-side authentication details.
  */
-export const DpopFailureReason = Schema.Literals([
-  "time_window",
-  "key_mismatch",
-  "request_mismatch",
-  "token_mismatch",
-  "replay",
-  "invalid_proof",
-]);
-export type DpopFailureReason = typeof DpopFailureReason.Type;
 
 export const IsoDateTime = Schema.String;
 export type IsoDateTime = typeof IsoDateTime.Type;
@@ -122,40 +113,12 @@ export type TurnId = typeof TurnId.Type;
 export const LocalClientId = makeEntityId("LocalClientId");
 export type LocalClientId = typeof LocalClientId.Type;
 
-export const AuthSessionId = makeEntityId("AuthSessionId");
-export type AuthSessionId = typeof AuthSessionId.Type;
 export const RpcClientId = NonNegativeInt.pipe(Schema.brand("RpcClientId"));
 export type RpcClientId = typeof RpcClientId.Type;
 
-/**
- * Which client surface a connection or command comes from. Unlike
- * `AuthClientMetadataDeviceType` (a UA-style device class where web and
- * desktop are both "desktop"), this names the actual product surface.
- * Optional everywhere it appears: old clients never send it.
- */
+/** Historical command origins remain decodable in stored thread history. */
 export const ClientSurface = Schema.Literals(["web", "desktop", "mobile", "cli"]);
 export type ClientSurface = typeof ClientSurface.Type;
-
-export const ClientOs = Schema.Literals([
-  "macOS",
-  "Windows",
-  "Linux",
-  "iOS",
-  "Android",
-  "ChromeOS",
-  "other",
-  "unknown",
-]);
-export type ClientOs = typeof ClientOs.Type;
-
-export const ClientDeviceType = Schema.Literals(["desktop", "phone", "tablet", "unknown"]);
-export type ClientDeviceType = typeof ClientDeviceType.Type;
-
-export const ClientWebDeployment = Schema.Literals(["hosted", "server"]);
-export type ClientWebDeployment = typeof ClientWebDeployment.Type;
-
-export const ClientConnectionMethod = Schema.Literals(["direct", "ssh", "relay", "unknown"]);
-export type ClientConnectionMethod = typeof ClientConnectionMethod.Type;
 
 export const ProviderItemId = makeEntityId("ProviderItemId");
 export type ProviderItemId = typeof ProviderItemId.Type;

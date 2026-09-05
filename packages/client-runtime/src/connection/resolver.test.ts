@@ -10,8 +10,7 @@ const environmentId = EnvironmentId.make("environment-local");
 const layer = ConnectionResolver.layer.pipe(
   Layer.provide(
     Layer.succeed(ClientPresentation, {
-      metadata: { label: "Desktop", deviceType: "desktop", surface: "desktop" },
-      scopes: [],
+      metadata: { surface: "desktop" },
     }),
   ),
 );

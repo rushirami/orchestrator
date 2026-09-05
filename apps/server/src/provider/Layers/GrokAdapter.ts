@@ -1,20 +1,22 @@
 import {
   ApprovalRequestId,
-  type GrokSettings,
   EventId,
+  type GrokSettings,
   type ProviderApprovalDecision,
+  ProviderDriverKind,
+  ProviderInstanceId,
   type ProviderRuntimeEvent,
   type ProviderSession,
   type ProviderUserInputAnswers,
-  ProviderDriverKind,
-  ProviderInstanceId,
   RuntimeRequestId,
   type ThreadId,
   TurnId,
 } from "@t3tools/contracts";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
-import { stableStringify } from "@t3tools/shared/relaySigning";
+import { stableStringify } from "@t3tools/shared/stableStringify";
+import * as EffectAcpErrors from "effect-acp/errors";
+import type * as EffectAcpSchema from "effect-acp/schema";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -35,21 +37,11 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as EffectAcpErrors from "effect-acp/errors";
-import type * as EffectAcpSchema from "effect-acp/schema";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
-import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
-import {
-  ProviderAdapterProcessError,
-  ProviderAdapterRequestError,
-  ProviderAdapterSessionNotFoundError,
-  ProviderAdapterValidationError,
-} from "../Errors.ts";
 import { mapAcpToAdapterError } from "../acp/AcpAdapterSupport.ts";
-import type * as AcpSessionRuntime from "../acp/AcpSessionRuntime.ts";
 import {
   makeAcpAssistantItemEvent,
   makeAcpContentDeltaEvent,
@@ -58,8 +50,9 @@ import {
   makeAcpRequestResolvedEvent,
   makeAcpToolCallEvent,
 } from "../acp/AcpCoreRuntimeEvents.ts";
-import { parsePermissionRequest } from "../acp/AcpRuntimeModel.ts";
 import { makeAcpNativeLoggerFactory } from "../acp/AcpNativeLogging.ts";
+import { parsePermissionRequest } from "../acp/AcpRuntimeModel.ts";
+import type * as AcpSessionRuntime from "../acp/AcpSessionRuntime.ts";
 import {
   applyGrokAcpModelSelection,
   currentGrokModelIdFromSessionSetup,
@@ -79,6 +72,13 @@ import {
   XAiAskUserQuestionRequest,
   XAiExitPlanModeRequest,
 } from "../acp/XAiAcpExtension.ts";
+import {
+  ProviderAdapterProcessError,
+  ProviderAdapterRequestError,
+  ProviderAdapterSessionNotFoundError,
+  ProviderAdapterValidationError,
+} from "../Errors.ts";
+import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
 import { type GrokAdapterShape } from "../Services/GrokAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
