@@ -574,6 +574,7 @@ function OpenCommandPaletteDialog(props: {
 }) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const locationSearch = useLocation({ select: (location) => location.search });
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -1772,12 +1773,18 @@ function OpenCommandPaletteDialog(props: {
     run: async () => {
       await navigate({
         to: "/workflows",
-        search: contextualProjectRef
-          ? {
-              project: contextualProjectRef.projectId,
-              environment: contextualProjectRef.environmentId,
-            }
-          : {},
+        search:
+          pathname === "/workflows"
+            ? {
+                ...(locationSearch.project ? { project: locationSearch.project } : {}),
+                ...(locationSearch.environment ? { environment: locationSearch.environment } : {}),
+              }
+            : contextualProjectRef
+              ? {
+                  project: contextualProjectRef.projectId,
+                  environment: contextualProjectRef.environmentId,
+                }
+              : {},
       });
     },
   });
