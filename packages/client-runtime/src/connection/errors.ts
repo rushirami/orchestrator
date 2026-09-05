@@ -6,20 +6,6 @@ import {
   ConnectionTransientError,
 } from "./model.ts";
 
-export function profileMissingError(connectionId: string): ConnectionBlockedError {
-  return new ConnectionBlockedError({
-    reason: "configuration",
-    detail: `Connection profile ${connectionId} is unavailable.`,
-  });
-}
-
-export function credentialMissingError(connectionId: string): ConnectionBlockedError {
-  return new ConnectionBlockedError({
-    reason: "authentication",
-    detail: `Connection credential ${connectionId} is unavailable.`,
-  });
-}
-
 export function environmentMismatchError(input: {
   readonly expected: EnvironmentId;
   readonly actual: EnvironmentId;
@@ -41,20 +27,18 @@ export function mapRemoteEnvironmentError(
         traceId: error.traceId,
       });
     case "EnvironmentResourceNotFoundError":
-      // Not expected during connection authorization, but the shared request
-      // error type now includes it (used by resource fetches like the thread
-      // snapshot). Treat it as a configuration issue with the endpoint.
+      // A missing metadata endpoint indicates a local backend configuration issue.
       return new ConnectionBlockedError({
         reason: "configuration",
         detail: "The environment endpoint could not be found.",
         traceId: error.traceId,
       });
-    case "RemoteEnvironmentAuthTimeoutError":
+    case "EnvironmentHttpTimeoutError":
       return new ConnectionTransientError({
         reason: "timeout",
         detail: error.message,
       });
-    case "RemoteEnvironmentAuthFetchError":
+    case "EnvironmentHttpFetchError":
       return new ConnectionTransientError({
         reason: "network",
         detail: error.message,
@@ -65,8 +49,8 @@ export function mapRemoteEnvironmentError(
         detail: "The environment could not answer the connection request.",
         traceId: error.traceId,
       });
-    case "RemoteEnvironmentAuthInvalidJsonError":
-    case "RemoteEnvironmentAuthUndeclaredStatusError":
+    case "EnvironmentHttpInvalidJsonError":
+    case "EnvironmentHttpUndeclaredStatusError":
       return new ConnectionTransientError({
         reason: "remote-unavailable",
         detail: error.message,

@@ -55,9 +55,9 @@ function transient(message = "Connection failed.") {
   });
 }
 
-function blocked(message = "Authentication required.") {
+function blocked(message = "Invalid local backend configuration.") {
   return new ConnectionBlockedError({
-    reason: "authentication",
+    reason: "configuration",
     detail: message,
   });
 }
@@ -571,7 +571,7 @@ describe("EnvironmentSupervisor", () => {
     }),
   );
 
-  it.effect("retries a blocked connection when platform credentials change", () =>
+  it.effect("retries a blocked connection when the desktop becomes active", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({
         prepare: (attempt) =>
@@ -582,7 +582,7 @@ describe("EnvironmentSupervisor", () => {
       }).pipe(Effect.provide(harness.dependencies));
 
       yield* awaitState(supervisor.state, (state) => state.phase === "blocked");
-      yield* harness.wake("credentials-changed");
+      yield* harness.wake("application-active-probe");
       yield* awaitState(supervisor.state, (state) => state.phase === "connected");
 
       expect(yield* Ref.get(harness.prepareCount)).toBe(2);
@@ -603,9 +603,9 @@ describe("EnvironmentSupervisor", () => {
       yield* Deferred.await(firstAttemptStarted);
       yield* Effect.all(
         [
-          harness.wake("credentials-changed"),
+          harness.wake("application-active-probe"),
           harness.wake("application-active"),
-          harness.wake("credentials-changed"),
+          harness.wake("application-active-probe"),
         ],
         { concurrency: "unbounded" },
       );
@@ -1002,7 +1002,7 @@ describe("EnvironmentSupervisor", () => {
     }),
   );
 
-  it.effect("does not churn a healthy session when credentials change", () =>
+  it.effect("does not churn a healthy session when the desktop requests a probe", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
       const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
@@ -1010,7 +1010,7 @@ describe("EnvironmentSupervisor", () => {
       }).pipe(Effect.provide(harness.dependencies));
 
       yield* awaitState(supervisor.state, (state) => state.phase === "connected");
-      yield* harness.wake("credentials-changed");
+      yield* harness.wake("application-active-probe");
       yield* Effect.yieldNow;
 
       expect(yield* Ref.get(harness.sessionCount)).toBe(1);
@@ -1047,9 +1047,9 @@ describe("EnvironmentSupervisor", () => {
       yield* Effect.all(
         [
           supervisor.disconnect,
-          harness.wake("credentials-changed"),
+          harness.wake("application-active-probe"),
           harness.wake("application-active"),
-          harness.wake("credentials-changed"),
+          harness.wake("application-active-probe"),
         ],
         { concurrency: "unbounded" },
       );

@@ -57,12 +57,12 @@ class TestQueryError extends Schema.TaggedErrorClass<TestQueryError>()("TestQuer
 
 const OFFLINE_QUERY_FAILURE = new ConnectionTransientError({
   reason: "transport",
-  detail: "Relay is unavailable.",
+  detail: "Local backend is unavailable.",
 });
 
 const BLOCKED_QUERY_FAILURE = new ConnectionBlockedError({
-  reason: "permission",
-  detail: "Access denied.",
+  reason: "configuration",
+  detail: "Invalid local backend configuration.",
 });
 
 function queryConnectionState(

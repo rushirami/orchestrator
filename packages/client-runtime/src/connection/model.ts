@@ -28,17 +28,11 @@ export const ConnectionTransientReason = Schema.Literals([
   "timeout",
   "transport",
   "endpoint-unavailable",
-  "relay-unavailable",
   "remote-unavailable",
 ]);
 export type ConnectionTransientReason = typeof ConnectionTransientReason.Type;
 
-export const ConnectionBlockedReason = Schema.Literals([
-  "authentication",
-  "configuration",
-  "permission",
-  "unsupported",
-]);
+export const ConnectionBlockedReason = Schema.Literals(["configuration", "unsupported"]);
 export type ConnectionBlockedReason = typeof ConnectionBlockedReason.Type;
 
 export class ConnectionTransientError extends Schema.TaggedErrorClass<ConnectionTransientError>()(

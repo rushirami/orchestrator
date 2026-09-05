@@ -17,22 +17,20 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
 const isEnvironmentHttpCommonError = Schema.is(EnvironmentHttpCommonError);
 
-export class RemoteEnvironmentAuthFetchError extends Data.TaggedError(
-  "RemoteEnvironmentAuthFetchError",
+export class EnvironmentHttpFetchError extends Data.TaggedError("EnvironmentHttpFetchError")<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+export class EnvironmentHttpInvalidJsonError extends Data.TaggedError(
+  "EnvironmentHttpInvalidJsonError",
 )<{
   readonly message: string;
   readonly cause: unknown;
 }> {}
 
-export class RemoteEnvironmentAuthInvalidJsonError extends Data.TaggedError(
-  "RemoteEnvironmentAuthInvalidJsonError",
-)<{
-  readonly message: string;
-  readonly cause: unknown;
-}> {}
-
-export class RemoteEnvironmentAuthUndeclaredStatusError extends Data.TaggedError(
-  "RemoteEnvironmentAuthUndeclaredStatusError",
+export class EnvironmentHttpUndeclaredStatusError extends Data.TaggedError(
+  "EnvironmentHttpUndeclaredStatusError",
 )<{
   readonly message: string;
   readonly status: number;
@@ -47,9 +45,7 @@ export class RemoteEnvironmentAuthUndeclaredStatusError extends Data.TaggedError
   }
 }
 
-export class RemoteEnvironmentAuthTimeoutError extends Data.TaggedError(
-  "RemoteEnvironmentAuthTimeoutError",
-)<{
+export class EnvironmentHttpTimeoutError extends Data.TaggedError("EnvironmentHttpTimeoutError")<{
   readonly message: string;
   readonly requestUrl: string;
   readonly timeoutMs: number;
@@ -67,10 +63,10 @@ export type RemoteEnvironmentRequestError =
   | EnvironmentRequestInvalidError
   | EnvironmentResourceNotFoundError
   | EnvironmentInternalError
-  | RemoteEnvironmentAuthFetchError
-  | RemoteEnvironmentAuthInvalidJsonError
-  | RemoteEnvironmentAuthUndeclaredStatusError
-  | RemoteEnvironmentAuthTimeoutError;
+  | EnvironmentHttpFetchError
+  | EnvironmentHttpInvalidJsonError
+  | EnvironmentHttpUndeclaredStatusError
+  | EnvironmentHttpTimeoutError;
 
 export const remoteHttpClientLayer = (
   fetchFn: typeof globalThis.fetch,
@@ -103,7 +99,7 @@ const failRemoteRequest = (
   requestUrl: string,
   cause: unknown,
 ): Effect.Effect<never, RemoteEnvironmentRequestError> => {
-  if (cause instanceof RemoteEnvironmentAuthTimeoutError) {
+  if (cause instanceof EnvironmentHttpTimeoutError) {
     return Effect.fail(cause);
   }
   if (isEnvironmentHttpCommonError(cause)) {
@@ -111,7 +107,7 @@ const failRemoteRequest = (
   }
   if (Schema.isSchemaError(cause)) {
     return Effect.fail(
-      new RemoteEnvironmentAuthInvalidJsonError({
+      new EnvironmentHttpInvalidJsonError({
         message: `Remote environment endpoint returned an invalid response from ${requestUrl}.`,
         cause,
       }),
@@ -120,19 +116,17 @@ const failRemoteRequest = (
   if (HttpClientError.isHttpClientError(cause) && cause.response !== undefined) {
     const response = cause.response;
     if (response.status < 200 || response.status >= 300) {
-      return Effect.fail(
-        new RemoteEnvironmentAuthUndeclaredStatusError(requestUrl, response.status),
-      );
+      return Effect.fail(new EnvironmentHttpUndeclaredStatusError(requestUrl, response.status));
     }
     return Effect.fail(
-      new RemoteEnvironmentAuthInvalidJsonError({
+      new EnvironmentHttpInvalidJsonError({
         message: `Remote environment endpoint returned an invalid response from ${requestUrl}.`,
         cause,
       }),
     );
   }
   return Effect.fail(
-    new RemoteEnvironmentAuthFetchError({
+    new EnvironmentHttpFetchError({
       message: `Failed to fetch remote environment endpoint ${requestUrl} (${String(cause)}).`,
       cause,
     }),
@@ -148,7 +142,7 @@ export const executeEnvironmentHttpRequest = <A, E, R>(
     Effect.timeoutOption(Duration.millis(timeoutMs)),
     Effect.flatMap(
       Option.match({
-        onNone: () => Effect.fail(new RemoteEnvironmentAuthTimeoutError(requestUrl, timeoutMs)),
+        onNone: () => Effect.fail(new EnvironmentHttpTimeoutError(requestUrl, timeoutMs)),
         onSome: Effect.succeed,
       }),
     ),
