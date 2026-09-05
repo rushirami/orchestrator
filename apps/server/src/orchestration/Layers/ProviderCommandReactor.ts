@@ -569,12 +569,14 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const workflowReadOnlySessions = new Map<ThreadId, boolean>();
   const ensureSessionForThread = Effect.fn("ensureSessionForThread")(function* (
     threadId: ThreadId,
     createdAt: string,
     options?: {
       readonly modelSelection?: ModelSelection;
       readonly pendingTurnStart?: boolean;
+      readonly workflowReadOnly?: boolean;
     },
   ) {
     const thread = yield* resolveThreadShell(threadId);
@@ -727,8 +729,16 @@ const make = Effect.gen(function* () {
           modelSelection: desiredModelSelection,
           ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
           runtimeMode: desiredRuntimeMode,
+          ...(options?.workflowReadOnly
+            ? { sandboxMode: "read-only" as const, approvalPolicy: "never" as const }
+            : {}),
         })
-        .pipe(Effect.tap(() => refreshWorkspaceSnapshot));
+        .pipe(
+          Effect.tap(() => {
+            workflowReadOnlySessions.set(threadId, options?.workflowReadOnly ?? false);
+            return refreshWorkspaceSnapshot;
+          }),
+        );
 
     const bindSessionToThread = (session: ProviderSession) =>
       Effect.gen(function* () {
@@ -781,6 +791,8 @@ const make = Effect.gen(function* () {
 
       if (
         !runtimeModeChanged &&
+        (workflowReadOnlySessions.get(threadId) ?? false) ===
+          (options?.workflowReadOnly ?? false) &&
         !cwdChanged &&
         !instanceChanged &&
         !shouldRestartForModelChange &&
@@ -835,6 +847,7 @@ const make = Effect.gen(function* () {
   const buildSendTurnRequestForThread = Effect.fnUntraced(function* (input: {
     readonly threadId: ThreadId;
     readonly messageText: string;
+    readonly workflowReadOnly?: boolean;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
@@ -849,6 +862,7 @@ const make = Effect.gen(function* () {
     yield* ensureSessionForThread(input.threadId, input.createdAt, {
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       pendingTurnStart: true,
+      ...(input.workflowReadOnly !== undefined ? { workflowReadOnly: input.workflowReadOnly } : {}),
     });
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
@@ -899,6 +913,7 @@ const make = Effect.gen(function* () {
     readonly branch: string | null;
     readonly worktreePath: string | null;
     readonly messageText: string;
+    readonly workflowReadOnly?: boolean;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
   }) {
     if (!input.branch || !input.worktreePath) {
@@ -958,6 +973,7 @@ const make = Effect.gen(function* () {
       readonly threadId: ThreadId;
       readonly cwd: string;
       readonly messageText: string;
+      readonly workflowReadOnly?: boolean;
       readonly attachments?: ReadonlyArray<ChatAttachment>;
       readonly titleSeed?: string;
     }) {
@@ -1419,6 +1435,9 @@ const make = Effect.gen(function* () {
     const sendTurnRequest = yield* buildSendTurnRequestForThread({
       threadId: event.payload.threadId,
       messageText: message.text,
+      ...(event.payload.workflowReadOnly !== undefined
+        ? { workflowReadOnly: event.payload.workflowReadOnly }
+        : {}),
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }
