@@ -31,7 +31,8 @@ The Workflows sidebar groups tasks by project and expands to their conversations
 The breadcrumb follows **Project / Workflows / Workflow name / Agent name**. Click the workflow name to return to the overview or **Workflows** to return to its project templates. The project selector switches projects. These breadcrumbs also appear when you open a workflow conversation from Threads or search, and disappear after its workflow is dismissed. Switch back to Threads to use the familiar conversation list.
 
 - **Pause after current stages** lets current turns finish and prevents new stages from starting.
-- **Resume** continues eligible work. Failed stages must first be prepared for retry.
+- **Resume** continues eligible work. Failed stages must first be recovered or prepared for retry.
+- **Recheck completed turn** recovers a failed stage when its recorded provider turn completed successfully and its checkpoint and required files are available. It uses the saved result without running the agent again and keeps the workflow paused until you resume. A result saying `complete` alone does not override a provider failure or interruption.
 - **Prepare skill retry** creates a fresh attempt for the failed skill while keeping the task paused. Inspect the original thread and any side effects before resuming.
 - **Cancel task** prevents further work and requests interruption of active turns. It preserves files and conversations.
 - **Dismiss task** removes a completed or fully stopped workflow from the sidebar. Its ordinary threads, worktree, and files remain available.
