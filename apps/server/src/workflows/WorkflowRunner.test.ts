@@ -1,6 +1,13 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { ThreadId, WorkflowTaskId, type WorkflowTask, type WorkflowNode } from "@t3tools/contracts";
+import {
+  CommandId,
+  ThreadId,
+  WorkflowId,
+  WorkflowTaskId,
+  type WorkflowTask,
+  type WorkflowNode,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -13,6 +20,8 @@ import { makeWorkflowRunner } from "./WorkflowRunner.ts";
 import { WorkflowRuntime, type WorkflowRuntimeEvent } from "./WorkflowRuntime.ts";
 import { WorkflowService } from "./WorkflowService.ts";
 import { WorkflowStore } from "./WorkflowStore.ts";
+import { validateWorkflowGraph } from "@t3tools/shared/workflowGraph";
+import { readWorkflowArtifact } from "./artifacts.ts";
 import { templateFixture, taskFixture } from "./testFixtures.ts";
 
 const layer = Layer.mergeAll(WorkflowService.layer, WorkflowStore.layer).pipe(
@@ -305,5 +314,239 @@ it.effect("recovers uncertain dispatches without resending and reconciles cancel
       projectId: task.projectId,
       expectedRevision: settled.revision,
     });
+  }).pipe(Effect.scoped, Effect.provide(layer)),
+);
+
+for (const scenario of [
+  "approval",
+  "join-approval",
+  "terminal-approval",
+  "approved-while-paused",
+] as const) {
+  it.effect(
+    `revalidates reviewed code across ${scenario} and requires fresh approval after retry`,
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO projection_projects(project_id, title, workspace_root, scripts_json, created_at, updated_at) VALUES ('project-a', 'Project', '/tmp/project', '[]', '2026-09-04T00:00:00.000Z', '2026-09-04T00:00:00.000Z')`;
+        const fs = yield* FileSystem.FileSystem;
+        const worktree = yield* fs.makeTempDirectoryScoped();
+        yield* fs.writeFileString(`${worktree}/spec.md`, "Unchanged approval artifact");
+        const artifact = yield* readWorkflowArtifact(worktree, "spec.md");
+        const store = yield* WorkflowStore;
+        const service = yield* WorkflowService;
+        const fixture = taskFixture();
+        const terminal = scenario === "terminal-approval";
+        const joined = scenario === "join-approval";
+        const nodes: WorkflowNode[] = fixture.definition.nodes.filter((node) =>
+          ["plan", "approval", "review-a", "review-b", ...(terminal ? [] : ["combine"])].includes(
+            node.id,
+          ),
+        );
+        if (joined)
+          nodes.push({ id: "join", name: "Join", kind: "join", position: { x: 0, y: 0 } });
+        const task: WorkflowTask = {
+          ...fixture,
+          status: "paused",
+          worktreePath: worktree,
+          threadIds: {
+            builder: ThreadId.make("builder"),
+            "review-a": ThreadId.make("a"),
+            "review-b": ThreadId.make("b"),
+          },
+          definition: {
+            ...fixture.definition,
+            rework: null,
+            nodes,
+            edges: [
+              { from: "plan", to: "review-a" },
+              { from: "plan", to: "review-b" },
+              { from: "review-a", to: joined ? "join" : "approval" },
+              { from: "review-b", to: joined ? "join" : "approval" },
+              ...(joined ? [{ from: "join", to: "approval" }] : []),
+              ...(terminal ? [] : [{ from: "approval", to: "combine" }]),
+            ],
+          },
+          nodes: nodes.map((node) => ({
+            ...fixture.nodes[0]!,
+            nodeId: node.id,
+            status:
+              node.id === "combine"
+                ? "pending"
+                : node.id === "approval" && scenario !== "approved-while-paused"
+                  ? "awaiting-approval"
+                  : "complete",
+            artifactRevision: node.id === "approval" ? artifact.revision : null,
+            reviewRevision: node.id.startsWith("review-") ? "reviewed-code" : undefined,
+          })),
+        };
+        assert.deepEqual(validateWorkflowGraph(task.definition), []);
+        yield* store.save(task, 0, "task.seeded");
+        const events = yield* Queue.unbounded<WorkflowRuntimeEvent>();
+        const dispatches = yield* Queue.unbounded<{
+          task: WorkflowTask;
+          node: Extract<WorkflowNode, { kind: "agent" }>;
+          operationId: string;
+        }>();
+        let basis = "reviewed-code";
+        const runner = yield* makeWorkflowRunner.pipe(
+          Effect.provideService(WorkflowRuntime, {
+            watch: () => Effect.void,
+            reviewRevision: () => Effect.succeed(basis),
+            validate: () => Effect.void,
+            plan: Effect.succeed,
+            prepare: () => Effect.void,
+            interrupt: () => Effect.void,
+            dispatch: (task, node, operationId) =>
+              Queue.offer(dispatches, { task, node, operationId }).pipe(Effect.asVoid),
+            events: Stream.fromQueue(events),
+          }),
+        );
+        const awaitTask = (predicate: (value: WorkflowTask) => boolean) =>
+          service.changes.pipe(
+            Stream.mapEffect(() => service.snapshot()),
+            Stream.map((snapshot) => snapshot.tasks.find((value) => value.id === task.id)),
+            Stream.filter(
+              (value): value is WorkflowTask => value !== undefined && predicate(value),
+            ),
+            Stream.runHead,
+            Effect.map(Option.getOrThrow),
+          );
+        let current = task;
+        if (scenario !== "approved-while-paused")
+          current = yield* runner.control({
+            taskId: task.id,
+            expectedRevision: current.revision,
+            action: "resume",
+          });
+        // The approval file is untouched, but an unrelated code edit changes the review basis.
+        basis = "edited-code";
+        current = yield* runner.control({
+          taskId: task.id,
+          expectedRevision: current.revision,
+          ...(scenario === "approved-while-paused"
+            ? { action: "resume" as const }
+            : {
+                action: "approve" as const,
+                nodeId: "approval",
+                artifactRevision: artifact.revision,
+              }),
+        });
+        assert.equal(current.status, "paused");
+        assert.equal(yield* Queue.size(dispatches), 0);
+        assert.isTrue(
+          current.nodes
+            .filter((node) => node.nodeId.startsWith("review-"))
+            .every((node) => node.status === "failed"),
+        );
+        assert.equal(current.nodes.find((node) => node.nodeId === "approval")?.status, "pending");
+        assert.isNull(current.nodes.find((node) => node.nodeId === "approval")?.artifactRevision);
+        if (joined)
+          assert.equal(current.nodes.find((node) => node.nodeId === "join")?.status, "pending");
+        for (const nodeId of ["review-a", "review-b"])
+          current = yield* runner.control({
+            taskId: task.id,
+            expectedRevision: current.revision,
+            action: "retry",
+            nodeId,
+          });
+        yield* runner.control({
+          taskId: task.id,
+          expectedRevision: current.revision,
+          action: "resume",
+        });
+        for (let i = 0; i < 2; i++) {
+          const next = yield* Queue.take(dispatches);
+          assert.isTrue(next.node.id.startsWith("review-"));
+          yield* Queue.offer(events, {
+            type: "result",
+            threadId: next.task.threadIds[next.node.threadId]!,
+            turnId: next.operationId,
+            operationId: next.operationId,
+            result: { outcome: "complete", summary: "Fresh review", artifacts: [] },
+          });
+        }
+        current = yield* awaitTask((value) =>
+          value.nodes.some(
+            (node) => node.nodeId === "approval" && node.status === "awaiting-approval",
+          ),
+        );
+        assert.equal(yield* Queue.size(dispatches), 0);
+        current = yield* runner.control({
+          taskId: task.id,
+          expectedRevision: current.revision,
+          action: "approve",
+          nodeId: "approval",
+          artifactRevision: artifact.revision,
+        });
+        if (terminal) assert.equal(current.status, "complete");
+        else assert.equal((yield* Queue.take(dispatches)).node.id, "combine");
+      }).pipe(Effect.scoped, Effect.provide(layer)),
+  );
+}
+
+it.effect("project deletion removes templates saved after its guard snapshot", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`INSERT INTO projection_projects(project_id, title, workspace_root, scripts_json, created_at, updated_at) VALUES ('project-a', 'Project', '/tmp/project', '[]', '2026-09-04T00:00:00.000Z', '2026-09-04T00:00:00.000Z')`;
+    const service = yield* WorkflowService;
+    const template = templateFixture();
+    yield* service.saveTemplate({
+      id: template.id,
+      projectId: template.projectId,
+      expectedRevision: 0,
+      definition: template.definition,
+    });
+    const runner = yield* makeWorkflowRunner.pipe(
+      Effect.provideService(WorkflowRuntime, {
+        watch: () => Effect.void,
+        reviewRevision: () => Effect.succeed("revision"),
+        validate: () => Effect.void,
+        plan: Effect.succeed,
+        prepare: () => Effect.void,
+        interrupt: () => Effect.void,
+        dispatch: () => Effect.void,
+        events: Stream.empty,
+      }),
+    );
+    const command = {
+      type: "project.delete" as const,
+      commandId: CommandId.make("delete-project"),
+      projectId: template.projectId,
+    };
+    const failed = yield* runner
+      .runClientCommand(command, Effect.fail("Deletion failed"))
+      .pipe(Effect.result);
+    assert.equal(failed._tag, "Failure");
+    assert.equal((yield* service.snapshot()).templates.length, 1);
+    yield* runner.runClientCommand(
+      command,
+      Effect.gen(function* () {
+        // Run concurrent-window saves precisely between the pre-delete guard and projection update.
+        yield* service.saveTemplate({
+          id: template.id,
+          projectId: template.projectId,
+          expectedRevision: 1,
+          definition: { ...template.definition, name: "Updated during deletion" },
+        });
+        yield* service.saveTemplate({
+          id: WorkflowId.make("saved-during-delete"),
+          projectId: template.projectId,
+          expectedRevision: 0,
+          definition: template.definition,
+        });
+        yield* sql`UPDATE projection_projects SET deleted_at = '2026-09-05T00:00:00.000Z' WHERE project_id = ${template.projectId}`;
+      }),
+    );
+    assert.equal((yield* service.snapshot()).templates.length, 0);
+    const late = yield* service
+      .saveTemplate({
+        id: template.id,
+        projectId: template.projectId,
+        expectedRevision: 0,
+        definition: template.definition,
+      })
+      .pipe(Effect.result);
+    assert.equal(late._tag, "Failure");
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );

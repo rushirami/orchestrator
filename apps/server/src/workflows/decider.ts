@@ -153,7 +153,12 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
           };
           status = "paused";
           error = next.error;
-        } else return restartFrom(task, rework.to, action.result);
+        } else
+          return restartFrom(
+            { ...task, nodes: task.nodes.map((entry, i) => (i === index ? next : entry)) },
+            rework.to,
+            action.result,
+          );
       }
     }
   } else if (action.type === "approve" || action.type === "revise") {
@@ -192,13 +197,7 @@ function restartFrom(
   nodeId: string,
   context?: WorkflowStageResult,
 ): WorkflowTask {
-  if (
-    task.nodes.some(
-      (node) =>
-        (node.status === "running" || node.status === "dispatching") &&
-        node.nodeId !== task.definition.rework?.from,
-    )
-  )
+  if (task.nodes.some((node) => node.status === "running" || node.status === "dispatching"))
     throw new Error("Wait for active branches before requesting rework.");
   const reset = workflowDescendants(task.definition, nodeId);
   reset.add(nodeId);

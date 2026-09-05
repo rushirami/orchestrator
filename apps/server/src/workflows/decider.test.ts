@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decideWorkflow } from "./decider.ts";
+import { validateWorkflowGraph } from "@t3tools/shared/workflowGraph";
 import { taskFixture } from "./testFixtures.ts";
 import type { WorkflowTask } from "@t3tools/contracts";
 
@@ -139,3 +140,65 @@ describe("workflow transitions", () => {
     expect(result.nodes.every((node) => node.status === "cancelled")).toBe(true);
   });
 });
+
+it.each(["dispatching", "running"] as const)(
+  "rejects approval revision while the rework source is %s",
+  (activeStatus) => {
+    const fixture = taskFixture();
+    const task: WorkflowTask = {
+      ...fixture,
+      definition: {
+        ...fixture.definition,
+        nodes: fixture.definition.nodes.filter((node) =>
+          ["plan", "approval", "combine"].includes(node.id),
+        ),
+        edges: [
+          { from: "plan", to: "approval" },
+          { from: "plan", to: "combine" },
+        ],
+        rework: { from: "combine", to: "plan", maxIterations: 3 },
+      },
+      nodes: fixture.nodes.filter((node) => ["plan", "approval", "combine"].includes(node.nodeId)),
+    };
+    expect(validateWorkflowGraph(task.definition)).toEqual([]);
+    let active = finish(task, "plan");
+    active = decideWorkflow(active, {
+      type: "start",
+      nodeId: "approval",
+      operationId: "approval",
+      artifactRevision: "spec",
+    });
+    active = decideWorkflow(active, { type: "start", nodeId: "combine", operationId: "active" });
+    if (activeStatus === "running")
+      active = decideWorkflow(active, {
+        type: "started",
+        nodeId: "combine",
+        operationId: "active",
+        turnId: "live-turn",
+      });
+    expect(() =>
+      decideWorkflow(active, {
+        type: "revise",
+        nodeId: "approval",
+        artifactRevision: "spec",
+      }),
+    ).toThrow("Wait for active branches");
+    expect(active.nodes.find((node) => node.nodeId === "combine")).toMatchObject({
+      status: activeStatus,
+      operationId: "active",
+    });
+    const settled = decideWorkflow(active, {
+      type: "result",
+      nodeId: "combine",
+      operationId: "active",
+      result: { outcome: "complete", summary: "Done", artifacts: ["reviews.md"] },
+    });
+    const revised = decideWorkflow(settled, {
+      type: "revise",
+      nodeId: "approval",
+      artifactRevision: "spec",
+    });
+    expect(revised.iteration).toBe(1);
+    expect(revised.nodes.every((node) => node.status === "pending")).toBe(true);
+  },
+);

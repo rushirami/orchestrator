@@ -62,6 +62,72 @@ export const makeWorkflowRunner = Effect.gen(function* () {
     return next === task ? task : yield* persist(next, `task.${action.type}`);
   });
 
+  const validateIncomingReviews = Effect.fn(function* (initial: WorkflowTask, nodeId: string) {
+    let task = initial;
+    const incomingReviews = new Set<string>();
+    const visited = new Set<string>();
+    const visitInputs = (nodeId: string) => {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+      for (const edge of task.definition.edges.filter((edge) => edge.to === nodeId)) {
+        const parent = task.definition.nodes.find((item) => item.id === edge.from);
+        if (parent?.kind === "join" || parent?.kind === "approval") visitInputs(parent.id);
+        else if (parent?.kind === "agent" && parent.access === "read-only")
+          incomingReviews.add(parent.id);
+      }
+    };
+    visitInputs(nodeId);
+    if (incomingReviews.size) {
+      const captured = yield* runtime.reviewRevision(task).pipe(Effect.result);
+      if (captured._tag === "Failure") {
+        task = yield* persist(
+          { ...task, status: "paused", error: captured.failure.message },
+          "task.review-capture-failed",
+        );
+        return task;
+      }
+      const currentRevision = captured.success;
+      const stale = task.nodes.filter(
+        (state) => incomingReviews.has(state.nodeId) && state.reviewRevision !== currentRevision,
+      );
+      if (stale.length) {
+        const error =
+          "The code changed after review. Retry the affected reviews before continuing.";
+        const downstream = new Set(
+          stale.flatMap((state) => [...workflowDescendants(task.definition, state.nodeId)]),
+        );
+        task = yield* persist(
+          {
+            ...task,
+            status: "paused",
+            error,
+            nodes: task.nodes.map((state) =>
+              stale.some((item) => item.nodeId === state.nodeId)
+                ? { ...state, status: "failed", error }
+                : downstream.has(state.nodeId) &&
+                    task.definition.nodes.some(
+                      (node) =>
+                        node.id === state.nodeId &&
+                        (node.kind === "join" || node.kind === "approval"),
+                    )
+                  ? {
+                      ...state,
+                      status: "pending",
+                      artifactRevision: null,
+                      operationId: null,
+                      turnId: null,
+                    }
+                  : state,
+            ),
+          },
+          "task.reviews-invalidated",
+        );
+        return task;
+      }
+    }
+    return task;
+  });
+
   const schedule = Effect.fn(function* (initial: WorkflowTask) {
     let task = initial;
     while (task.status === "running") {
@@ -70,56 +136,8 @@ export const makeWorkflowRunner = Effect.gen(function* () {
       if (!id) break;
       const node = task.definition.nodes.find((item) => item.id === id)!;
       const state = task.nodes.find((item) => item.nodeId === id)!;
-      const incomingReviews = new Set<string>();
-      const visitInputs = (nodeId: string) => {
-        for (const edge of task.definition.edges.filter((edge) => edge.to === nodeId)) {
-          const parent = task.definition.nodes.find((item) => item.id === edge.from);
-          if (parent?.kind === "join") visitInputs(parent.id);
-          else if (parent?.kind === "agent" && parent.access === "read-only")
-            incomingReviews.add(parent.id);
-        }
-      };
-      visitInputs(node.id);
-      if (incomingReviews.size) {
-        const captured = yield* runtime.reviewRevision(task).pipe(Effect.result);
-        if (captured._tag === "Failure") {
-          task = yield* persist(
-            { ...task, status: "paused", error: captured.failure.message },
-            "task.review-capture-failed",
-          );
-          break;
-        }
-        const currentRevision = captured.success;
-        const stale = task.nodes.filter(
-          (state) => incomingReviews.has(state.nodeId) && state.reviewRevision !== currentRevision,
-        );
-        if (stale.length) {
-          const error =
-            "The code changed after review. Retry the affected reviews before continuing.";
-          const downstream = new Set(
-            stale.flatMap((state) => [...workflowDescendants(task.definition, state.nodeId)]),
-          );
-          task = yield* persist(
-            {
-              ...task,
-              status: "paused",
-              error,
-              nodes: task.nodes.map((state) =>
-                stale.some((item) => item.nodeId === state.nodeId)
-                  ? { ...state, status: "failed", error }
-                  : downstream.has(state.nodeId) &&
-                      task.definition.nodes.some(
-                        (node) => node.id === state.nodeId && node.kind === "join",
-                      )
-                    ? { ...state, status: "pending" }
-                    : state,
-              ),
-            },
-            "task.reviews-invalidated",
-          );
-          break;
-        }
-      }
+      task = yield* validateIncomingReviews(task, node.id);
+      if (task.status !== "running") break;
       const operationId = `workflow:${task.id}:${node.id}:${task.iteration}:${state.attempt}:${state.skillIndex}`;
       const started = yield* Effect.gen(function* () {
         const artifact =
@@ -280,6 +298,10 @@ export const makeWorkflowRunner = Effect.gen(function* () {
             message:
               "The artifact changed after you opened it. Review the current contents before approving.",
           });
+        if (input.action === "approve") {
+          const checked = yield* validateIncomingReviews(task, node.id);
+          if (checked !== task) return checked;
+        }
         task = yield* transition(
           {
             ...task,
@@ -510,9 +532,9 @@ export const makeWorkflowRunner = Effect.gen(function* () {
       }
       const result = yield* effect;
       if (command.type === "project.delete") {
-        for (const value of values)
-          if (value.projectId === command.projectId)
-            yield* store.remove(value.id, value.projectId, value.revision);
+        const remaining = yield* store.list(command.projectId);
+        for (const value of remaining)
+          yield* store.remove(value.id, value.projectId, value.revision);
         yield* service.changed;
       }
       return result;
