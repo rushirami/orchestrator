@@ -198,8 +198,7 @@ export function WorkflowSettings({
                 ...definition,
                 rework: event.target.checked
                   ? {
-                      from:
-                        definition.nodes.filter((node) => node.kind === "agent").at(-1)?.id ?? "",
+                      from: definition.nodes.findLast((node) => node.kind === "agent")?.id ?? "",
                       to: definition.nodes.find((node) => node.kind === "agent")?.id ?? "",
                       maxIterations: 3,
                     }

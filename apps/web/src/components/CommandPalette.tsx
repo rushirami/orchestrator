@@ -1763,6 +1763,24 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
+  actionItems.push({
+    kind: "action",
+    value: "action:configure-workflows",
+    searchTerms: ["workflow", "orchestration", "agents", "template"],
+    title: "Configure project workflows",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({
+        to: "/workflows",
+        search: contextualProjectRef
+          ? {
+              project: contextualProjectRef.projectId,
+              environment: contextualProjectRef.environmentId,
+            }
+          : {},
+      });
+    },
+  });
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const settingsSearchItems: CommandPaletteActionItem[] = searchSettings(
     deferredQuery,

@@ -1,7 +1,32 @@
 import { randomUUID } from "../../lib/utils";
 import type { WorkflowDefinition, WorkflowNode } from "@t3tools/contracts";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+
+function ArtifactPathsInput({
+  paths,
+  onChange,
+}: {
+  paths: readonly string[];
+  onChange: (paths: string[]) => void;
+}) {
+  const [text, setText] = useState(paths.join(", "));
+  return (
+    <input
+      placeholder="spec.md, validation.md"
+      value={text}
+      onChange={(event) => {
+        setText(event.target.value);
+        onChange(
+          event.target.value
+            .split(",")
+            .map((path) => path.trim())
+            .filter(Boolean),
+        );
+      }}
+    />
+  );
+}
 
 export function WorkflowField({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -169,20 +194,16 @@ export function WorkflowInspector({
                   />
                 </WorkflowField>
                 <WorkflowField label="Required artifacts">
-                  <input
-                    placeholder="spec.md, validation.md"
-                    value={skill.outputPaths.join(", ")}
-                    onChange={(event) =>
+                  <ArtifactPathsInput
+                    paths={skill.outputPaths}
+                    onChange={(paths) =>
                       update({
                         ...node,
                         skills: node.skills.map((item) =>
                           item.id === skill.id
                             ? {
                                 ...item,
-                                outputPaths: event.target.value
-                                  .split(",")
-                                  .map((path) => path.trim())
-                                  .filter(Boolean),
+                                outputPaths: paths,
                               }
                             : item,
                         ),

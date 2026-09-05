@@ -1,6 +1,6 @@
 import type { WorkflowDefinition, WorkflowNode, WorkflowNodeState } from "@t3tools/contracts";
 import { Check, GitBranch, GripVertical, LockKeyhole, Maximize2, Minus, Plus } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./workflows.css";
 
 const EMPTY_STATES: readonly WorkflowNodeState[] = [];
@@ -58,6 +58,19 @@ export function WorkflowGraph({
     null,
   );
   const viewport = useRef<HTMLDivElement>(null);
+  const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  useEffect(() => {
+    const element = viewport.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        setZoom((value) => Math.max(0.35, Math.min(1.8, value - event.deltaY * 0.002)));
+      }
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, []);
   const nodes = useMemo(
     () =>
       definition.nodes.map((node) =>
@@ -77,7 +90,7 @@ export function WorkflowGraph({
     });
   const fit = () => {
     const bounds = viewport.current?.getBoundingClientRect();
-    if (bounds) setZoom(Math.min(1, (bounds.width - 30) / width, (bounds.height - 30) / height));
+    if (bounds) setZoom(Math.min(1, (bounds.width - 30) / width, (bounds.height - 82) / height));
   };
   return (
     <div className="workflow-graph" aria-label="Workflow graph">
@@ -102,14 +115,35 @@ export function WorkflowGraph({
       <div
         className="workflow-graph-viewport"
         ref={viewport}
-        onWheel={(event) => {
-          if (event.ctrlKey || event.metaKey) {
-            event.preventDefault();
-            setZoom((value) => Math.max(0.35, Math.min(1.8, value - event.deltaY * 0.002)));
-          }
+        tabIndex={0}
+        aria-label="Pan workflow canvas with arrow keys or drag its background"
+        onPointerDown={(event) => {
+          if (
+            event.button !== 0 ||
+            (event.target instanceof Element && event.target.closest("button"))
+          )
+            return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          pan.current = {
+            x: event.clientX,
+            y: event.clientY,
+            left: event.currentTarget.scrollLeft,
+            top: event.currentTarget.scrollTop,
+          };
+        }}
+        onPointerMove={(event) => {
+          if (!pan.current) return;
+          event.currentTarget.scrollLeft = pan.current.left + pan.current.x - event.clientX;
+          event.currentTarget.scrollTop = pan.current.top + pan.current.y - event.clientY;
+        }}
+        onPointerUp={() => {
+          pan.current = null;
+        }}
+        onPointerCancel={() => {
+          pan.current = null;
         }}
       >
-        <div style={{ width: width * zoom, height: height * zoom }}>
+        <div style={{ width: width * zoom, height: height * zoom, marginInline: "auto" }}>
           <div
             className="workflow-graph-plane"
             style={{ width, height, transform: `scale(${zoom})` }}

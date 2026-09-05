@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { Link } from "@tanstack/react-router";
@@ -29,6 +30,7 @@ export function WorkflowSidebar() {
 function EnvironmentWorkflows({ projects }: { projects: readonly EnvironmentProject[] }) {
   const environmentId = projects[0]!.environmentId;
   const result = useAtomValue(workflowEnvironment.snapshot({ environmentId, input: {} }));
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   if (result._tag === "Failure")
     return <p className="workflow-help">Workflow tasks are unavailable for this environment.</p>;
   if (result._tag !== "Success") return <p className="workflow-help">Loading workflow tasks…</p>;
@@ -42,11 +44,30 @@ function EnvironmentWorkflows({ projects }: { projects: readonly EnvironmentProj
         </div>
         {tasks.length === 0 && <p className="workflow-help">No active workflows</p>}
         {tasks.map((task) => (
-          <details className="workflow-sidebar-task" key={task.id} open>
+          <details
+            className="workflow-sidebar-task"
+            key={task.id}
+            open={!collapsed.has(task.id)}
+            onToggle={(event) => {
+              const open = event.currentTarget.open;
+              setCollapsed((previous) => {
+                if (previous.has(task.id) === !open) return previous;
+                const next = new Set(previous);
+                if (open) next.delete(task.id);
+                else next.add(task.id);
+                return next;
+              });
+            }}
+          >
             <summary>
               <ChevronDown size={13} />
               <GitBranch size={14} />
-              <span>{task.workspaceName}</span>
+              <Link
+                to="/workflows"
+                search={{ task: task.id, project: project.id, environment: environmentId }}
+              >
+                {task.workspaceName}
+              </Link>
               <small>{task.status}</small>
             </summary>
             {task.definition.threads.map((thread) => {

@@ -12,6 +12,22 @@ const changes = createEnvironmentRpcSubscriptionAtomFamily(connectionAtomRuntime
 });
 
 export const workflowEnvironment = {
+  launch: createEnvironmentRpcCommand(connectionAtomRuntime, {
+    label: "workflows:launch",
+    tag: WORKFLOW_METHODS.launch,
+  }),
+  control: createEnvironmentRpcCommand(connectionAtomRuntime, {
+    label: "workflows:control",
+    tag: WORKFLOW_METHODS.control,
+  }),
+  artifact: createEnvironmentRpcCommand(connectionAtomRuntime, {
+    label: "workflows:artifact",
+    tag: WORKFLOW_METHODS.artifact,
+  }),
+  validate: createEnvironmentRpcCommand(connectionAtomRuntime, {
+    label: "workflows:validate",
+    tag: WORKFLOW_METHODS.validate,
+  }),
   snapshot: createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
     label: "workflows:snapshot",
     tag: WORKFLOW_METHODS.snapshot,

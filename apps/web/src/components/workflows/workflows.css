@@ -382,7 +382,7 @@
   bottom: 3px;
   width: calc(50% - 3px);
   border-radius: 5px;
-  background: var(--sidebar-background, #fff);
+  background: var(--sidebar, #fff);
   box-shadow: 0 1px 3px #0000000d;
   transition: transform 180ms ease-out;
 }
@@ -475,5 +475,115 @@
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+.workflow-launch-popup {
+  width: min(760px, calc(100vw - 48px));
+  max-width: 760px;
+  max-height: calc(100dvh - 80px);
+  background: white;
+  color: #202124;
+  padding: 0;
+}
+.workflow-launch {
+  padding: 28px;
+  overflow-y: auto;
+  max-height: calc(100dvh - 80px);
+  height: auto;
+  border-radius: 12px;
+}
+.workflow-launch [data-slot="dialog-title"] {
+  font-size: 22px;
+  font-weight: 600;
+}
+.workflow-launch [data-slot="dialog-description"] {
+  color: #62656b;
+  margin-top: 8px;
+}
+.workflow-launch-thread {
+  display: grid;
+  grid-template-columns: 120px 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+.workflow-launch-thread select,
+.workflow-launch-thread input {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #d6dbe3;
+  border-radius: 6px;
+}
+.workflow-launch-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 0 14px;
+}
+.workflow-launch-footer label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #62656b;
+}
+.workflow-launch-footer input {
+  width: 130px;
+  color: #202124;
+  border: 1px solid #d6dbe3;
+  border-radius: 6px;
+  padding: 8px;
+}
+.workflow-launch-footer .workflow-spacer {
+  flex: 1;
+}
+.workflow-artifact {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 20px 0;
+  padding: 16px;
+  max-height: 45vh;
+  overflow-y: auto;
+  line-height: 1.6;
+  background: #f7f8fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.workflow-result {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  margin: 12px 0;
+}
+.workflow-task-status {
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  text-transform: capitalize;
+}
+.workflow-workspace .workflow-node {
+  transition:
+    transform 240ms ease-out,
+    border-color 140ms ease-out,
+    box-shadow 140ms ease-out;
+}
+.workflow-workspace .workflow-node.is-dragging {
+  transition: none;
+}
+@media (max-width: 1050px) {
+  .workflow-header {
+    gap: 8px;
+    padding: 0 16px;
+  }
+  .workflow-header > strong {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workflow-inspector {
+    width: 310px;
+    padding: 20px;
   }
 }

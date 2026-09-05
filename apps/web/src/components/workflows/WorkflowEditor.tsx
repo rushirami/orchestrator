@@ -1,31 +1,39 @@
 import { randomUUID } from "../../lib/utils";
 import { useAtomValue } from "@effect/atom-react";
+import { useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   DEFAULT_MODEL,
   ProviderInstanceId,
   WorkflowId,
+  resolveWorkflowPrompt,
+  workflowVariables,
   type WorkflowDefinition,
   type WorkflowTemplate,
 } from "@t3tools/contracts";
 import { validateWorkflowGraph } from "@t3tools/shared/workflowGraph";
 import { ArrowLeft, Check, Folder, Plus, Settings2, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProjects, useServerConfigs } from "../../state/entities";
 import { workflowEnvironment } from "../../state/workflows";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { WorkflowGraph } from "./WorkflowGraph";
 import { WorkflowInspector } from "./WorkflowInspector";
 import { WorkflowSettings } from "./WorkflowSettings";
+import { WorkflowLaunch } from "./WorkflowLaunch";
+import { WorkflowTaskDetail } from "./WorkflowTaskDetail";
 import { createLocalWorkflow } from "./presets";
 import "./workflows.css";
 
 export function WorkflowEditor() {
   const projects = useProjects();
-  const [projectKey, setProjectKey] = useState("");
+  const search = useSearch({ from: "/_chat/workflows" });
+  const navigate = useNavigate();
   const project =
-    projects.find((item) => `${item.environmentId}:${item.id}` === projectKey) ?? projects[0];
+    projects.find(
+      (item) => item.id === search.project && item.environmentId === search.environment,
+    ) ?? projects[0];
   return (
     <div className="workflow-workspace">
       <header className="workflow-header">
@@ -33,7 +41,16 @@ export function WorkflowEditor() {
         <select
           aria-label="Workflow project"
           value={project ? `${project.environmentId}:${project.id}` : ""}
-          onChange={(event) => setProjectKey(event.target.value)}
+          onChange={(event) => {
+            const next = projects.find(
+              (item) => `${item.environmentId}:${item.id}` === event.target.value,
+            );
+            if (next)
+              void navigate({
+                to: "/workflows",
+                search: { project: next.id, environment: next.environmentId },
+              });
+          }}
         >
           {projects.map((item) => (
             <option
@@ -57,11 +74,16 @@ export function WorkflowEditor() {
 }
 
 function ProjectWorkflows({ project }: { project: EnvironmentProject }) {
+  const search = useSearch({ from: "/_chat/workflows" });
+  const navigate = useNavigate();
   const snapshot = useAtomValue(
     workflowEnvironment.snapshot({ environmentId: project.environmentId, input: {} }),
   );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>();
   const [draftKey, setDraftKey] = useState(0);
+  const [unsaved, setUnsaved] = useState(false);
+  const canLeaveDraft = () => !unsaved || window.confirm("Discard unsaved workflow changes?");
+  useBlocker({ shouldBlockFn: () => !canLeaveDraft(), enableBeforeUnload: unsaved });
   if (snapshot._tag === "Failure")
     return (
       <div className="workflow-error" role="alert">
@@ -74,10 +96,44 @@ function ProjectWorkflows({ project }: { project: EnvironmentProject }) {
         Loading workflows…
       </div>
     );
+  if (search.task) {
+    const task = snapshot.value.tasks.find(
+      (task) => task.id === search.task && task.projectId === project.id,
+    );
+    return task ? (
+      <WorkflowTaskDetail
+        key={task.id}
+        task={task}
+        environmentId={project.environmentId}
+        onDismissed={() =>
+          void navigate({
+            to: "/workflows",
+            search: { project: project.id, environment: project.environmentId },
+          })
+        }
+      />
+    ) : (
+      <div className="workflow-empty">
+        <p>This workflow task is no longer available.</p>
+        <button
+          className="workflow-button"
+          onClick={() =>
+            void navigate({
+              to: "/workflows",
+              search: { project: project.id, environment: project.environmentId },
+            })
+          }
+        >
+          Back to templates
+        </button>
+      </div>
+    );
+  }
   const templates = snapshot.value.templates.filter(
     (template) => template.projectId === project.id,
   );
-  const template = templates.find((item) => item.id === selectedId);
+  const template =
+    selectedId === undefined ? templates[0] : templates.find((item) => item.id === selectedId);
   return (
     <>
       <div className="workflow-heading">
@@ -90,7 +146,11 @@ function ProjectWorkflows({ project }: { project: EnvironmentProject }) {
             className="workflow-button"
             aria-label="Saved workflow"
             value={template?.id ?? ""}
-            onChange={(event) => setSelectedId(event.target.value || null)}
+            onChange={(event) => {
+              if (!canLeaveDraft()) return;
+              setSelectedId(event.target.value || null);
+              setDraftKey((key) => key + 1);
+            }}
           >
             <option value="">New workflow</option>
             {templates.map((item) => (
@@ -102,6 +162,7 @@ function ProjectWorkflows({ project }: { project: EnvironmentProject }) {
           <button
             className="workflow-button"
             onClick={() => {
+              if (!canLeaveDraft()) return;
               setSelectedId(null);
               setDraftKey((key) => key + 1);
             }}
@@ -112,10 +173,14 @@ function ProjectWorkflows({ project }: { project: EnvironmentProject }) {
         </div>
       </div>
       <TemplateEditor
-        key={template?.id ?? `new-${draftKey}`}
+        key={draftKey}
         project={project}
         template={template}
-        onSaved={setSelectedId}
+        onUnsaved={setUnsaved}
+        onSaved={(id) => {
+          setSelectedId(id);
+          if (id === null) setDraftKey((key) => key + 1);
+        }}
       />
     </>
   );
@@ -125,10 +190,12 @@ function TemplateEditor({
   project,
   template,
   onSaved,
+  onUnsaved,
 }: {
   project: EnvironmentProject;
   template: WorkflowTemplate | undefined;
   onSaved: (id: string | null) => void;
+  onUnsaved: (value: boolean) => void;
 }) {
   const configs = useServerConfigs();
   const providers = configs.get(project.environmentId)?.providers ?? [];
@@ -153,16 +220,33 @@ function TemplateEditor({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(!template);
+  const [touched, setTouched] = useState(false);
+  useEffect(() => {
+    onUnsaved(dirty && touched);
+  }, [dirty, touched, onUnsaved]);
+  const [launchOpen, setLaunchOpen] = useState(false);
+  const navigate = useNavigate();
   const save = useAtomCommand(workflowEnvironment.saveTemplate);
   const remove = useAtomCommand(workflowEnvironment.remove);
+  const validateProviders = useAtomCommand(workflowEnvironment.validate);
   const update = (next: WorkflowDefinition) => {
     setDefinition(next);
+    setTouched(true);
     setDirty(true);
     setNotice(null);
     setError(null);
   };
   const node = definition.nodes.find((item) => item.id === selectedNode);
   const validate = () => {
+    try {
+      resolveWorkflowPrompt(
+        definition.prompt,
+        Object.fromEntries(workflowVariables(definition.prompt).map((key) => [key, "example"])),
+      );
+    } catch (error) {
+      setError(String(error));
+      return false;
+    }
     const issues = validateWorkflowGraph(definition);
     if (issues.length) {
       setError(issues.map((issue) => issue.message).join("\n"));
@@ -173,6 +257,20 @@ function TemplateEditor({
   };
   return (
     <>
+      {launchOpen && template && (
+        <WorkflowLaunch
+          template={template}
+          project={project}
+          onClose={() => setLaunchOpen(false)}
+          onLaunched={(task) => {
+            setLaunchOpen(false);
+            void navigate({
+              to: "/workflows",
+              search: { task: task.id, project: project.id, environment: project.environmentId },
+            });
+          }}
+        />
+      )}
       <div className="workflow-header">
         {settings ? (
           <button className="workflow-button" onClick={() => setSettings(false)}>
@@ -219,10 +317,31 @@ function TemplateEditor({
           </>
         )}
         <div className="workflow-spacer" />
+        {revision > 0 && (
+          <button
+            className="workflow-button"
+            disabled={busy || dirty}
+            onClick={() => setLaunchOpen(true)}
+          >
+            Start workflow
+          </button>
+        )}
         <button
           className="workflow-button"
-          onClick={() => {
-            if (validate()) setNotice("The graph is valid. No agents or worktrees were started.");
+          disabled={busy}
+          onClick={async () => {
+            if (!validate()) return;
+            setBusy(true);
+            const result = await validateProviders({
+              environmentId: project.environmentId,
+              input: definition,
+            });
+            setBusy(false);
+            if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
+            else
+              setNotice(
+                "The graph and agent capabilities are valid. No agents or worktrees were started.",
+              );
           }}
         >
           <Check size={14} />
