@@ -3607,15 +3607,24 @@ export default function Sidebar() {
       <SidebarChromeHeader isElectron={isElectron} />
       <div className="workflow-sidebar-switch" role="group" aria-label="Sidebar view">
         <span className={sidebarMode === "workflows" ? "is-workflows" : ""} aria-hidden="true" />
-        <button aria-pressed={sidebarMode === "threads"} onClick={() => setSidebarMode("threads")}>
-          Threads
-        </button>
-        <button
-          aria-pressed={sidebarMode === "workflows"}
-          onClick={() => setSidebarMode("workflows")}
-        >
-          Workflows
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            aria-pressed={sidebarMode === "threads"}
+            onClick={() => setSidebarMode("threads")}
+          >
+            Threads
+          </TooltipTrigger>
+          <TooltipPopup>Show threads</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            aria-pressed={sidebarMode === "workflows"}
+            onClick={() => setSidebarMode("workflows")}
+          >
+            Workflows
+          </TooltipTrigger>
+          <TooltipPopup>Show workflows</TooltipPopup>
+        </Tooltip>
       </div>
       <div className={sidebarMode === "workflows" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
         <WorkflowSidebar active={sidebarMode === "workflows"} />

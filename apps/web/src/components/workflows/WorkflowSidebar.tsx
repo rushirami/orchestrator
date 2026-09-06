@@ -1,16 +1,28 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactElement } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Folder, GitBranch, MessageSquare, Plus } from "lucide-react";
 import { useProjects } from "../../state/entities";
 import { workflowEnvironment } from "../../state/workflows";
+import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import "./workflows.css";
 
 interface WorkflowSidebarContentProps {
   collapsed: ReadonlySet<string>;
   onToggle: (key: string, open: boolean) => void;
   onContentReady: () => void;
+}
+
+function WorkflowSidebarTooltip({ label, children }: { label: string; children: ReactElement }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipPopup side="right" className="max-w-72 break-words">
+        {label}
+      </TooltipPopup>
+    </Tooltip>
+  );
 }
 
 export function WorkflowSidebar({ active }: { active: boolean }) {
@@ -44,15 +56,19 @@ export function WorkflowSidebar({ active }: { active: boolean }) {
         scrollTop.current = event.currentTarget.scrollTop;
       }}
     >
-      <Link className="workflow-sidebar-action" to="/workflows">
-        <Plus size={15} />
-        Configure workflows
-      </Link>
-      <WorkflowSidebarProjects
-        collapsed={collapsed}
-        onToggle={onToggle}
-        onContentReady={restoreScroll}
-      />
+      <TooltipProvider delay={300} closeDelay={0}>
+        <WorkflowSidebarTooltip label="Configure workflow templates">
+          <Link className="workflow-sidebar-action" to="/workflows">
+            <Plus size={15} aria-hidden="true" />
+            Configure workflows
+          </Link>
+        </WorkflowSidebarTooltip>
+        <WorkflowSidebarProjects
+          collapsed={collapsed}
+          onToggle={onToggle}
+          onContentReady={restoreScroll}
+        />
+      </TooltipProvider>
     </div>
   );
 }
@@ -93,71 +109,95 @@ function EnvironmentWorkflows({
     return (
       <section key={project.id} className="workflow-sidebar-project">
         <div className="workflow-sidebar-label">
-          <Folder size={15} />
-          <Link to="/workflows" search={{ project: project.id, environment: environmentId }}>
-            <strong>{project.title}</strong>
-          </Link>
-          <Link
-            className="workflow-sidebar-new"
-            to="/workflows"
-            search={{ project: project.id, environment: environmentId, view: "new" }}
-            aria-label={`New workflow in ${project.title}`}
-            title={`New workflow in ${project.title}`}
-          >
-            <Plus size={15} />
-          </Link>
+          <WorkflowSidebarTooltip label={`Open workflows in ${project.title}`}>
+            <Link
+              className="workflow-sidebar-project-link"
+              to="/workflows"
+              search={{ project: project.id, environment: environmentId }}
+            >
+              <Folder size={15} aria-hidden="true" />
+              <strong>{project.title}</strong>
+            </Link>
+          </WorkflowSidebarTooltip>
+          <WorkflowSidebarTooltip label={`New workflow in ${project.title}`}>
+            <Link
+              className="workflow-sidebar-new"
+              to="/workflows"
+              search={{ project: project.id, environment: environmentId, view: "new" }}
+              aria-label={`New workflow in ${project.title}`}
+            >
+              <Plus size={15} aria-hidden="true" />
+            </Link>
+          </WorkflowSidebarTooltip>
         </div>
         {tasks.length === 0 && <p className="workflow-help">No active workflows</p>}
-        {tasks.map((task) => (
-          <details
-            className="workflow-sidebar-task"
-            key={task.id}
-            open={!collapsed.has(`${environmentId}:${task.id}`)}
-            onToggle={(event) => onToggle(`${environmentId}:${task.id}`, event.currentTarget.open)}
-          >
-            <summary>
-              <ChevronDown size={13} />
-              <GitBranch size={14} />
-              <Link
-                to="/workflows"
-                onClick={(event) => event.stopPropagation()}
-                search={{ task: task.id, project: project.id, environment: environmentId }}
-              >
-                {task.workspaceName}
-              </Link>
-              <small>{task.status}</small>
-            </summary>
-            {task.definition.threads.map((thread) => {
-              const threadId = task.threadIds[thread.id];
-              const stages = task.definition.nodes.filter(
-                (node) => node.kind === "agent" && node.threadId === thread.id,
-              );
-              const state = task.nodes.find(
-                (node) =>
-                  stages.some((stage) => stage.id === node.nodeId) &&
-                  (node.status === "running" || node.status === "failed"),
-              );
-              return threadId ? (
-                <Link
-                  key={thread.id}
-                  className="workflow-sidebar-thread"
-                  to="/$environmentId/$threadId"
-                  params={{ environmentId, threadId }}
-                >
-                  <MessageSquare size={13} />
-                  <span>{thread.name}</span>
-                  {state && <small>{state.status}</small>}
-                </Link>
-              ) : (
-                <div key={thread.id} className="workflow-sidebar-thread">
-                  <MessageSquare size={13} />
-                  <span>{thread.name}</span>
-                  <small>Waiting</small>
-                </div>
-              );
-            })}
-          </details>
-        ))}
+        {tasks.map((task) => {
+          const key = `${environmentId}:${task.id}`;
+          const open = !collapsed.has(key);
+          const threadsId = `workflow-threads-${key}`;
+          const toggleLabel = `${open ? "Collapse" : "Expand"} ${task.workspaceName} threads`;
+          return (
+            <div className="workflow-sidebar-task" key={task.id}>
+              <div className="workflow-sidebar-task-header">
+                <WorkflowSidebarTooltip label={toggleLabel}>
+                  <button
+                    type="button"
+                    className="workflow-sidebar-toggle"
+                    aria-label={toggleLabel}
+                    aria-expanded={open}
+                    aria-controls={threadsId}
+                    onClick={() => onToggle(key, !open)}
+                  >
+                    <ChevronDown size={13} aria-hidden="true" />
+                  </button>
+                </WorkflowSidebarTooltip>
+                <WorkflowSidebarTooltip label={`Open ${task.workspaceName} workflow`}>
+                  <Link
+                    className="workflow-sidebar-task-link"
+                    to="/workflows"
+                    search={{ task: task.id, project: project.id, environment: environmentId }}
+                  >
+                    <GitBranch size={14} aria-hidden="true" />
+                    <span>{task.workspaceName}</span>
+                    <small>{task.status}</small>
+                  </Link>
+                </WorkflowSidebarTooltip>
+              </div>
+              <div id={threadsId} hidden={!open}>
+                {task.definition.threads.map((thread) => {
+                  const threadId = task.threadIds[thread.id];
+                  const stages = task.definition.nodes.filter(
+                    (node) => node.kind === "agent" && node.threadId === thread.id,
+                  );
+                  const state = task.nodes.find(
+                    (node) =>
+                      stages.some((stage) => stage.id === node.nodeId) &&
+                      (node.status === "running" || node.status === "failed"),
+                  );
+                  return threadId ? (
+                    <WorkflowSidebarTooltip key={thread.id} label={`Open ${thread.name} thread`}>
+                      <Link
+                        className="workflow-sidebar-thread"
+                        to="/$environmentId/$threadId"
+                        params={{ environmentId, threadId }}
+                      >
+                        <MessageSquare size={13} aria-hidden="true" />
+                        <span>{thread.name}</span>
+                        {state && <small>{state.status}</small>}
+                      </Link>
+                    </WorkflowSidebarTooltip>
+                  ) : (
+                    <div key={thread.id} className="workflow-sidebar-thread">
+                      <MessageSquare size={13} aria-hidden="true" />
+                      <span>{thread.name}</span>
+                      <small>Waiting</small>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </section>
     );
   });
