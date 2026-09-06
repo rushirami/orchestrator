@@ -184,8 +184,12 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
       throw new Error("This stage is not ready for review.");
     if (state.artifactRevision !== action.artifactRevision)
       throw new Error("The artifact changed. Review the current revision before approving.");
-    if (action.type === "revise")
-      return restartFrom({ ...task, status: "running" }, node.revisionTarget, action.context);
+    if (action.type === "revise") {
+      const revised = restartFrom(task, node.revisionTarget, action.context);
+      if (revised.nodes.some((node) => node.status === "failed"))
+        throw new Error("Retry the other failed stages before requesting revisions.");
+      return { ...revised, status: "running" };
+    }
     next = { ...state, status: "complete" };
   } else if (action.type === "retry") {
     if (task.status !== "paused" || state.status !== "failed")

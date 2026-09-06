@@ -6,6 +6,7 @@ import {
   type WorkflowArtifactComment,
   type WorkflowTask,
 } from "@t3tools/contracts";
+import { validateWorkflowGraph } from "@t3tools/shared/workflowGraph";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -289,5 +290,142 @@ for (const predecessorStatus of ["pending", "complete"] as const) {
         assert.equal(preparations, 0);
         assert.equal(dispatches, 0);
       }).pipe(Effect.scoped, Effect.provide(layer)),
+  );
+}
+
+for (const [approvalStatus, revisionTarget] of [
+  ["pending", "review-a"],
+  ["awaiting-approval", "review-a"],
+  ["pending", "plan"],
+] as const) {
+  it.effect(`handles failed branches when revising ${approvalStatus} to ${revisionTarget}`, () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO projection_projects(project_id, title, workspace_root, scripts_json, created_at, updated_at) VALUES ('project-a', 'Project', '/tmp/project', '[]', '2026-09-04T00:00:00.000Z', '2026-09-04T00:00:00.000Z')`;
+      const store = yield* WorkflowStore;
+      const fs = yield* FileSystem.FileSystem;
+      const worktree = yield* fs.makeTempDirectoryScoped();
+      yield* fs.writeFileString(`${worktree}/spec.md`, "# Spec\n\nUse red.\nShip a mobile app.\n");
+      const artifact = yield* readWorkflowArtifact(worktree, "spec.md");
+      const fixture = taskFixture();
+      const nodeIds = new Set(["plan", "review-a", "approval", "review-b"]);
+      const failure = "The second reviewer failed before producing a result.";
+      const task: WorkflowTask = {
+        ...fixture,
+        status: "paused",
+        error: failure,
+        worktreePath: worktree,
+        reworkTargetNodeId: "review-b",
+        reworkContext: {
+          outcome: "changes-requested",
+          summary: "Previous feedback still awaiting recovery.",
+          artifacts: ["spec.md"],
+        },
+        definition: {
+          ...fixture.definition,
+          rework: null,
+          nodes: fixture.definition.nodes
+            .filter((node) => nodeIds.has(node.id))
+            .map((node) => (node.kind === "approval" ? { ...node, revisionTarget } : node)),
+          edges: [
+            { from: "plan", to: "review-a" },
+            { from: "review-a", to: "approval" },
+            { from: "plan", to: "review-b" },
+          ],
+        },
+        nodes: fixture.nodes
+          .filter((node) => nodeIds.has(node.nodeId))
+          .map((node) => {
+            if (node.nodeId === "approval")
+              return {
+                ...node,
+                status: approvalStatus,
+                artifactRevision: approvalStatus === "pending" ? null : "previous-artifact-hash",
+              };
+            if (node.nodeId === "review-b") return { ...node, status: "failed", error: failure };
+            return {
+              ...node,
+              status: "complete",
+              result: { outcome: "complete", summary: "Finished", artifacts: ["spec.md"] },
+              reviewRevision: "code-revision",
+            };
+          }),
+      };
+      assert.deepEqual(validateWorkflowGraph(task.definition), []);
+      yield* store.save(task, 0, "task.paused");
+      const dispatches = yield* Queue.unbounded<{ task: WorkflowTask; nodeId: string }>();
+      let preparations = 0;
+      const runner = yield* makeWorkflowRunner.pipe(
+        Effect.provideService(WorkflowRuntime, {
+          watch: () => Effect.void,
+          readResult: () => Effect.succeed(null),
+          reviewRevision: () => Effect.succeed("code-revision"),
+          validate: () => Effect.void,
+          plan: Effect.succeed,
+          prepare: () =>
+            Effect.sync(() => {
+              preparations++;
+            }),
+          interrupt: () => Effect.void,
+          dispatch: (dispatched, node) =>
+            Effect.gen(function* () {
+              assert.deepEqual(yield* store.get(dispatched.id), dispatched);
+              yield* Queue.offer(dispatches, { task: dispatched, nodeId: node.id });
+            }).pipe(Effect.orDie),
+          events: Stream.empty,
+        }),
+      );
+      const input = {
+        taskId: task.id,
+        expectedRevision: task.revision,
+        nodeId: "approval",
+        action: "revise" as const,
+        artifactRevision: artifact.revision,
+        revisionComments: comments,
+      };
+      let current = task;
+      if (revisionTarget === "review-a") {
+        const rejected = yield* runner.control(input).pipe(Effect.result);
+        assert.equal(rejected._tag, "Failure");
+        if (rejected._tag === "Failure")
+          assert.include(
+            rejected.failure.message,
+            "Retry the other failed stages before requesting revisions.",
+          );
+        assert.deepEqual(yield* store.get(task.id), task);
+        assert.equal(yield* Queue.size(dispatches), 0);
+        assert.equal(preparations, 0);
+        current = yield* runner.control({
+          taskId: task.id,
+          expectedRevision: task.revision,
+          nodeId: "review-b",
+          action: "retry",
+        });
+        assert.equal(current.status, "paused");
+        assert.equal(current.nodes.find((node) => node.nodeId === "review-b")?.status, "pending");
+        assert.deepEqual(current.reworkContext, task.reworkContext);
+        assert.equal(yield* Queue.size(dispatches), 0);
+      }
+      const revised = yield* runner.control({ ...input, expectedRevision: current.revision });
+      assert.equal(revised.status, "running");
+      assert.isNull(revised.error);
+      assert.equal(revised.iteration, 1);
+      assert.equal(revised.reworkTargetNodeId, revisionTarget);
+      assert.equal(revised.reworkContext?.outcome, "changes-requested");
+      assert.deepEqual(revised.reworkContext?.artifacts, ["spec.md"]);
+      assert.include(revised.reworkContext!.summary, comments[0]!.text);
+      assert.include(revised.reworkContext!.summary, comments[1]!.text);
+      assert.include(revised.reworkContext!.summary, "> 3: Use red.\n> 4: Ship a mobile app.");
+      assert.isFalse(revised.nodes.some((node) => node.status === "failed"));
+      assert.isNull(revised.nodes.find((node) => node.nodeId === "approval")?.artifactRevision);
+      assert.deepEqual(yield* store.get(task.id), revised);
+      for (const nodeId of revisionTarget === "plan" ? ["plan"] : ["review-a", "review-b"]) {
+        const dispatched = yield* Queue.take(dispatches);
+        assert.equal(dispatched.nodeId, nodeId);
+        assert.deepEqual(dispatched.task.reworkContext, revised.reworkContext);
+      }
+      assert.equal(yield* Queue.size(dispatches), 0);
+      assert.equal(preparations, 0);
+    }).pipe(Effect.scoped, Effect.provide(layer)),
   );
 }
