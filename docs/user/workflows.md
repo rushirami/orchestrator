@@ -50,3 +50,5 @@ Quitting the desktop stops its local backend. Work does not continue while the a
 Deleting a project is blocked while it owns unfinished or still-running workflow work. Finish or cancel those tasks first. Separate desktop-managed environments keep separate workflow data.
 
 Workflow screens follow your Appearance settings, including light, dark, system, and custom themes. The canvas, stage details, reports, and launch dialog update with the rest of the app.
+
+Open an approval artifact or a file listed in a stage result to read it in the workflow’s **Files** tab. Documents render as Markdown, with headings, lists, links, and code blocks. The stage inspector keeps approval and revision actions beside the document. **Reload artifact** refreshes the reviewed version; switch back to **Workflow** to see the graph, or choose **Close file** to clear the preview.

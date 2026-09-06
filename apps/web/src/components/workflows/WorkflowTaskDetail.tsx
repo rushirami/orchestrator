@@ -17,6 +17,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { useState } from "react";
+import { Tabs } from "@base-ui/react/tabs";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { workflowEnvironment } from "../../state/workflows";
 import ChatMarkdown from "../ChatMarkdown";
@@ -36,6 +37,7 @@ export function WorkflowTaskDetail({
   const [artifact, setArtifact] = useState<
     (typeof WorkflowArtifact.Type & { nodeId: string }) | null
   >(null);
+  const [activeTab, setActiveTab] = useState<string>("workflow");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const control = useAtomCommand(workflowEnvironment.control);
@@ -197,25 +199,61 @@ export function WorkflowTaskDetail({
         </div>
       )}
       <div className="workflow-body">
-        <WorkflowGraph
-          fitToView
-          definition={task.definition}
-          states={task.nodes}
-          selectedId={selectedId}
-          onSelect={(id) => {
-            const node = task.definition.nodes.find((item) => item.id === id);
-            const threadId = node?.kind === "agent" ? task.threadIds[node.threadId] : undefined;
-            if (threadId) {
-              void navigate({
-                to: "/$environmentId/$threadId",
-                params: { environmentId, threadId },
-              });
-              return;
-            }
-            setSelectedId(id);
-            setArtifact(null);
-          }}
-        />
+        <Tabs.Root className="workflow-content-tabs" value={activeTab} onValueChange={setActiveTab}>
+          <Tabs.List className="workflow-content-tab-list" aria-label="Workflow views">
+            <Tabs.Tab className="workflow-content-tab" value="workflow">
+              Workflow
+            </Tabs.Tab>
+            <Tabs.Tab className="workflow-content-tab" value="files">
+              Files
+            </Tabs.Tab>
+          </Tabs.List>
+          <Tabs.Panel className="workflow-content-panel" value="workflow" keepMounted>
+            <WorkflowGraph
+              fitToView
+              definition={task.definition}
+              states={task.nodes}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                const node = task.definition.nodes.find((item) => item.id === id);
+                const threadId = node?.kind === "agent" ? task.threadIds[node.threadId] : undefined;
+                if (threadId) {
+                  void navigate({
+                    to: "/$environmentId/$threadId",
+                    params: { environmentId, threadId },
+                  });
+                  return;
+                }
+                setSelectedId(id);
+                setArtifact(null);
+              }}
+            />
+          </Tabs.Panel>
+          <Tabs.Panel className="workflow-content-panel" value="files">
+            {artifact ? (
+              <section className="workflow-file-view" aria-label={artifact.path}>
+                <header className="workflow-file-heading">
+                  <FileText size={16} />
+                  <span>{artifact.path}</span>
+                  <button className="workflow-button" onClick={() => setArtifact(null)}>
+                    Close file
+                  </button>
+                </header>
+                <div className="workflow-file-document">
+                  <ChatMarkdown
+                    text={artifact.content}
+                    cwd={task.worktreePath ?? undefined}
+                    environmentId={environmentId}
+                  />
+                </div>
+              </section>
+            ) : (
+              <div className="workflow-empty">
+                Select a stage and open an artifact to review its file.
+              </div>
+            )}
+          </Tabs.Panel>
+        </Tabs.Root>
         {selected && state && (
           <aside className="workflow-inspector" key={selected.id}>
             <h2>{selected.name}</h2>
@@ -278,15 +316,20 @@ export function WorkflowTaskDetail({
                     setBusy(false);
                     if (result._tag === "Failure")
                       setError(String(squashAtomCommandFailure(result)));
-                    else setArtifact({ ...result.value, nodeId: selected.id });
+                    else {
+                      setError(null);
+                      setArtifact({ ...result.value, nodeId: selected.id });
+                      setActiveTab("files");
+                    }
                   }}
                 >
                   <FileText size={14} />
-                  {artifact ? "Reload artifact" : `Read ${selected.artifactPath}`}
+                  {artifact?.nodeId === selected.id
+                    ? "Reload artifact"
+                    : `Open ${selected.artifactPath}`}
                 </button>
                 {artifact?.nodeId === selected.id && (
                   <>
-                    <pre className="workflow-artifact">{artifact.content}</pre>
                     {state.status === "awaiting-approval" && (
                       <div className="workflow-row">
                         <button
@@ -333,16 +376,17 @@ export function WorkflowTaskDetail({
                       setBusy(false);
                       if (result._tag === "Failure")
                         setError(String(squashAtomCommandFailure(result)));
-                      else setArtifact({ ...result.value, nodeId: selected.id });
+                      else {
+                        setError(null);
+                        setArtifact({ ...result.value, nodeId: selected.id });
+                        setActiveTab("files");
+                      }
                     }}
                   >
                     <FileText size={12} /> {path}
                   </button>
                 ))}
               </section>
-            )}
-            {selected.kind !== "approval" && artifact?.nodeId === selected.id && (
-              <pre className="workflow-artifact">{artifact.content}</pre>
             )}
             <section className="workflow-divider">
               <h3>Worktree</h3>

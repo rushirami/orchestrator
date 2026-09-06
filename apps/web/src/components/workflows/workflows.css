@@ -587,18 +587,58 @@
 .workflow-launch-footer .workflow-spacer {
   flex: 1;
 }
-.workflow-artifact {
-  white-space: pre-wrap;
+/* File review shares the canvas space so approval controls remain available. */
+.workflow-content-tabs,
+.workflow-content-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.workflow-content-tabs {
+  flex-direction: column;
+}
+.workflow-content-panel[hidden] {
+  display: none;
+}
+.workflow-content-tab-list {
+  display: flex;
+  gap: 16px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--wf-line);
+}
+.workflow-content-tab {
+  padding: 12px 0;
+  color: var(--wf-muted);
+  border-bottom: 2px solid transparent;
+}
+.workflow-content-tab[data-active] {
+  color: var(--wf-ink);
+  border-bottom-color: var(--wf-accent);
+}
+.workflow-file-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.workflow-file-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--wf-line);
+}
+.workflow-file-heading span {
+  flex: 1;
   overflow-wrap: anywhere;
-  margin: 20px 0;
-  padding: 16px;
-  max-height: 45vh;
-  overflow-y: auto;
-  line-height: 1.6;
-  background: var(--muted);
-  border: 1px solid var(--contrast-border);
-  border-radius: 7px;
-  font-size: 12px;
+}
+.workflow-file-document {
+  flex: 1;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 24px;
 }
 .workflow-workspace .workflow-result {
   color: var(--wf-ink);
