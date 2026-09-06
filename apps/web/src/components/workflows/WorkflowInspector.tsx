@@ -1,7 +1,8 @@
 import { randomUUID } from "../../lib/utils";
-import type { WorkflowDefinition, WorkflowNode } from "@t3tools/contracts";
+import type { ModelSelection, WorkflowDefinition, WorkflowNode } from "@t3tools/contracts";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { createWorkflowThread } from "./draft";
 
 function ArtifactPathsInput({
   paths,
@@ -39,11 +40,13 @@ export function WorkflowField({ label, children }: { label: string; children: Re
 
 export function WorkflowInspector({
   definition,
+  defaultModelSelection,
   node,
   onChange,
   onSelect,
 }: {
   definition: WorkflowDefinition;
+  defaultModelSelection: ModelSelection;
   node: WorkflowNode;
   onChange: (definition: WorkflowDefinition) => void;
   onSelect: (id: string | null) => void;
@@ -54,14 +57,16 @@ export function WorkflowInspector({
       nodes: definition.nodes.map((item) => (item.id === node.id ? next : item)),
     });
   const addThread = () => {
-    if (node.kind !== "agent" || !definition.threads[0]) return;
-    const id = randomUUID();
-    const thread = { ...definition.threads[0], id, name: `Agent ${definition.threads.length + 1}` };
+    if (node.kind !== "agent") return;
+    const thread = createWorkflowThread(
+      definition.threads[0]?.modelSelection ?? defaultModelSelection,
+      definition.threads.length,
+    );
     onChange({
       ...definition,
       threads: [...definition.threads, thread],
       nodes: definition.nodes.map((item) =>
-        item.id === node.id ? { ...node, threadId: id } : item,
+        item.id === node.id ? { ...node, threadId: thread.id } : item,
       ),
     });
   };
@@ -89,11 +94,13 @@ export function WorkflowInspector({
                   definition.nodes.find((item) => item.kind === "agent" && item.id !== node.id)
                     ?.id ?? "",
               });
-            if (event.target.value === "agent")
-              update({
+            if (event.target.value === "agent") {
+              const thread =
+                definition.threads[0] ?? createWorkflowThread(defaultModelSelection, 0);
+              const agent: WorkflowNode = {
                 ...common,
                 kind: "agent",
-                threadId: definition.threads[0]?.id ?? "",
+                threadId: thread.id,
                 access: "read-only",
                 skills: [
                   {
@@ -102,7 +109,13 @@ export function WorkflowInspector({
                     outputPaths: [],
                   },
                 ],
+              };
+              onChange({
+                ...definition,
+                threads: definition.threads.length ? definition.threads : [thread],
+                nodes: definition.nodes.map((item) => (item.id === node.id ? agent : item)),
               });
+            }
           }}
         >
           <option value="agent">Agent task</option>

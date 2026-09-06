@@ -6,7 +6,9 @@ Open **Workflows** in the sidebar, then **Configure workflows**. You can also op
 
 ## Configure a template
 
-An **Agent task** has ordered skill instructions and a named thread. Instructions can refer to skills installed in that agent's own setup. Several stages can reuse Builder to preserve its conversation. Add separate reviewer threads for independent reviews. Agents retain their own credentials, tools, and MCP configuration; workflows do not add Jira or GitHub accounts.
+New templates start with a blank canvas, an empty starting prompt, and no agent threads or review revisions. Choose **Add stage** to create your first stage, then select its type and instructions. Adding the first agent stage creates a thread using your project's default agent and model. Set the workflow name, starting prompt, and agent assignments in **Workflow settings**. Add and configure at least one stage before saving.
+
+An **Agent task** has ordered skill instructions and a named thread. Instructions can refer to skills installed in that agent's own setup. Several stages can reuse a thread to preserve its conversation. Add separate threads for independent work. Agents retain their own credentials, tools, and MCP configuration; workflows do not add Jira or GitHub accounts.
 
 **Human approval** opens an artifact such as `spec.md` before continuing. Approval applies to the contents you read. If the file changes, reload it before approving. **Request revision** sends work back to the configured earlier stage.
 
@@ -14,7 +16,7 @@ Select multiple outgoing stages to start all branches. Every incoming branch mus
 
 Read-only stages return findings in their result summary. They cannot write review files. Follow them with a Builder stage to combine reports and save an artifact. The application checks that reviews still match the code before advancing. An outside edit requires fresh reviews.
 
-**Workflow settings** contains the reusable prompt, worktree defaults, thread providers and models, and an optional bounded return-to-Builder path for review fixes. For example:
+**Workflow settings** contains the reusable prompt, worktree defaults, thread providers and models, and an optional bounded return to an earlier stage for review fixes. For example:
 
 ```text
 Start brainstorming on {{ TASK_ID }}

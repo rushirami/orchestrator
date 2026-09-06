@@ -25,7 +25,7 @@ import { WorkflowLaunch } from "./WorkflowLaunch";
 import { WorkflowTaskDetail } from "./WorkflowTaskDetail";
 import { WorkflowBreadcrumb } from "./WorkflowBreadcrumb";
 import { WorkflowNew } from "./WorkflowNew";
-import { createLocalWorkflow } from "./presets";
+import { createBlankWorkflow, createWorkflowThread } from "./draft";
 import "./workflows.css";
 
 export function WorkflowEditor() {
@@ -198,21 +198,19 @@ function TemplateEditor({
 }) {
   const configs = useServerConfigs();
   const providers = configs.get(project.environmentId)?.providers ?? [];
+  const provider = providers.find((item) => item.enabled && item.installed);
+  const defaultModelSelection = project.defaultModelSelection ?? {
+    instanceId: provider?.instanceId ?? ProviderInstanceId.make("codex"),
+    model:
+      provider?.models.find((model) => model.isDefault)?.slug ??
+      provider?.models[0]?.slug ??
+      DEFAULT_MODEL,
+  };
   const [id] = useState(() => template?.id ?? WorkflowId.make(randomUUID()));
   const [revision, setRevision] = useState(template?.revision ?? 0);
-  const [definition, setDefinition] = useState<WorkflowDefinition>(() => {
-    if (template) return template.definition;
-    const provider = providers.find((item) => item.enabled && item.installed);
-    return createLocalWorkflow(
-      project.defaultModelSelection ?? {
-        instanceId: provider?.instanceId ?? ProviderInstanceId.make("codex"),
-        model:
-          provider?.models.find((model) => model.isDefault)?.slug ??
-          provider?.models[0]?.slug ??
-          DEFAULT_MODEL,
-      },
-    );
-  });
+  const [definition, setDefinition] = useState<WorkflowDefinition>(
+    () => template?.definition ?? createBlankWorkflow(),
+  );
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [settings, setSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -283,19 +281,24 @@ function TemplateEditor({
               className="workflow-button"
               onClick={() => {
                 const nodeId = randomUUID();
+                const thread =
+                  definition.threads[0] ?? createWorkflowThread(defaultModelSelection, 0);
                 update({
                   ...definition,
+                  threads: definition.threads.length ? definition.threads : [thread],
                   nodes: [
                     ...definition.nodes,
                     {
                       id: nodeId,
                       name: "New stage",
                       kind: "agent",
-                      threadId: definition.threads[0]?.id ?? "",
+                      threadId: thread.id,
                       access: "read-only",
                       position: {
                         x: 40,
-                        y: Math.max(0, ...definition.nodes.map((item) => item.position.y)) + 134,
+                        y: definition.nodes.length
+                          ? Math.max(...definition.nodes.map((item) => item.position.y)) + 134
+                          : 40,
                       },
                       skills: [
                         {
@@ -426,6 +429,7 @@ function TemplateEditor({
           {node && (
             <WorkflowInspector
               definition={definition}
+              defaultModelSelection={defaultModelSelection}
               node={node}
               onChange={update}
               onSelect={setSelectedNode}

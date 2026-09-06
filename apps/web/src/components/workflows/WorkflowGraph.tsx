@@ -104,6 +104,12 @@ export function WorkflowGraph({
   };
   return (
     <div className="workflow-graph" aria-label="Workflow graph">
+      {onChange && nodes.length === 0 && (
+        <div className="workflow-empty workflow-graph-empty">
+          <strong>Build your workflow</strong>
+          <p>Use Add stage to choose what happens first.</p>
+        </div>
+      )}
       <div className="workflow-graph-tools">
         {onChange && (
           <button onClick={() => onChange(arrangeWorkflow(definition))}>Arrange nodes</button>

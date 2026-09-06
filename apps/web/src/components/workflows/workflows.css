@@ -107,6 +107,12 @@
   padding: 5px;
   border-radius: 7px;
 }
+.workflow-graph-empty {
+  position: absolute;
+  inset: 52px 24px 24px;
+  pointer-events: none;
+  text-align: center;
+}
 .workflow-graph-tools button {
   display: inline-flex;
   padding: 5px;
