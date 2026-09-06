@@ -54,8 +54,12 @@ it("validates revision comments at the wire boundary", () => {
   assert.equal(decode({ ...input, action: "approve" }).action, "approve");
 });
 
-for (const status of ["running", "paused"] as const) {
-  it.effect(`revises a ${status} approval with durable comments and returns for approval`, () =>
+for (const [status, approvalStatus] of [
+  ["running", "awaiting-approval"],
+  ["paused", "awaiting-approval"],
+  ["paused", "pending"],
+] as const) {
+  it.effect(`revises ${status}/${approvalStatus} with comments and returns for approval`, () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO projection_projects(project_id, title, workspace_root, scripts_json, created_at, updated_at) VALUES ('project-a', 'Project', '/tmp/project', '[]', '2026-09-04T00:00:00.000Z', '2026-09-04T00:00:00.000Z')`;
@@ -80,7 +84,11 @@ for (const status of ["running", "paused"] as const) {
                 result: { outcome: "complete", summary: "Wrote spec", artifacts: ["spec.md"] },
               }
             : node.nodeId === "approval"
-              ? { ...node, status: "awaiting-approval", artifactRevision: artifact.revision }
+              ? {
+                  ...node,
+                  status: approvalStatus,
+                  artifactRevision: approvalStatus === "pending" ? null : artifact.revision,
+                }
               : node,
         ),
       };
@@ -166,7 +174,11 @@ for (const status of ["running", "paused"] as const) {
         threadId: task.threadIds.builder!,
         turnId: "revision-turn",
         operationId: state.operationId!,
-        result: { outcome: "complete", summary: "Addressed both comments", artifacts: ["spec.md"] },
+        result: {
+          outcome: "complete",
+          summary: "Addressed both comments",
+          artifacts: ["spec.md"],
+        },
       });
       const awaiting = yield* service.changes.pipe(
         Stream.mapEffect(() => service.snapshot()),
@@ -195,5 +207,87 @@ for (const status of ["running", "paused"] as const) {
         .pipe(Effect.result);
       assert.equal(oldApproval._tag, "Failure");
     }).pipe(Effect.scoped, Effect.provide(layer)),
+  );
+}
+
+for (const predecessorStatus of ["pending", "complete"] as const) {
+  it.effect(
+    `reviews a paused pending approval only with a complete predecessor (${predecessorStatus})`,
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO projection_projects(project_id, title, workspace_root, scripts_json, created_at, updated_at) VALUES ('project-a', 'Project', '/tmp/project', '[]', '2026-09-04T00:00:00.000Z', '2026-09-04T00:00:00.000Z')`;
+        const store = yield* WorkflowStore;
+        const fs = yield* FileSystem.FileSystem;
+        const worktree = yield* fs.makeTempDirectoryScoped();
+        yield* fs.writeFileString(
+          `${worktree}/spec.md`,
+          "# Spec\n\nUse red.\nShip a desktop app.\n",
+        );
+        const artifact = yield* readWorkflowArtifact(worktree, "spec.md");
+        const fixture = taskFixture();
+        const task: WorkflowTask = {
+          ...fixture,
+          status: "paused",
+          worktreePath: worktree,
+          nodes: fixture.nodes.map((node) =>
+            node.nodeId === "plan" ? { ...node, status: predecessorStatus } : node,
+          ),
+        };
+        yield* store.save(task, 0, "task.paused");
+        let dispatches = 0;
+        let preparations = 0;
+        const runner = yield* makeWorkflowRunner.pipe(
+          Effect.provideService(WorkflowRuntime, {
+            watch: () => Effect.void,
+            readResult: () => Effect.succeed(null),
+            reviewRevision: () => Effect.succeed("revision"),
+            validate: () => Effect.void,
+            plan: Effect.succeed,
+            prepare: () =>
+              Effect.sync(() => {
+                preparations++;
+              }),
+            interrupt: () => Effect.void,
+            dispatch: () =>
+              Effect.sync(() => {
+                dispatches++;
+              }),
+            events: Stream.empty,
+          }),
+        );
+        const input = {
+          taskId: task.id,
+          expectedRevision: task.revision,
+          nodeId: "approval",
+          artifactRevision: artifact.revision,
+        };
+        if (predecessorStatus === "pending") {
+          for (const action of ["approve", "revise"] as const) {
+            const rejected = yield* runner
+              .control({ ...input, action, revisionComments: comments })
+              .pipe(Effect.result);
+            assert.equal(rejected._tag, "Failure");
+            if (rejected._tag === "Failure")
+              assert.include(rejected.failure.message, "not ready for review");
+          }
+          assert.deepEqual(yield* store.get(task.id), task);
+        } else {
+          const approved = yield* runner.control({ ...input, action: "approve" });
+          assert.equal(approved.status, "paused");
+          assert.equal(
+            approved.nodes.find((node) => node.nodeId === "approval")?.status,
+            "complete",
+          );
+          assert.equal(
+            approved.nodes.find((node) => node.nodeId === "approval")?.artifactRevision,
+            artifact.revision,
+          );
+          assert.equal(approved.nodes.find((node) => node.nodeId === "build")?.status, "pending");
+          assert.deepEqual(yield* store.get(task.id), approved);
+        }
+        assert.equal(preparations, 0);
+        assert.equal(dispatches, 0);
+      }).pipe(Effect.scoped, Effect.provide(layer)),
   );
 }

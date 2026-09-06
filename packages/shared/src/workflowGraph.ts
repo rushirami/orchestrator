@@ -1,4 +1,4 @@
-import type { WorkflowDefinition, WorkflowNodeState } from "@t3tools/contracts";
+import type { WorkflowDefinition, WorkflowNodeState, WorkflowTask } from "@t3tools/contracts";
 
 export type WorkflowIssue = { nodeId?: string; message: string };
 
@@ -140,4 +140,20 @@ export function readyWorkflowNodes(
           .every((edge) => byId.get(edge.from)?.status === "complete"),
     )
     .map((node) => node.id);
+}
+
+/** A ready approval remains reviewable when pausing prevents the scheduler from starting it. */
+export function canReviewWorkflowApproval(
+  task: Pick<WorkflowTask, "status" | "definition" | "nodes">,
+  nodeId: string,
+): boolean {
+  if (task.status !== "running" && task.status !== "paused") return false;
+  const node = task.definition.nodes.find((node) => node.id === nodeId);
+  if (node?.kind !== "approval") return false;
+  const state = task.nodes.find((state) => state.nodeId === nodeId);
+  return (
+    state?.status === "awaiting-approval" ||
+    (state?.status === "pending" &&
+      readyWorkflowNodes(task.definition, task.nodes).includes(nodeId))
+  );
 }

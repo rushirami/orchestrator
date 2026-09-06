@@ -1,7 +1,11 @@
 import * as Schema from "effect/Schema";
 import { WorkflowDefinition, WorkflowNodeState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { readyWorkflowNodes, validateWorkflowGraph } from "./workflowGraph.ts";
+import {
+  canReviewWorkflowApproval,
+  readyWorkflowNodes,
+  validateWorkflowGraph,
+} from "./workflowGraph.ts";
 
 const decodeState = Schema.decodeUnknownSync(WorkflowNodeState);
 const decode = Schema.decodeUnknownSync(WorkflowDefinition);
@@ -116,5 +120,68 @@ describe("workflow dependency graph", () => {
     const issues = validateWorkflowGraph(changed);
     expect(issues.some((issue) => issue.message.includes("inside"))).toBe(true);
     expect(issues.some((issue) => issue.message.includes("earlier"))).toBe(true);
+  });
+});
+
+describe("workflow approval availability", () => {
+  const base = graph();
+  const definition: WorkflowDefinition = {
+    ...base,
+    nodes: base.nodes.map((node) =>
+      node.id === "join"
+        ? { ...node, kind: "approval", artifactPath: "report.md", revisionTarget: "build" }
+        : node,
+    ),
+  };
+
+  it.each(["running", "paused"] as const)(
+    "allows ready pending and awaiting approvals in a %s task",
+    (status) => {
+      for (const nodeStatus of ["pending", "awaiting-approval"])
+        expect(
+          canReviewWorkflowApproval(
+            { status, definition, nodes: states(["complete", "complete", "complete", nodeStatus]) },
+            "join",
+          ),
+        ).toBe(true);
+    },
+  );
+
+  it("requires every predecessor to complete before reviewing a pending approval", () => {
+    for (const predecessor of ["pending", "running", "failed", "cancelled"])
+      expect(
+        canReviewWorkflowApproval(
+          {
+            status: "paused",
+            definition,
+            nodes: states(["complete", "complete", predecessor, "pending"]),
+          },
+          "join",
+        ),
+      ).toBe(false);
+  });
+
+  it("does not expose review for inactive tasks, finished approvals, or other stage kinds", () => {
+    const nodes = states(["complete", "complete", "complete", "pending"]);
+    for (const status of ["starting", "complete", "cancelled"] as const)
+      expect(canReviewWorkflowApproval({ status, definition, nodes }, "join")).toBe(false);
+    for (const status of ["dispatching", "running", "complete", "failed", "cancelled"])
+      expect(
+        canReviewWorkflowApproval(
+          {
+            status: "paused",
+            definition,
+            nodes: states(["complete", "complete", "complete", status]),
+          },
+          "join",
+        ),
+      ).toBe(false);
+    expect(canReviewWorkflowApproval({ status: "paused", definition, nodes }, "build")).toBe(false);
+    expect(canReviewWorkflowApproval({ status: "paused", definition, nodes }, "missing")).toBe(
+      false,
+    );
+    expect(canReviewWorkflowApproval({ status: "paused", definition: base, nodes }, "join")).toBe(
+      false,
+    );
   });
 });

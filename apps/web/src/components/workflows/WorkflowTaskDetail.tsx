@@ -23,6 +23,7 @@ import { workflowEnvironment } from "../../state/workflows";
 import ChatMarkdown from "../ChatMarkdown";
 import { WorkflowGraph } from "./WorkflowGraph";
 import { WorkflowArtifactReview } from "./WorkflowArtifactReview";
+import { canReviewWorkflowApproval } from "@t3tools/shared/workflowGraph";
 
 export function WorkflowTaskDetail({
   task,
@@ -248,11 +249,20 @@ export function WorkflowTaskDetail({
                 cwd={task.worktreePath ?? undefined}
                 reviewKey={`t3code.workflow-review:${JSON.stringify([environmentId, task.id, artifact.nodeId, artifact.path])}`}
                 canReview={
-                  task.status !== "cancelled" &&
-                  task.status !== "complete" &&
                   selected?.kind === "approval" &&
                   artifact.nodeId === selected.id &&
-                  state?.status === "awaiting-approval"
+                  canReviewWorkflowApproval(task, artifact.nodeId)
+                }
+                reviewUnavailableReason={
+                  selected?.kind === "approval" && artifact.nodeId === selected.id
+                    ? task.status === "cancelled"
+                      ? "This workflow has been cancelled."
+                      : task.status === "complete" || state?.status === "complete"
+                        ? "This approval is already complete."
+                        : state?.status === "failed"
+                          ? "Retry the failed approval stage before reviewing."
+                          : "Review will be available when the earlier stages finish."
+                    : undefined
                 }
                 busy={busy}
                 onClose={() => setArtifact(null)}

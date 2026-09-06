@@ -141,6 +141,7 @@ export function WorkflowArtifactReview({
   cwd,
   reviewKey,
   canReview,
+  reviewUnavailableReason,
   busy,
   onClose,
   onApprove,
@@ -151,6 +152,7 @@ export function WorkflowArtifactReview({
   cwd: string | undefined;
   reviewKey: string;
   canReview: boolean;
+  reviewUnavailableReason?: string | undefined;
   busy: boolean;
   onClose: () => void;
   onApprove: () => Promise<boolean>;
@@ -354,6 +356,23 @@ export function WorkflowArtifactReview({
             >
               <MessageSquare size={14} />
               Request revision{review.comments.length > 0 ? ` (${review.comments.length})` : ""}
+            </button>
+          </div>
+        </footer>
+      )}
+      {!canReview && reviewUnavailableReason && (
+        <footer className="workflow-file-review">
+          <div className="workflow-review-actions">
+            <p className="workflow-help" role="status">
+              {reviewUnavailableReason}
+            </p>
+            <button className="workflow-button" disabled>
+              <Check size={14} />
+              Approve
+            </button>
+            <button className="workflow-button is-primary" disabled>
+              <MessageSquare size={14} />
+              Request revision
             </button>
           </div>
         </footer>

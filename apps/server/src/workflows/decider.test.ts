@@ -101,6 +101,65 @@ describe("workflow transitions", () => {
     expect(updated.reworkTargetNodeId).toBeUndefined();
     expect(updated.nodes.find((node) => node.nodeId === "approval")?.status).toBe("pending");
   });
+  it("accepts a revision-bound decision on a paused pending approval without resuming other work", () => {
+    const planned = finish(taskFixture(), "plan");
+    const task: WorkflowTask = {
+      ...planned,
+      status: "paused",
+      nodes: planned.nodes.map((node) =>
+        node.nodeId === "approval" ? { ...node, artifactRevision: "spec-v1" } : node,
+      ),
+    };
+    for (const type of ["approve", "revise"] as const)
+      expect(() =>
+        decideWorkflow(task, {
+          type,
+          nodeId: "approval",
+          artifactRevision: "spec-old",
+          context: revisionContext,
+        }),
+      ).toThrow("changed");
+    const approved = decideWorkflow(task, {
+      type: "approve",
+      nodeId: "approval",
+      artifactRevision: "spec-v1",
+    });
+    expect(approved.status).toBe("paused");
+    expect(approved.nodes.find((node) => node.nodeId === "approval")?.status).toBe("complete");
+    expect(approved.nodes.find((node) => node.nodeId === "build")?.status).toBe("pending");
+    const revised = decideWorkflow(task, {
+      type: "revise",
+      nodeId: "approval",
+      artifactRevision: "spec-v1",
+      context: revisionContext,
+    });
+    expect(revised).toMatchObject({
+      status: "running",
+      iteration: 1,
+      reworkTargetNodeId: "plan",
+      reworkContext: revisionContext,
+    });
+    expect(revised.nodes.every((node) => node.status === "pending")).toBe(true);
+  });
+  it("rejects pending approval decisions before all stage dependencies complete", () => {
+    const fixture = taskFixture();
+    const task: WorkflowTask = {
+      ...fixture,
+      status: "paused",
+      nodes: fixture.nodes.map((node) =>
+        node.nodeId === "approval" ? { ...node, artifactRevision: "spec-v1" } : node,
+      ),
+    };
+    for (const type of ["approve", "revise"] as const)
+      expect(() =>
+        decideWorkflow(task, {
+          type,
+          nodeId: "approval",
+          artifactRevision: "spec-v1",
+          context: revisionContext,
+        }),
+      ).toThrow("not ready for review");
+  });
   it("retains feedback through all skills of the revision target and preserves upstream results", () => {
     let task = finish(finish(throughBuild(), "review-a"), "review-b");
     task = decideWorkflow(task, { type: "start", nodeId: "combine", operationId: "combine" });

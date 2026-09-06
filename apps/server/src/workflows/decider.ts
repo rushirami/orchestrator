@@ -1,5 +1,9 @@
 import type { WorkflowNodeState, WorkflowStageResult, WorkflowTask } from "@t3tools/contracts";
-import { readyWorkflowNodes, workflowDescendants } from "@t3tools/shared/workflowGraph";
+import {
+  canReviewWorkflowApproval,
+  readyWorkflowNodes,
+  workflowDescendants,
+} from "@t3tools/shared/workflowGraph";
 
 export type WorkflowAction =
   | { type: "pause" }
@@ -176,13 +180,8 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
       }
     }
   } else if (action.type === "approve" || action.type === "revise") {
-    if (
-      task.status === "cancelled" ||
-      task.status === "complete" ||
-      node.kind !== "approval" ||
-      state.status !== "awaiting-approval"
-    )
-      throw new Error("This stage is not awaiting approval.");
+    if (node.kind !== "approval" || !canReviewWorkflowApproval(task, node.id))
+      throw new Error("This stage is not ready for review.");
     if (state.artifactRevision !== action.artifactRevision)
       throw new Error("The artifact changed. Review the current revision before approving.");
     if (action.type === "revise")
