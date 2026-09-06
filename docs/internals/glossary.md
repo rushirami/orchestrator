@@ -208,3 +208,13 @@ ships T3 Code already matching it.
 [24]: ./overview.md
 [25]: ../../apps/server/src/environmentTheme.ts
 [26]: ../user/environment-theme.md
+
+## Workflow terms
+
+- **Workflow template**: a project-owned graph, reusable prompt, named agent threads, and worktree defaults.
+- **Workflow task**: one launched template with frozen settings, one worktree, and durable stage progress.
+- **Workflow stage**: an agent task, human approval, or all-inputs join. Agent stages execute ordered skills.
+- **Workflow attempt**: one dispatch of a stage skill, with an operation ID used to reject late results.
+- **Review basis**: a digest of the worktree code inspected by a read-only reviewer. Changed code requires fresh review.
+
+See [workflow persistence and execution](workflow-persistence.md) and the [user guide](../user/workflows.md).

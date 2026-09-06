@@ -2226,6 +2226,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
+          ...(input.sandboxMode === "read-only" ? { readOnly: true } : {}),
           ...(input.modelSelection?.instanceId === boundInstanceId
             ? { model: input.modelSelection.model }
             : {}),
@@ -2597,6 +2598,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   return {
     provider: PROVIDER,
     capabilities: {
+      supportsReadOnlyWorkflow: true,
       sessionModelSwitch: "in-session",
       promptlessTurnContinuation: true,
     },

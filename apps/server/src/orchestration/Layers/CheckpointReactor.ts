@@ -129,6 +129,7 @@ const make = Effect.gen(function* () {
     readonly threadId: ThreadId;
     readonly turnId: TurnId | null;
     readonly detail: string;
+    readonly checkpointCaptured?: boolean;
     readonly createdAt: string;
   }) =>
     Effect.all({
@@ -147,6 +148,7 @@ const make = Effect.gen(function* () {
             summary: "Checkpoint capture failed",
             payload: {
               detail: input.detail,
+              checkpointCaptured: input.checkpointCaptured ?? false,
             },
             turnId: input.turnId,
             createdAt: input.createdAt,
@@ -286,6 +288,7 @@ const make = Effect.gen(function* () {
             threadId: input.threadId,
             turnId: input.turnId,
             detail: `Checkpoint captured, but turn diff summary is unavailable: ${error.message}`,
+            checkpointCaptured: true,
             createdAt: input.createdAt,
           }),
         ),

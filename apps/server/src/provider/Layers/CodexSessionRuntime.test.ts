@@ -788,6 +788,46 @@ describe("isRecoverableThreadResumeError", () => {
 });
 
 describe("openCodexThread", () => {
+  it.effect("keeps resumed workflow reviewers read only even with full-access defaults", () =>
+    Effect.gen(function* () {
+      const calls: unknown[] = [];
+      const client = {
+        request: <M extends "thread/start" | "thread/resume">(
+          _method: M,
+          payload: CodexRpc.ClientRequestParamsByMethod[M],
+        ) => {
+          calls.push(payload);
+          return Effect.succeed(
+            makeThreadOpenResponse("review-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
+          );
+        },
+      };
+      yield* openCodexThread({
+        client,
+        threadId: ThreadId.make("review-thread"),
+        runtimeMode: "full-access",
+        readOnly: true,
+        cwd: "/tmp/project",
+        requestedModel: undefined,
+        serviceTier: undefined,
+        resumeThreadId: "review-thread",
+      });
+      NodeAssert.ok(
+        calls[0] &&
+          typeof calls[0] === "object" &&
+          "sandbox" in calls[0] &&
+          calls[0].sandbox === "read-only",
+      );
+      const turn = yield* buildTurnStartParams({
+        threadId: "review-thread",
+        runtimeMode: "full-access",
+        readOnly: true,
+        prompt: "Review",
+      });
+      NodeAssert.equal(turn.approvalPolicy, "never");
+      NodeAssert.deepStrictEqual(turn.sandboxPolicy, { type: "readOnly" });
+    }),
+  );
   it.effect("falls back to thread/start when resume fails recoverably", () =>
     Effect.gen(function* () {
       const calls: Array<{ method: "thread/start" | "thread/resume"; payload: unknown }> = [];

@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./workflowGraph": {
+      "types": "./src/workflowGraph.ts",
+      "import": "./src/workflowGraph.ts"
+    },
     "./themePalettes": {
       "types": "./src/themePalettes.ts",
       "import": "./src/themePalettes.ts"

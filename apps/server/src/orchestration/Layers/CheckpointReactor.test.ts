@@ -949,18 +949,17 @@ describe("CheckpointReactor", () => {
       payload: { state: "completed" },
     });
 
-    await waitForEvent(harness.engine, (event) => event.type === "thread.turn-diff-completed");
-    const thread = await waitForThread(
-      harness.readModel,
-      (entry) =>
-        entry.checkpoints.length === 1 &&
-        entry.activities.some((activity) => activity.kind === "checkpoint.capture.failed"),
-    );
+    expect(await Effect.runPromise(harness.nextReceipt)).toMatchObject({
+      type: "checkpoint.diff.finalized",
+      turnId: "turn-missing-baseline",
+    });
+    const thread = (await harness.readModel()).threads.find((entry) => entry.id === "thread-1");
 
-    expect(thread.checkpoints[0]?.checkpointTurnCount).toBe(1);
+    expect(thread?.checkpoints[0]?.checkpointTurnCount).toBe(1);
     expect(
-      thread.activities.some((activity) => activity.kind === "checkpoint.capture.failed"),
-    ).toBe(true);
+      thread?.activities.find((activity) => activity.kind === "checkpoint.capture.failed")?.payload,
+    ).toMatchObject({ checkpointCaptured: true });
+    expect(thread?.checkpoints[0]?.status).toBe("ready");
   });
 
   it("captures pre-turn baseline from project workspace root when thread worktree is unset", async () => {

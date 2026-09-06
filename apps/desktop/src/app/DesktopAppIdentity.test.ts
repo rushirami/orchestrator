@@ -155,6 +155,18 @@ describe("DesktopAppIdentity", () => {
       { legacyPathExists: true },
     ),
   );
+  it.effect("uses an explicit isolated profile ahead of existing legacy data", () =>
+    withIdentity(
+      Effect.gen(function* () {
+        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+        assert.equal(yield* identity.resolveUserDataPath, "/tmp/t3-workflow-test/electron");
+      }),
+      {
+        environment: { env: { T3CODE_DESKTOP_USER_DATA_DIR: "/tmp/t3-workflow-test/electron" } },
+        legacyPathExists: true,
+      },
+    ),
+  );
 
   it.effect("preserves failures while inspecting the legacy userData path", () => {
     const legacyPath = "/Users/alice/Library/Application Support/T3 Code (Alpha)";

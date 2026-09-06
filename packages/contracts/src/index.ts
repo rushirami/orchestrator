@@ -35,3 +35,4 @@ export * from "./terminal.ts";
 export * from "./usage.ts";
 export * from "./usageLimitSourceId.ts";
 export * from "./vcs.ts";
+export * from "./workflows.ts";

@@ -20,6 +20,7 @@ export const DesktopConfig = Config.all({
   xdgConfigHome: trimmedString("XDG_CONFIG_HOME"),
   xdgDataHome: trimmedString("XDG_DATA_HOME"),
   t3Home: trimmedString("T3CODE_HOME"),
+  userDataDirectoryOverride: trimmedString("T3CODE_DESKTOP_USER_DATA_DIR"),
   devServerUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option),
   appUserModelIdOverride: trimmedString("T3CODE_DESKTOP_APP_USER_MODEL_ID"),
   configuredBackendPort: Config.port("T3CODE_PORT").pipe(Config.option),

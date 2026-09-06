@@ -26,6 +26,8 @@ import type * as Stream from "effect/Stream";
 export type ProviderSessionModelSwitchMode = "in-session" | "unsupported";
 
 export interface ProviderAdapterCapabilities {
+  /** Enforces filesystem/tool restrictions for concurrent workflow reviewers. */
+  readonly supportsReadOnlyWorkflow?: boolean;
   /**
    * Declares whether changing the model on an existing session is supported.
    */

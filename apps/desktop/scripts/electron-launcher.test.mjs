@@ -3,11 +3,19 @@ import { assert, describe, it } from "vite-plus/test";
 import {
   makeDevelopmentLauncherScript,
   resolveElectronBinaryPath,
+  resolveElectronProfileArgs,
   resolveMacLauncherIconPaths,
   resolveMacLauncherPaths,
 } from "./electron-launcher.mjs";
 
 describe("electron development launcher", () => {
+  it("isolates Chromium helper storage before Electron creates sessions", () => {
+    assert.deepEqual(
+      resolveElectronProfileArgs({ T3CODE_DESKTOP_USER_DATA_DIR: "/tmp/workflow test/electron" }),
+      ["--user-data-dir=/tmp/workflow test/electron"],
+    );
+    assert.deepEqual(resolveElectronProfileArgs({}), []);
+  });
   it("uses captured values only as fallbacks for a live runner environment", () => {
     const script = makeDevelopmentLauncherScript({
       electronBinaryPath: "/repo/node_modules/electron/Electron",

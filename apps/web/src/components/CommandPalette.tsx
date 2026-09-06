@@ -574,6 +574,7 @@ function OpenCommandPaletteDialog(props: {
 }) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const locationSearch = useLocation({ select: (location) => location.search });
   const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -1763,6 +1764,56 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
+  actionItems.push({
+    kind: "action",
+    value: "action:configure-workflows",
+    searchTerms: ["workflow", "orchestration", "agents", "template"],
+    title: "Configure project workflows",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({
+        to: "/workflows",
+        search:
+          pathname === "/workflows"
+            ? {
+                ...(locationSearch.project ? { project: locationSearch.project } : {}),
+                ...(locationSearch.environment ? { environment: locationSearch.environment } : {}),
+              }
+            : contextualProjectRef
+              ? {
+                  project: contextualProjectRef.projectId,
+                  environment: contextualProjectRef.environmentId,
+                }
+              : {},
+      });
+    },
+  });
+  actionItems.push({
+    kind: "action",
+    value: "action:new-workflow",
+    searchTerms: ["workflow", "start", "launch", "agents"],
+    title: "New project workflow",
+    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({
+        to: "/workflows",
+        search:
+          pathname === "/workflows"
+            ? {
+                view: "new",
+                ...(locationSearch.project ? { project: locationSearch.project } : {}),
+                ...(locationSearch.environment ? { environment: locationSearch.environment } : {}),
+              }
+            : contextualProjectRef
+              ? {
+                  view: "new",
+                  project: contextualProjectRef.projectId,
+                  environment: contextualProjectRef.environmentId,
+                }
+              : { view: "new" },
+      });
+    },
+  });
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const settingsSearchItems: CommandPaletteActionItem[] = searchSettings(
     deferredQuery,
