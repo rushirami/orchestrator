@@ -10,7 +10,8 @@ export type WorkflowAction =
   | { type: "result"; nodeId: string; operationId: string; result: WorkflowStageResult }
   | { type: "reconcile"; nodeId: string; operationId: string; result: WorkflowStageResult }
   | { type: "failed"; nodeId: string; operationId: string; error: string }
-  | { type: "approve" | "revise"; nodeId: string; artifactRevision: string }
+  | { type: "approve"; nodeId: string; artifactRevision: string }
+  | { type: "revise"; nodeId: string; artifactRevision: string; context: WorkflowStageResult }
   | { type: "retry"; nodeId: string }
   | { type: "recovered" };
 
@@ -82,6 +83,7 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
   let next = state;
   let status = task.status;
   let error = task.error;
+  let clearReworkContext = false;
   if (action.type === "start") {
     if (
       task.status !== "running" ||
@@ -136,6 +138,8 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
         throw new Error("The skill result is missing required artifacts.");
       }
       const lastSkill = state.skillIndex + 1 >= node.skills.length;
+      clearReworkContext =
+        lastSkill && action.result.outcome === "complete" && task.reworkTargetNodeId === node.id;
       if (action.result.outcome === "changes-requested" && !lastSkill)
         throw new Error("A rework outcome must come from the last skill.");
       next = {
@@ -181,7 +185,8 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
       throw new Error("This stage is not awaiting approval.");
     if (state.artifactRevision !== action.artifactRevision)
       throw new Error("The artifact changed. Review the current revision before approving.");
-    if (action.type === "revise") return restartFrom(task, node.revisionTarget);
+    if (action.type === "revise")
+      return restartFrom({ ...task, status: "running" }, node.revisionTarget, action.context);
     next = { ...state, status: "complete" };
   } else if (action.type === "retry") {
     if (task.status !== "paused" || state.status !== "failed")
@@ -199,13 +204,17 @@ export function decideWorkflow(task: WorkflowTask, action: WorkflowAction): Work
   const nodes = task.nodes.map((entry, i) => (i === index ? next : entry));
   if (status === "running" && nodes.every((entry) => entry.status === "complete"))
     status = "complete";
+  if (clearReworkContext) {
+    const { reworkContext: _context, reworkTargetNodeId: _target, ...remaining } = task;
+    return { ...remaining, nodes, status, error };
+  }
   return { ...task, nodes, status, error };
 }
 
 function restartFrom(
   task: WorkflowTask,
   nodeId: string,
-  context?: WorkflowStageResult,
+  context: WorkflowStageResult,
 ): WorkflowTask {
   if (task.nodes.some((node) => node.status === "running" || node.status === "dispatching"))
     throw new Error("Wait for active branches before requesting rework.");
@@ -214,7 +223,8 @@ function restartFrom(
   const iteration = task.iteration + 1;
   return {
     ...task,
-    ...(context ? { reworkContext: context } : {}),
+    reworkContext: context,
+    reworkTargetNodeId: nodeId,
     iteration,
     nodes: task.nodes.map((node) => (reset.has(node.nodeId) ? pendingNode(node, iteration) : node)),
     error: null,

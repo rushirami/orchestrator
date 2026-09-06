@@ -217,9 +217,12 @@ const make = Effect.gen(function* () {
           `${task.definition.nodes.find((item) => item.id === predecessor.nodeId)?.name ?? predecessor.nodeId}: ${yield* encodeResult(predecessor.result)}`,
         );
     }
-    if (task.reworkContext)
-      reports.push(`Revision request: ${yield* encodeResult(task.reworkContext)}`);
+    const revisionRequest =
+      task.reworkContext && (!task.reworkTargetNodeId || task.reworkTargetNodeId === node.id)
+        ? `First address the requested changes below in this stage's artifacts. Preserve the parts that do not need changes, then return the updated artifacts for review.\nRevision request: ${yield* encodeResult(task.reworkContext)}`
+        : "";
     const text = [
+      revisionRequest,
       task.resolvedPrompt,
       `Workflow stage: ${node.name}. Skill ${state!.skillIndex + 1} of ${node.skills.length}. Iteration ${task.iteration + 1}.`,
       skill.prompt,

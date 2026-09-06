@@ -119,6 +119,7 @@ export const WorkflowTask = Schema.Struct({
   variables: Schema.Record(Schema.String, Schema.String),
   resolvedPrompt: Schema.String,
   reworkContext: Schema.optional(WorkflowStageResult),
+  reworkTargetNodeId: Schema.optional(TrimmedNonEmptyString),
   workspaceName: TrimmedNonEmptyString,
   branch: TrimmedNonEmptyString,
   baseBranch: TrimmedNonEmptyString,
@@ -180,13 +181,32 @@ export const WorkflowLaunchInput = Schema.Struct({
 });
 export type WorkflowLaunchInput = typeof WorkflowLaunchInput.Type;
 
+export const WorkflowArtifactComment = Schema.Struct({
+  startLine: PositiveInt,
+  endLine: PositiveInt,
+  text: TrimmedNonEmptyString,
+}).check(
+  Schema.makeFilter(
+    (comment) => comment.endLine >= comment.startLine || "Comment line ranges must be in order.",
+  ),
+);
+export type WorkflowArtifactComment = typeof WorkflowArtifactComment.Type;
+
 export const WorkflowControlInput = Schema.Struct({
   taskId: WorkflowTaskId,
   expectedRevision: PositiveInt,
   action: Schema.Literals(["pause", "resume", "cancel", "retry", "reconcile", "approve", "revise"]),
   nodeId: Schema.optional(TrimmedNonEmptyString),
   artifactRevision: Schema.optional(TrimmedNonEmptyString),
-});
+  revisionComments: Schema.optional(Schema.Array(WorkflowArtifactComment)),
+}).check(
+  Schema.makeFilter(
+    (input) =>
+      input.action !== "revise" ||
+      (input.revisionComments?.length ?? 0) > 0 ||
+      "Add at least one comment before requesting changes.",
+  ),
+);
 export type WorkflowControlInput = typeof WorkflowControlInput.Type;
 
 export const WorkflowArtifactInput = Schema.Struct({

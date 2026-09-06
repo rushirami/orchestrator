@@ -22,6 +22,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { workflowEnvironment } from "../../state/workflows";
 import ChatMarkdown from "../ChatMarkdown";
 import { WorkflowGraph } from "./WorkflowGraph";
+import { WorkflowArtifactReview } from "./WorkflowArtifactReview";
 
 export function WorkflowTaskDetail({
   task,
@@ -45,8 +46,12 @@ export function WorkflowTaskDetail({
   const remove = useAtomCommand(workflowEnvironment.remove);
   const selected = task.definition.nodes.find((node) => node.id === selectedId);
   const state = task.nodes.find((node) => node.nodeId === selectedId);
-  const act = async (action: WorkflowControlInput["action"], nodeId?: string) => {
-    if (busy) return;
+  const act = async (
+    action: WorkflowControlInput["action"],
+    nodeId?: string,
+    revisionComments?: WorkflowControlInput["revisionComments"],
+  ) => {
+    if (busy) return false;
     setBusy(true);
     setError(null);
     const result = await control({
@@ -56,12 +61,17 @@ export function WorkflowTaskDetail({
         expectedRevision: task.revision,
         action,
         ...(nodeId ? { nodeId } : {}),
+        ...(revisionComments ? { revisionComments } : {}),
         ...(artifact && artifact.nodeId === nodeId ? { artifactRevision: artifact.revision } : {}),
       },
     });
     setBusy(false);
     if (result._tag === "Failure") setError(String(squashAtomCommandFailure(result)));
-    else if (action === "approve" || action === "revise") setArtifact(null);
+    else if (action === "approve" || action === "revise") {
+      setArtifact(null);
+      setActiveTab("workflow");
+    }
+    return result._tag !== "Failure";
   };
   const waiting = task.nodes.filter((node) => node.status === "awaiting-approval");
   return (
@@ -231,22 +241,24 @@ export function WorkflowTaskDetail({
           </Tabs.Panel>
           <Tabs.Panel className="workflow-content-panel" value="files">
             {artifact ? (
-              <section className="workflow-file-view" aria-label={artifact.path}>
-                <header className="workflow-file-heading">
-                  <FileText size={16} />
-                  <span>{artifact.path}</span>
-                  <button className="workflow-button" onClick={() => setArtifact(null)}>
-                    Close file
-                  </button>
-                </header>
-                <div className="workflow-file-document">
-                  <ChatMarkdown
-                    text={artifact.content}
-                    cwd={task.worktreePath ?? undefined}
-                    environmentId={environmentId}
-                  />
-                </div>
-              </section>
+              <WorkflowArtifactReview
+                key={`${artifact.nodeId}:${artifact.revision}`}
+                artifact={artifact}
+                environmentId={environmentId}
+                cwd={task.worktreePath ?? undefined}
+                reviewKey={`t3code.workflow-review:${JSON.stringify([environmentId, task.id, artifact.nodeId, artifact.path])}`}
+                canReview={
+                  task.status !== "cancelled" &&
+                  task.status !== "complete" &&
+                  selected?.kind === "approval" &&
+                  artifact.nodeId === selected.id &&
+                  state?.status === "awaiting-approval"
+                }
+                busy={busy}
+                onClose={() => setArtifact(null)}
+                onApprove={() => act("approve", artifact.nodeId)}
+                onRequestRevision={(comments) => act("revise", artifact.nodeId, comments)}
+              />
             ) : (
               <div className="workflow-empty">
                 Select a stage and open an artifact to review its file.
@@ -328,29 +340,10 @@ export function WorkflowTaskDetail({
                     ? "Reload artifact"
                     : `Open ${selected.artifactPath}`}
                 </button>
-                {artifact?.nodeId === selected.id && (
-                  <>
-                    {state.status === "awaiting-approval" && (
-                      <div className="workflow-row">
-                        <button
-                          className="workflow-button is-primary"
-                          disabled={busy}
-                          onClick={() => void act("approve", selected.id)}
-                        >
-                          <Check size={14} />
-                          Approve
-                        </button>
-                        <button
-                          className="workflow-button"
-                          disabled={busy}
-                          onClick={() => void act("revise", selected.id)}
-                        >
-                          Request revision
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
+                <p className="workflow-help">
+                  Review the file in the Files tab. Add line comments there to request changes
+                  before approving.
+                </p>
               </section>
             )}
             {state.result && (

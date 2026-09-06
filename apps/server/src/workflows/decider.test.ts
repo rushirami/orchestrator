@@ -4,6 +4,12 @@ import { validateWorkflowGraph } from "@t3tools/shared/workflowGraph";
 import { taskFixture } from "./testFixtures.ts";
 import type { WorkflowTask } from "@t3tools/contracts";
 
+const revisionContext = {
+  outcome: "changes-requested" as const,
+  summary: "spec.md lines 3-4: Keep this desktop-only.",
+  artifacts: ["spec.md"],
+};
+
 function finish(task: WorkflowTask, nodeId: string, operationId = nodeId) {
   const started = decideWorkflow(task, { type: "start", nodeId, operationId });
   const node = task.definition.nodes.find((node) => node.id === nodeId);
@@ -57,6 +63,59 @@ describe("workflow transitions", () => {
       status: "pending",
       skillIndex: 1,
     });
+  });
+  it("resumes a paused approval revision, resets downstream work, and clears addressed feedback", () => {
+    let task = decideWorkflow(finish(taskFixture(), "plan"), {
+      type: "start",
+      nodeId: "approval",
+      operationId: "approval",
+      artifactRevision: "spec-v1",
+    });
+    task = decideWorkflow(task, { type: "pause" });
+    expect(() =>
+      decideWorkflow(task, {
+        type: "revise",
+        nodeId: "approval",
+        artifactRevision: "spec-old",
+        context: revisionContext,
+      }),
+    ).toThrow("changed");
+    const revised = decideWorkflow(task, {
+      type: "revise",
+      nodeId: "approval",
+      artifactRevision: "spec-v1",
+      context: revisionContext,
+    });
+    expect(revised).toMatchObject({
+      status: "running",
+      iteration: 1,
+      reworkContext: revisionContext,
+      reworkTargetNodeId: "plan",
+    });
+    expect(revised.nodes.every((node) => node.status === "pending" && node.result === null)).toBe(
+      true,
+    );
+    expect(revised.nodes.every((node) => node.artifactRevision === null)).toBe(true);
+    const updated = finish(revised, "plan", "revision");
+    expect(updated.reworkContext).toBeUndefined();
+    expect(updated.reworkTargetNodeId).toBeUndefined();
+    expect(updated.nodes.find((node) => node.nodeId === "approval")?.status).toBe("pending");
+  });
+  it("retains feedback through all skills of the revision target and preserves upstream results", () => {
+    let task = finish(finish(throughBuild(), "review-a"), "review-b");
+    task = decideWorkflow(task, { type: "start", nodeId: "combine", operationId: "combine" });
+    task = decideWorkflow(task, {
+      type: "result",
+      nodeId: "combine",
+      operationId: "combine",
+      result: { ...revisionContext, artifacts: ["reviews.md"] },
+    });
+    expect(task.nodes.find((node) => node.nodeId === "approval")?.status).toBe("complete");
+    task = finish(task, "build", "implementation-revision");
+    expect(task.reworkTargetNodeId).toBe("build");
+    expect(task.reworkContext?.summary).toBe(revisionContext.summary);
+    task = finish(task, "build", "validation-revision");
+    expect(task.reworkContext).toBeUndefined();
   });
   it("runs reviews together, waits for both, and completes after combining", () => {
     let task = throughBuild();
@@ -181,6 +240,7 @@ it.each(["dispatching", "running"] as const)(
         type: "revise",
         nodeId: "approval",
         artifactRevision: "spec",
+        context: revisionContext,
       }),
     ).toThrow("Wait for active branches");
     expect(active.nodes.find((node) => node.nodeId === "combine")).toMatchObject({
@@ -197,6 +257,7 @@ it.each(["dispatching", "running"] as const)(
       type: "revise",
       nodeId: "approval",
       artifactRevision: "spec",
+      context: revisionContext,
     });
     expect(revised.iteration).toBe(1);
     expect(revised.nodes.every((node) => node.status === "pending")).toBe(true);

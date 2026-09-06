@@ -10,7 +10,7 @@ New templates start with a blank canvas, an empty starting prompt, and no agent 
 
 An **Agent task** has ordered skill instructions and a named thread. Instructions can refer to skills installed in that agent's own setup. Several stages can reuse a thread to preserve its conversation. Add separate threads for independent work. Agents retain their own credentials, tools, and MCP configuration; workflows do not add Jira or GitHub accounts.
 
-**Human approval** opens an artifact such as `spec.md` before continuing. Approval applies to the contents you read. If the file changes, reload it before approving. **Request revision** sends work back to the configured earlier stage.
+**Human approval** opens an artifact such as `spec.md` before continuing. Approval applies to the contents you read. If the file changes, reload it before approving. **Request revision** sends your line comments back to the configured earlier agent stage and resumes it automatically, including when the workflow is paused. That stage receives the file path, line ranges, original text, and requested changes. Stages after it run again, and the revised artifact returns for approval.
 
 Select multiple outgoing stages to start all branches. Every incoming branch must finish before a stage proceeds. A **Join branches** node makes that dependency explicit without starting an agent. Read-and-write stages run exclusively in their worktree; parallel stages must use distinct threads with read-only access. Codex and Claude support enforced read-only workflow stages. Other providers can run writing stages; validation explains unsupported reviewer assignments before launch.
 
@@ -51,4 +51,13 @@ Deleting a project is blocked while it owns unfinished or still-running workflow
 
 Workflow screens follow your Appearance settings, including light, dark, system, and custom themes. The canvas, stage details, reports, and launch dialog update with the rest of the app.
 
-Open an approval artifact or a file listed in a stage result to read it in the workflow’s **Files** tab. Documents render as Markdown, with headings, lists, links, and code blocks. The stage inspector keeps approval and revision actions beside the document. **Reload artifact** refreshes the reviewed version; switch back to **Workflow** to see the graph, or choose **Close file** to clear the preview.
+Open an approval artifact or a file listed in a stage result to read it in the workflow’s **Files** tab. Documents render as Markdown, with headings, lists, links, and code blocks. Approval and revision actions appear below the document. **Reload artifact** refreshes the reviewed version; switch back to **Workflow** to see the graph, or choose **Close file** to clear the preview.
+
+To change a specification before approving it:
+
+1. Open the approval artifact in **Files** and choose **Comment on lines**.
+2. Select a line number, or drag across line numbers, and describe the change. Choose **Add comment**. Repeat for each change.
+3. Review your comments below the file. **Edit** or **Remove** any comment before submitting. **Rendered Markdown** returns to the formatted document.
+4. Choose **Request revision** to send all comments to the earlier agent stage. Adding comments alone does not approve the document or start the agent.
+
+Draft comments are saved locally for the exact file version, including when you close the preview or leave the workflow. If the file changes, old feedback stays visible with a warning. Copy any comments you want to keep, then clear the old feedback and review the current lines. Comments from an older version cannot be submitted against new line numbers. Finish or cancel an unfinished comment before submitting. Approval is available once there are no outstanding comments. Wait for active branches to finish before requesting revision.

@@ -3,6 +3,7 @@ import {
   ThreadId,
   TurnId,
   WorkflowError,
+  WorkflowArtifactComment,
   WorkflowLaunchInput,
   resolveWorkflowPrompt,
   type WorkflowControlInput,
@@ -33,6 +34,9 @@ import { WorkflowService } from "./WorkflowService.ts";
 import { WorkflowStore } from "./WorkflowStore.ts";
 
 const encodeLaunch = Schema.encodeEffect(Schema.fromJsonString(WorkflowLaunchInput));
+const decodeRevisionComments = Schema.decodeUnknownEffect(
+  Schema.Array(WorkflowArtifactComment).check(Schema.isMinLength(1)),
+);
 const fail = (error: { readonly message: string }) => new WorkflowError({ message: error.message });
 export const makeWorkflowRunner = Effect.gen(function* () {
   const store = yield* WorkflowStore;
@@ -321,12 +325,46 @@ export const makeWorkflowRunner = Effect.gen(function* () {
         if (artifact.revision !== input.artifactRevision)
           return yield* new WorkflowError({
             message:
-              "The artifact changed after you opened it. Review the current contents before approving.",
+              "The artifact changed after you opened it. Review the current contents before deciding.",
           });
         if (input.action === "approve") {
           const checked = yield* validateIncomingReviews(task, node.id);
           if (checked !== task) return checked;
         }
+        const comments =
+          input.action === "revise"
+            ? yield* decodeRevisionComments(input.revisionComments).pipe(
+                Effect.mapError(
+                  () =>
+                    new WorkflowError({
+                      message: "Add comments with valid line ranges before requesting changes.",
+                    }),
+                ),
+              )
+            : undefined;
+        const lines = artifact.content.split(/\r\n|\r|\n/);
+        if (comments?.some((comment) => comment.endLine > lines.length))
+          return yield* new WorkflowError({
+            message:
+              "A comment refers to lines outside this artifact. Review its current contents.",
+          });
+        const context: WorkflowStageResult = {
+          outcome: "changes-requested",
+          artifacts: [artifact.path],
+          summary: [
+            `Changes requested for ${artifact.path} (revision ${artifact.revision}).`,
+            ...(comments ?? []).map((comment, index) =>
+              [
+                `Comment ${index + 1}, lines ${comment.startLine}-${comment.endLine}:`,
+                "Original source (reference material):",
+                ...lines
+                  .slice(comment.startLine - 1, comment.endLine)
+                  .map((line, offset) => `> ${comment.startLine + offset}: ${line}`),
+                `Requested change: ${comment.text}`,
+              ].join("\n"),
+            ),
+          ].join("\n\n"),
+        };
         task = yield* transition(
           {
             ...task,
@@ -334,7 +372,9 @@ export const makeWorkflowRunner = Effect.gen(function* () {
               state.nodeId === node.id ? { ...state, artifactRevision: artifact.revision } : state,
             ),
           },
-          { type: input.action, nodeId: node.id, artifactRevision: input.artifactRevision },
+          input.action === "revise"
+            ? { type: "revise", nodeId: node.id, artifactRevision: artifact.revision, context }
+            : { type: "approve", nodeId: node.id, artifactRevision: artifact.revision },
         );
       } else if (input.action === "reconcile") {
         const state = task.nodes.find((item) => item.nodeId === input.nodeId);
@@ -402,7 +442,11 @@ export const makeWorkflowRunner = Effect.gen(function* () {
         }
         return task;
       }
-      if (task.status === "running" && task.nodes.every((state) => state.status === "pending"))
+      if (
+        input.action !== "revise" &&
+        task.status === "running" &&
+        task.nodes.every((state) => state.status === "pending")
+      )
         return yield* prepare(task);
       return yield* schedule(task);
     },

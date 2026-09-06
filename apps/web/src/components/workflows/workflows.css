@@ -751,3 +751,49 @@
   color: var(--primary);
   font-weight: 600;
 }
+
+.workflow-file-help {
+  padding: 8px 12px;
+  color: var(--wf-muted);
+  font-size: 12px;
+}
+.workflow-file-review {
+  border-top: 1px solid var(--wf-line);
+  flex-shrink: 0;
+  max-height: 55%;
+  overflow: auto;
+}
+.workflow-review-comments {
+  max-height: 180px;
+  overflow: auto;
+}
+.workflow-review-comment,
+.workflow-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+.workflow-review-comment {
+  border-bottom: 1px solid var(--wf-line);
+}
+.workflow-review-comment p,
+.workflow-review-actions p {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.workflow-review-actions,
+.workflow-file-heading {
+  flex-wrap: wrap;
+}
+.workflow-stale-review {
+  padding: 12px;
+  color: var(--warning-foreground);
+  background: var(--warning-surface);
+}
+.workflow-stale-review p {
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}

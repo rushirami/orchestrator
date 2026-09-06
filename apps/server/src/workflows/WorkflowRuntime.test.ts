@@ -6,6 +6,7 @@ import {
   OrchestrationThreadShell,
   WorkflowStageResult,
   ThreadId,
+  type OrchestrationCommand,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -177,6 +178,87 @@ const result: WorkflowStageResult = {
   summary: "Created specification",
   artifacts: ["spec.md"],
 };
+
+it.effect(
+  "starts the existing revision target with the user's feedback before its original skill",
+  () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationCommand[] = [];
+      const task = {
+        ...taskFixture(),
+        threadIds: { builder: ThreadId.make("existing-builder") },
+        reworkTargetNodeId: "plan",
+        reworkContext: {
+          outcome: "changes-requested" as const,
+          summary: "spec.md lines 3-4: Use blue and keep this desktop-only.",
+          artifacts: ["spec.md"],
+        },
+      };
+      const shell = yield* decodeShell({
+        id: "existing-builder",
+        projectId: task.projectId,
+        title: "Builder",
+        modelSelection: { instanceId: "codex", model: "default" },
+        runtimeMode: "full-access",
+        branch: task.branch,
+        worktreePath: task.worktreePath,
+        latestTurn: null,
+        latestUserMessageAt: null,
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+        hasActionableProposedPlan: false,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        session: null,
+      });
+      const runtime = yield* WorkflowRuntime.pipe(
+        Effect.provide(
+          WorkflowRuntime.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                ServerConfig.layerTest(process.cwd(), { prefix: "workflow-revision-prompt-" }),
+                Layer.mock(OrchestrationEngineService)({
+                  subscribeDomainEvents: Effect.succeed(Stream.empty),
+                  dispatch: (command) =>
+                    Effect.sync(() => {
+                      commands.push(command);
+                      return { sequence: commands.length };
+                    }),
+                }),
+                Layer.mock(ProjectionSnapshotQuery)({
+                  getThreadShellById: () => Effect.succeed(Option.some(shell)),
+                }),
+                Layer.mock(ProviderService)({}),
+                Layer.mock(GitVcsDriver)({}),
+                Layer.mock(ProjectionTurnRepository)({}),
+              ).pipe(Layer.provideMerge(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+            ),
+          ),
+        ),
+      );
+      const plan = task.definition.nodes.find((node) => node.id === "plan")!;
+      const build = task.definition.nodes.find((node) => node.id === "build")!;
+      assert.equal(plan.kind, "agent");
+      assert.equal(build.kind, "agent");
+      if (plan.kind !== "agent" || build.kind !== "agent") return;
+      yield* runtime.dispatch(task, plan, "revision-operation");
+      yield* runtime.dispatch(task, build, "unrelated-operation");
+      const revision = commands[0]!;
+      const unrelated = commands[1]!;
+      assert.equal(revision.type, "thread.turn.start");
+      assert.equal(unrelated.type, "thread.turn.start");
+      if (revision.type !== "thread.turn.start" || unrelated.type !== "thread.turn.start") return;
+      assert.equal(revision.threadId, task.threadIds.builder);
+      assert.include(revision.message.text, task.reworkContext.summary);
+      assert.isBelow(
+        revision.message.text.indexOf(task.reworkContext.summary),
+        revision.message.text.indexOf(plan.skills[0]!.prompt),
+      );
+      assert.notInclude(unrelated.message.text, task.reworkContext.summary);
+    }).pipe(Effect.scoped),
+);
+
 const baseTurn = decodeTurn({
   threadId: "affected",
   turnId: "affected-turn",
